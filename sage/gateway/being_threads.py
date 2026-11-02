@@ -19,7 +19,10 @@ entry removed, so the change is auditable and reversible by hand.
 
 A word matches at the start of a word ("install" matches "installer", "scope" matches "scopes", "api"
 does not match "rapid"), case-insensitively. `preview='true'` reports what would move and writes
-nothing, so a being (or its seat) can check a word list before using it.
+nothing, so a being (or its seat) can check a word list before using it. A broad selection needs
+a one-use, short-lived confirmation from a preview of the same words, reason and full source state.
+It is process-local coordination evidence, not proof that a human reviewed the result or a grant of
+authority. The existing gate remains necessary. A restart expires pending confirmations.
 """
 from __future__ import annotations
 
@@ -27,6 +30,9 @@ import hashlib
 import json
 import os
 import re
+import secrets
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
@@ -35,6 +41,11 @@ TODO = "todo.md"
 MIN_WORD = 3          # shorter words match too much to be a topic ("ap", "in")
 MAX_WORDS = 100       # cbp-being's hestia thread (11-01) took 68 to cover without catching its own work
 REASON_MAX = 600
+STOPWORDS = frozenset({"the", "and", "for"})
+_PREVIEW_TTL = 300.0
+_PREVIEW_CAP = 128
+_preview_lock = threading.Lock()
+_previews = {}  # one-use in-process confirmations; never authority or durable proof
 
 
 def _stamp(now: Optional[float]) -> datetime:
@@ -130,6 +141,42 @@ def plan(instance: Path, words: List[str]):
     return body, kept, moved, entries, nxt, gone, err
 
 
+def _broad(kept, moved, entries, gone):
+    """Two or more matches and a strict majority of either affected collection."""
+    return ((len(moved) >= 2 and len(moved) * 2 > len(moved) + len(kept)) or
+            (len(gone) >= 2 and len(gone) * 2 > len(entries)))
+
+
+def _preview_binding(instance, words, reason, body, entries, nxt):
+    # Bind complete semantic source state, not just counts or the first 20
+    # items rendered. This digest is not an authentication or authority claim.
+    raw = json.dumps({"instance": os.path.realpath(instance), "words": [w.lower() for w in words],
+                      "reason": reason, "todo": body, "entries": entries, "next": nxt},
+                     sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _issue_confirmation(binding):
+    current = time.monotonic()
+    with _preview_lock:
+        for key, (_, expiry) in list(_previews.items()):
+            if expiry <= current:
+                del _previews[key]
+        while len(_previews) >= _PREVIEW_CAP:
+            del _previews[next(iter(_previews))]
+        token = secrets.token_hex(32)
+        _previews[token] = (binding, current + _PREVIEW_TTL)
+    return token
+
+
+def _consume_confirmation(token, binding):
+    if not isinstance(token, str) or not re.fullmatch(r"[0-9a-f]{64}", token):
+        return False
+    with _preview_lock:
+        record = _previews.pop(token, None)
+    return bool(record and record[1] > time.monotonic() and secrets.compare_digest(record[0], binding))
+
+
 def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "") -> Tuple[bool, str, bool]:
     """Returns (ok, message, changed)."""
     from sage.gateway import being_settled as st
@@ -147,6 +194,8 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
                        f"matching everything: {', '.join(repr(w) for w in short)}. Nothing was changed."), False
     if len(words) > MAX_WORDS:
         return False, f"at most {MAX_WORDS} words in one retire; nothing was changed.", False
+    if any(w.casefold() in STOPWORDS for w in words):
+        return False, "a common stopword is not a topic; choose more specific words. Nothing was changed.", False
     if not preview and not reason:
         return False, ("retire_thread needs a 'reason': why this line of work is finished. It is written "
                        "at the top of the retired file. (preview='true' shows what would move without one.)"), False
@@ -154,11 +203,17 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
     if preview:
         # A PREVIEW TAKES NO LOCK (NOVA on 577adb4b): _home_lock opens .home.lock in append mode, which
         # creates it on a fresh home, a write thread_paths does not declare for a preview. It only reads.
-        return _preview(instance, words)
+        return _preview(instance, words, reason)
     with st._home_lock(instance):
         body, kept, moved, entries, nxt, gone, err = plan(instance, words)
         if err:
             return False, f"cannot read your settled list: {err}. Nothing was changed.", False
+        confirmation = a.get("confirmation")
+        if _broad(kept, moved, entries, gone) or confirmation is not None:
+            binding = _preview_binding(instance, words, reason, body, entries, nxt)
+            if not _consume_confirmation(confirmation, binding):
+                return False, ("Broad or changed retirement requires a fresh preview and confirmation. "
+                               "No todo or settled records were changed."), False
         topic = ", ".join(words)
         if not moved and not gone:
             return True, (f"Nothing names {topic}: no open todo item and no settled entry. Nothing was "
@@ -200,13 +255,13 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
     return True, said, True
 
 
-def _preview(instance: Path, words: List[str]) -> Tuple[bool, str, bool]:
+def _preview(instance: Path, words: List[str], reason: str = "") -> Tuple[bool, str, bool]:
     from sage.gateway import being_settled as st
     body, kept, moved, entries, nxt, gone, err = plan(instance, words)
     if err:
         return False, f"cannot read your settled list: {err}. Nothing was changed.", False
     topic = ", ".join(words)
-    lines =[f"PREVIEW, nothing was changed. Words: {topic}. "
+    lines =[f"PREVIEW, no files or records were changed. Words: {topic}. "
              f"{len(moved)} of {len(moved) + len(kept)} open todo item(s) and {len(gone)} of "
              f"{len(entries)} settled entr{'y' if len(entries) == 1 else 'ies'} would be retired."]
     lines += [f"- settled [{e['id']}] {st._flat(e['question'])[:140]}" for e in gone]
@@ -214,4 +269,11 @@ def _preview(instance: Path, words: List[str]) -> Tuple[bool, str, bool]:
     if len(moved) > 20:
         lines.append(f"- … and {len(moved) - 20} more todo item(s)")
     lines += [f"- STAYS: {t[:140]}" for t, _ in kept[:10]]
+    if _broad(kept, moved, entries, gone):
+        if reason:
+            binding = _preview_binding(instance, words, reason, body, entries, nxt)
+            lines.append(f"Broad retirement: confirmation: {_issue_confirmation(binding)}")
+            lines.append("Use this confirmation once with the same words, reason and source state within 5 minutes.")
+        else:
+            lines.append("Broad retirement: preview again with a reason to obtain a confirmation.")
     return True, "\n".join(lines), False

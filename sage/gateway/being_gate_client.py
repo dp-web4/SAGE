@@ -3097,11 +3097,13 @@ _TOOL_SCHEMAS = {
                       "retired file (todo.retired-thread-<id>.md) that recall still searches. Use it when a "
                       "topic is finished or someone asks you to drop it, so it stops coming back uninvited. "
                       "Other items and entries stay as they are. preview='true' shows what would move and "
-                      "changes nothing.",
+                      "changes nothing. A broad retirement needs a preview with the same reason, then "
+                      "the one-use confirmation it returns; a changed source requires another preview.",
                       {"words": "the topic, as words separated by commas, e.g. 'webserver, port 8080'. A word "
                                 "matches at the start of a word: 'install' also matches 'installer'",
-                       "reason": "why this line of work is finished (needed unless preview='true')",
-                       "preview": "optional: 'true' lists what would move and changes nothing"},
+                       "reason": "why this line is finished; also needed in a broad preview to get confirmation",
+                       "preview": "optional: 'true' lists what would move and changes no files",
+                       "confirmation": "one-use value from the broad preview; not a grant or authorization"},
                       ["words"]),
     # SKILLS (dp, 2026-10-27: "a 'skills' structure, and membot-type index for them ... model it on your
     # own skills in claude-code"). The beat lists them, the matching ones first (being_skills.render).

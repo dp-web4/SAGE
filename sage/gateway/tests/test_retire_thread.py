@@ -5,8 +5,12 @@ import builtins
 import io
 import json
 import os
+import re
 import tempfile
+from types import SimpleNamespace
 from pathlib import Path
+
+import pytest
 
 from sage.gateway import being_settled as st
 from sage.gateway import being_threads as bt
@@ -42,6 +46,111 @@ def _open(h):
     return [t for t, _ in _todo_items((h / "todo.md").read_text()).values()]
 
 
+def _broad_home(tmp_path):
+    (tmp_path / "todo.md").write_text(
+        "2026-10-30 09:00 UTC\n" + "".join(f"- [ ] widget task {n}\n" for n in range(6))
+        + "- [ ] unrelated task\n")
+    return tmp_path
+
+
+def _preview_confirmation(h, args):
+    preview = bt.retire_thread(h, {**args, "preview": "true"})
+    assert preview[0] and not preview[2], preview
+    match = re.search(r"confirmation: ([0-9a-f]{64})", preview[1])
+    assert match, preview[1]
+    return match.group(1)
+
+
+def _confirmed_if_broad(h, args):
+    preview = bt.retire_thread(h, {**args, "preview": "true"})
+    assert preview[0] and not preview[2], preview
+    match = re.search(r"confirmation: ([0-9a-f]{64})", preview[1])
+    return {**args, "confirmation": match.group(1)} if match else args
+
+
+@pytest.mark.parametrize("word", ["the", "AND", "for"])
+def test_common_stopwords_cannot_retire_or_preview_everything(tmp_path, word):
+    h = _broad_home(tmp_path)
+    before = (h / bt.TODO).read_bytes()
+    for extra in ({"preview": "true"}, {"reason": "finished"}):
+        ok, message, changed = bt.retire_thread(h, {"words": word, **extra})
+        assert not ok and not changed and "stopword" in message.lower()
+    assert (h / bt.TODO).read_bytes() == before
+    assert not (h / ".home.lock").exists()
+
+
+def test_broad_retire_requires_single_use_preview_bound_to_snapshot(tmp_path):
+    h = _broad_home(tmp_path)
+    args = {"words": "widget", "reason": "finished"}
+    before = (h / bt.TODO).read_bytes()
+    ok, message, changed = bt.retire_thread(h, args)
+    assert not ok and not changed and "preview" in message.lower()
+    assert (h / bt.TODO).read_bytes() == before
+    token = _preview_confirmation(h, args)
+    ok, message, changed = bt.retire_thread(h, {**args, "confirmation": token})
+    assert ok and changed, message
+    # Replay cannot authorize another act, even when the archive is removed.
+    (h / bt.TODO).write_bytes(before)
+    (h / bt.archive_name(args)).unlink()
+    replay = bt.retire_thread(h, {**args, "confirmation": token})
+    assert not replay[0] and not replay[2]
+
+
+def test_confirmation_expires_and_is_not_durable(tmp_path, monkeypatch):
+    h = _broad_home(tmp_path)
+    args = {"words": "widget", "reason": "finished"}
+    clock = SimpleNamespace(monotonic=lambda: 100.0)
+    monkeypatch.setattr(bt, "time", clock)
+    token = _preview_confirmation(h, args)
+    clock.monotonic = lambda: 100.0 + bt._PREVIEW_TTL
+    assert not bt.retire_thread(h, {**args, "confirmation": token})[0]
+    token = _preview_confirmation(h, args)
+    with bt._preview_lock:
+        bt._previews.clear()  # process restart loses pending confirmations
+    assert not bt.retire_thread(h, {**args, "confirmation": token})[0]
+
+
+def test_confirmation_is_bound_to_the_home_and_preview_needs_reason(tmp_path):
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    _broad_home(first)
+    _broad_home(second)
+    preview = bt.retire_thread(first, {"words": "widget", "preview": "true"})
+    assert preview[0] and "confirmation: " not in preview[1]
+    args = {"words": "widget", "reason": "finished"}
+    token = _preview_confirmation(first, args)
+    ok, _, changed = bt.retire_thread(second, {**args, "confirmation": token})
+    assert not ok and not changed
+    assert not (second / bt.archive_name(args)).exists()
+
+
+def test_one_item_is_not_classed_as_a_broad_retirement(tmp_path):
+    (tmp_path / bt.TODO).write_text("2026-10-30 09:00 UTC\n- [ ] widget task\n")
+    ok, _, changed = bt.retire_thread(tmp_path, {"words": "widget", "reason": "finished"})
+    assert ok and changed
+
+
+@pytest.mark.parametrize("changed", ["todo", "settled", "reason", "words"])
+def test_broad_confirmation_refuses_changed_snapshot_or_request(tmp_path, changed):
+    h = _broad_home(tmp_path)
+    args = {"words": "widget", "reason": "finished"}
+    token = _preview_confirmation(h, args)
+    if changed == "todo":
+        with (h / bt.TODO).open("a") as stream:
+            stream.write("- [ ] unrelated new item\n")
+    elif changed == "settled":
+        assert st.settle(h, {"question": "new fact?", "answer": "yes"})[0]
+    else:
+        args[changed] = "different" if changed == "reason" else "unrelated"
+    before = (h / bt.TODO).read_bytes()
+    ok, message, applied = bt.retire_thread(h, {**args, "confirmation": token})
+    assert not ok and not applied and "preview" in message.lower()
+    assert (h / bt.TODO).read_bytes() == before
+    assert not (h / bt.archive_name(args)).exists()
+
+
 def test_settled_evidence_is_not_a_topic_selector(tmp_path):
     # Two conclusions share provenance; only one is actually about the topic.
     assert st.settle(tmp_path, {"question": "Can recall find old work?", "answer": "yes",
@@ -60,7 +169,8 @@ def test_settled_evidence_is_not_a_topic_selector(tmp_path):
 
 def test_a_thread_leaves_the_todo_and_the_settled_list_and_the_rest_stays(tmp_path):
     h = _home(tmp_path)
-    ok, msg, changed = bt.retire_thread(h, {"words": "widget, daemon", "reason": "dp: drop it"}, now=0)
+    args = {"words": "widget, daemon", "reason": "dp: drop it"}
+    ok, msg, changed = bt.retire_thread(h, _confirmed_if_broad(h, args), now=0)
     assert ok and changed, msg
     assert "3 open todo item(s) and 2 settled entries" in msg and "Still open: 2" in msg
     assert _open(h) == ["Build a small neural net and test it on the sine data",
@@ -79,14 +189,14 @@ def test_a_thread_leaves_the_todo_and_the_settled_list_and_the_rest_stays(tmp_pa
 def test_open_items_keep_the_date_they_were_opened(tmp_path):
     h = _home(tmp_path)
     before = {t: s for t, s in _todo_items(TODO).values()}
-    bt.retire_thread(h, {"words": "widget", "reason": "r"}, now=0)
+    assert bt.retire_thread(h, _confirmed_if_broad(h, {"words": "widget", "reason": "r"}), now=0)[0]
     after = {t: s for t, s in _todo_items((h / "todo.md").read_text()).values()}
     assert after and all(before[t] == s for t, s in after.items())
 
 
 def test_recall_still_finds_what_was_retired(tmp_path):
     h = _home(tmp_path)
-    bt.retire_thread(h, {"words": "widget", "reason": "r"}, now=0)
+    assert bt.retire_thread(h, _confirmed_if_broad(h, {"words": "widget", "reason": "r"}), now=0)[0]
     hits = search_home(h, "widget installer")
     assert any(r["source"].startswith("todo.retired-") for r in hits), hits
 
@@ -95,7 +205,7 @@ def test_a_preview_changes_nothing_and_says_what_would_move(tmp_path):
     h = _home(tmp_path)
     before = {p.name: p.read_bytes() for p in h.iterdir() if p.is_file()}
     ok, msg, changed = bt.retire_thread(h, {"words": "widget", "preview": "true"}, now=0)
-    assert ok and not changed and msg.startswith("PREVIEW, nothing was changed")
+    assert ok and not changed and msg.startswith("PREVIEW, no files or records were changed")
     assert "3 of 5 open todo item(s) and 2 of 3 settled entries would be retired" in msg
     assert "STAYS: Build a small neural net" in msg
     assert {p.name: p.read_bytes() for p in h.iterdir() if p.is_file()} == before
@@ -169,7 +279,7 @@ def test_no_path_outside_the_declared_set_is_opened_for_writing(tmp_path, monkey
     """NOVA (1bd4fd69): the archive's atomic temp was written and undeclared. Checked on the real
     open/replace calls, not on what is left on disk (a temp file is gone by then)."""
     h = _home(tmp_path)
-    args = {"words": "widget", "reason": "r"}
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "r"})
     assert thread_paths({"words": "widget", "preview": "true"}, {"memory_root": str(h)}) == []
     declared = _declared(h, args)
     w = _Writes(monkeypatch)
@@ -183,6 +293,7 @@ def test_an_interleaved_retire_cannot_move_this_one_off_its_declared_paths(tmp_p
     mine, other = {"words": "widget", "reason": "mine"}, {"words": "daemon", "reason": "other"}
     declared = _declared(h, mine)               # the gate is told, then another retire lands first
     assert bt.retire_thread(h, other)[0]
+    mine = _confirmed_if_broad(h, mine)
     w = _Writes(monkeypatch)
     assert bt.retire_thread(h, mine)[0]
     assert w.paths <= declared, w.paths - declared
@@ -191,8 +302,10 @@ def test_an_interleaved_retire_cannot_move_this_one_off_its_declared_paths(tmp_p
     h2 = _home(tmp_path / "two")
     declared = _declared(h2, mine)
     monkeypatch.undo()
+    mine = _confirmed_if_broad(h2, {"words": "widget", "reason": "mine"})
     assert bt.retire_thread(h2, mine)[0]
     (h2 / "todo.md").write_text(TODO)           # the thread crept back before the second ran
+    mine = _confirmed_if_broad(h2, {"words": "widget", "reason": "mine"})
     w = _Writes(monkeypatch)
     ok, msg, _ = bt.retire_thread(h2, mine)
     assert not ok and "Give a different reason" in msg
@@ -201,7 +314,7 @@ def test_an_interleaved_retire_cannot_move_this_one_off_its_declared_paths(tmp_p
 
 def test_a_failed_settled_commit_rolls_back_within_the_declared_paths(tmp_path, monkeypatch):
     h = _home(tmp_path)
-    args = {"words": "widget", "reason": "r"}
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "r"})
     declared = _declared(h, args)
     entries_before = (h / "settled.json").read_bytes()
     monkeypatch.setattr(st, "_commit", lambda *a, **k: (False, "could not write settled.json (OSError)"))
@@ -218,7 +331,8 @@ def test_the_verb_retires_and_witnesses():
     root = Path(tempfile.mkdtemp(prefix="rt-"))
     d = HestiaF1aDispatcher("sprout-being", str(root), mcp_factory=lambda ep, pid: FakeMcp(ep, pid))
     _home(root)
-    env = d(BeingIntent("retire_thread", {"words": "widget", "reason": "finished"}), _ALLOW)
+    args = _confirmed_if_broad(root, {"words": "widget", "reason": "finished"})
+    env = d(BeingIntent("retire_thread", args), _ALLOW)
     assert env.ok and env.witness_id, env.error
     assert "Build a small neural net" in (root / "todo.md").read_text()
     assert "widget" not in (root / "todo.md").read_text().split("UTC:", 1)[-1].lower()
@@ -233,4 +347,14 @@ def test_a_preview_on_a_fresh_home_writes_nothing_not_even_the_lock(tmp_path, mo
     ok, msg, changed = bt.retire_thread(tmp_path, {"words": "widget", "preview": "true"})
     assert ok and not changed and msg.startswith("PREVIEW") and "3 of 5 open todo" in msg
     assert w.paths == set(), w.paths
+    assert not (tmp_path / ".home.lock").exists()
+
+
+def test_broad_preview_with_reason_and_confirmation_writes_no_files(tmp_path, monkeypatch):
+    _broad_home(tmp_path)
+    before = {p.name: p.read_bytes() for p in tmp_path.iterdir() if p.is_file()}
+    w = _Writes(monkeypatch)
+    token = _preview_confirmation(tmp_path, {"words": "widget", "reason": "finished"})
+    assert token and w.paths == set()
+    assert {p.name: p.read_bytes() for p in tmp_path.iterdir() if p.is_file()} == before
     assert not (tmp_path / ".home.lock").exists()
