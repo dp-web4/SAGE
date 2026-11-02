@@ -10,6 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 import random
+import re
 import subprocess
 import time
 
@@ -22,6 +23,7 @@ ARCHIVIST = ('Preserve an accurate continuity note, including inconvenient facts
              'source IDs, uncertainty and corrections. The actor decision is not '
              'evidence of correctness. Return JSON with handoff only. '
              'Do not provide private chain-of-thought or grant authority.')
+PIN_SCHEMA = 'observed-backend-pin/v1'
 
 
 class AdapterFailure(ValueError):
@@ -36,6 +38,66 @@ def bounded(value, limit=4000):
     if isinstance(value, bytes):
         value = value.decode('utf-8', errors='replace')
     return str(value or '')[-limit:]
+
+
+def validate_backend_pins(metadata, arms):
+    """Require a pin for each used role; this is not provider attestation."""
+    pins = metadata.get('backend_pins')
+    required = {'actor'} | ({'archivist'} if any(arm.startswith('archivist') for arm in arms) else set())
+    if not isinstance(pins, dict) or not required.issubset(pins) or set(pins) - {'actor', 'archivist'}:
+        raise ValueError('backend_pins must contain each used role and no unknown roles')
+    keys = {'schema', 'backend', 'requested_model', 'reported_model', 'model_digest', 'runtime_version'}
+    for role, pin in pins.items():
+        if not isinstance(pin, dict) or set(pin) != keys:
+            raise ValueError(f'backend_pins.{role} must contain the six required fields')
+        if any(not isinstance(value, str) or not value or value != value.strip() or len(value) > 256
+               for value in pin.values()):
+            raise ValueError(f'backend_pins.{role} fields must be bounded nonempty strings')
+        if not re.fullmatch(r'sha256:[0-9a-f]{64}', pin['model_digest']):
+            raise ValueError(f'backend_pins.{role} model_digest must be a lowercase SHA-256')
+        if pin['schema'] != PIN_SCHEMA:
+            raise ValueError(f'unsupported backend_pins.{role} schema')
+    if metadata.get('model_revision') != pins['actor']['model_digest']:
+        raise ValueError('model_revision must equal backend_pins.actor model_digest')
+    return {role: dict(pin) for role, pin in pins.items()}
+
+
+def require_backend_observation(response, pin):
+    """Compare both provider observations; failure does not prove what ran in between."""
+    obs = response.get('adapter_observation') if isinstance(response, dict) else None
+    mismatched = []
+    if not isinstance(obs, dict):
+        mismatched.append('adapter_observation')
+    else:
+        for key in ('schema', 'backend', 'requested_model', 'reported_model'):
+            if obs.get(key) != pin[key]:
+                mismatched.append(key)
+        for phase in ('before', 'after'):
+            snapshot = obs.get(phase)
+            if not isinstance(snapshot, dict):
+                mismatched.append(phase)
+                continue
+            for key in ('model_digest', 'runtime_version'):
+                if snapshot.get(key) != pin[key]:
+                    mismatched.append(f'{phase}.{key}')
+    if mismatched:
+        # Keep only bounded, syntactically valid identity observations. Never
+        # copy arbitrary adapter/model text into the infrastructure error.
+        measured = {}
+        for phase in ('before', 'after'):
+            snapshot = obs.get(phase) if isinstance(obs, dict) else None
+            snapshot = snapshot if isinstance(snapshot, dict) else {}
+            digest_value = snapshot.get('model_digest')
+            version_value = snapshot.get('runtime_version')
+            measured[phase] = {
+                'model_digest': digest_value if isinstance(digest_value, str)
+                and re.fullmatch(r'sha256:[0-9a-f]{64}', digest_value) else None,
+                'runtime_version': version_value if isinstance(version_value, str)
+                and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.+\-]{0,79}', version_value) else None,
+            }
+        raise AdapterFailure('backend pin unavailable or changed',
+                             {'kind': 'backend_pin_mismatch', 'fields': mismatched,
+                              'observed': measured})
 
 
 def digest(value):
@@ -152,6 +214,7 @@ def run(config, command, out, metadata, adapter=call_adapter):
             raise ValueError(f'missing run metadata: {key}')
     if metadata['stateless_attested'] is not True:
         raise ValueError('adapter must attest stateless calls')
+    backend_pins = validate_backend_pins(metadata, config['arms'])
     # Exclusive creation prevents accidentally replacing a prior run.
     with Path(out).open('x', encoding='utf-8') as stream:
         def emit(row):
@@ -176,6 +239,7 @@ def run(config, command, out, metadata, adapter=call_adapter):
                     req['handoff_chars'] = config['handoff_chars']
                     active_req = req
                     response, usage = adapter(command, active_req, config['timeout_seconds'], config['handoff_chars'])
+                    require_backend_observation(response, backend_pins['actor'])
                     active_req = None
                     archive = None
                     next_note = response['handoff'] if arm != 'none' else ''
@@ -184,6 +248,7 @@ def run(config, command, out, metadata, adapter=call_adapter):
                                            actor_decision=response['decision'])
                         active_req = archive_req
                         archive_response, archive_usage = adapter(command, active_req, config['timeout_seconds'], config['handoff_chars'])
+                        require_backend_observation(archive_response, backend_pins['archivist'])
                         active_req = None
                         archive = {'request': archive_req, 'response': archive_response, 'usage': archive_usage}
                         next_note = archive_response['handoff']
@@ -213,6 +278,7 @@ def summarize(path):
     if not rows or rows[0].get('kind') != 'manifest' or rows[-1].get('kind') != 'complete':
         raise ValueError('incomplete run; inspect error/partial evidence before analysis')
     config = validate(rows[0]['config'])
+    backend_pins = validate_backend_pins(rows[0]['metadata'], config['arms'])
     if digest(config) != rows[0]['config_hash']:
         raise ValueError('config hash mismatch')
     cases = {c['id']: c for c in config['cases']}
@@ -243,6 +309,7 @@ def summarize(path):
         if row['request'] != expected_request:
             raise ValueError('arm request or inherited handoff mismatch')
         response = row['response']
+        require_backend_observation(response, backend_pins['actor'])
         if (not isinstance(response, dict) or response.get('decision') not in case['options']
                 or not isinstance(response.get('handoff'), str)
                 or len(response['handoff']) > config['handoff_chars']):
@@ -254,6 +321,7 @@ def summarize(path):
             if not isinstance(archive, dict) or archive.get('request') != expected_archive:
                 raise ValueError('archivist request mismatch')
             archive_response = archive.get('response')
+            require_backend_observation(archive_response, backend_pins['archivist'])
             note = archive_response.get('handoff') if isinstance(archive_response, dict) else None
             if not isinstance(note, str) or len(note) > config['handoff_chars']:
                 raise ValueError('invalid archivist response')

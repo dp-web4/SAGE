@@ -7,6 +7,7 @@ Pin the server model digest and sampling defaults in run metadata before use.
 """
 import argparse
 import json
+import re
 import sys
 import urllib.request
 
@@ -67,6 +68,22 @@ def interpret_reply(reply, metadata):
     return {'adapter_failure': failure}
 
 
+def pin_observation(requested_model, reply, before, after):
+    """Format provider observations for the runner, without asserting their truth."""
+    def snapshot(metadata):
+        raw = metadata.get('model_digest')
+        if isinstance(raw, str) and re.fullmatch(r'[0-9a-f]{64}', raw):
+            digest = 'sha256:' + raw
+        elif isinstance(raw, str) and re.fullmatch(r'sha256:[0-9a-f]{64}', raw):
+            digest = raw
+        else:
+            digest = None
+        return {'model_digest': digest, 'runtime_version': metadata.get('ollama_version')}
+    return {'schema': 'observed-backend-pin/v1', 'backend': 'ollama', 'requested_model': requested_model,
+            'reported_model': reply.get('model'),
+            'before': snapshot(before), 'after': snapshot(after)}
+
+
 def payload(request, model):
     instruction = request['instruction'] + f" Keep handoff under {request['handoff_chars']} characters."
     data = {k: v for k, v in request.items() if k not in ('instruction', 'seed')}
@@ -93,6 +110,9 @@ def main():
         if not isinstance(reply, dict):
             raise ValueError('provider response is not an object')
         response = interpret_reply(reply, metadata)
+        if 'adapter_failure' not in response:
+            after = backend_metadata(args.url, args.model, args.timeout)
+            response['adapter_observation'].update(pin_observation(args.model, reply, metadata, after))
     except (OSError, ValueError, TypeError) as exc:
         response = {'adapter_failure': dict(metadata, kind='backend_error',
                                             backend_error=type(exc).__name__)}

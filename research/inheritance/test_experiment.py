@@ -11,18 +11,29 @@ from unittest import mock
 
 import ollama_adapter
 from ollama_adapter import payload
-from experiment import call_adapter, digest, gate, request_for, run, summarize, validate
+from experiment import (call_adapter, digest, gate, request_for, require_backend_observation,
+                        run, summarize, validate)
 
 CONFIG = json.loads(Path(__file__).with_name('pilot.json').read_text())
-META = dict(model_revision='scripted-test-only', sampling={'temperature': 0},
+PIN = {'schema': 'observed-backend-pin/v1', 'backend': 'scripted', 'requested_model': 'fixture', 'reported_model': 'fixture',
+       'model_digest': 'sha256:' + 'a' * 64, 'runtime_version': 'test-version'}
+META = dict(model_revision=PIN['model_digest'], backend_pins={'actor': dict(PIN), 'archivist': dict(PIN)},
+            sampling={'temperature': 0},
             adapter_revision='test-v1', harness_revision='test', machine='unit-test',
             stateless_attested=True)
+
+
+def observation(pin=PIN):
+    measured = {'model_digest': pin['model_digest'], 'runtime_version': pin['runtime_version']}
+    return {'schema': pin['schema'], 'backend': pin['backend'], 'requested_model': pin['requested_model'],
+            'reported_model': pin['reported_model'], 'before': dict(measured), 'after': dict(measured)}
 
 
 class ExperimentTests(unittest.TestCase):
     def fixture_adapter(self, command, request, timeout, handoff_chars):
         # Intentionally mediocre constant-choice stub; exercises scoring, not cognition.
-        return {'decision': request['options'][0], 'handoff': 'fallible test note'}, {
+        return {'decision': request['options'][0], 'handoff': 'fallible test note',
+                'adapter_observation': observation()}, {
             'seconds': 0.0, 'request_chars': len(json.dumps(request)), 'response_chars': 1}
 
     def make_run(self, path):
@@ -43,6 +54,155 @@ class ExperimentTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 self.make_run(path)
 
+    def test_missing_or_changed_backend_observation_cannot_be_scored(self):
+        cfg = copy.deepcopy(CONFIG)
+        cfg['cases'] = cfg['cases'][:1]
+        cfg['arms'] = ['none']
+        cfg['repeats'] = 1
+        with tempfile.TemporaryDirectory() as d:
+            for mode in ('missing', 'before', 'after', 'reported', 'unavailable', 'untrusted_text'):
+                def adapter(command, request, timeout, handoff_chars):
+                    response, usage = self.fixture_adapter(command, request, timeout, handoff_chars)
+                    if mode == 'missing':
+                        del response['adapter_observation']
+                    else:
+                        response['adapter_observation'] = observation()
+                        if mode == 'before':
+                            response['adapter_observation']['before']['model_digest'] = 'sha256:' + 'b' * 64
+                        elif mode == 'after':
+                            response['adapter_observation']['after']['runtime_version'] = 'different'
+                        elif mode == 'reported':
+                            response['adapter_observation']['reported_model'] = 'other'
+                        elif mode == 'unavailable':
+                            response['adapter_observation']['after']['model_digest'] = None
+                        elif mode == 'untrusted_text':
+                            response['adapter_observation']['after']['runtime_version'] = 'untrusted\nfree text'
+                    return response, usage
+                path = Path(d) / (mode + '.jsonl')
+                with self.subTest(mode=mode):
+                    with self.assertRaises(ValueError):
+                        run(cfg, ['stub'], path, META, adapter)
+                    row = json.loads(path.read_text().splitlines()[-1])
+                    self.assertEqual(row['kind'], 'error')
+                    self.assertEqual(row['request']['role'], 'actor')
+                    self.assertEqual(row['adapter_failure']['kind'], 'backend_pin_mismatch')
+                    observed = row['adapter_failure']['observed']
+                    if mode == 'before':
+                        self.assertEqual(observed['before']['model_digest'], 'sha256:' + 'b' * 64)
+                    if mode == 'after':
+                        self.assertEqual(observed['after']['runtime_version'], 'different')
+                    if mode == 'unavailable':
+                        self.assertIsNone(observed['after']['model_digest'])
+                    if mode == 'untrusted_text':
+                        self.assertIsNone(observed['after']['runtime_version'])
+                        self.assertNotIn('untrusted\nfree text', json.dumps(row['adapter_failure']))
+                    with self.assertRaises(ValueError):
+                        summarize(path)
+
+    def test_archivist_must_match_its_registered_backend_pin(self):
+        cfg = copy.deepcopy(CONFIG)
+        cfg['cases'] = cfg['cases'][:1]
+        cfg['arms'] = ['archivist']
+        cfg['repeats'] = 1
+        def adapter(command, request, timeout, handoff_chars):
+            response, usage = self.fixture_adapter(command, request, timeout, handoff_chars)
+            response['adapter_observation'] = observation()
+            if request['role'] == 'archivist':
+                response['adapter_observation']['after']['model_digest'] = 'sha256:' + 'b' * 64
+            return response, usage
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'archivist.jsonl'
+            with self.assertRaises(ValueError):
+                run(cfg, ['stub'], path, META, adapter)
+            row = json.loads(path.read_text().splitlines()[-1])
+            self.assertEqual(row['request']['role'], 'archivist')
+            self.assertEqual(row['adapter_failure']['kind'], 'backend_pin_mismatch')
+
+    def test_invalid_pin_refused_before_creating_a_run(self):
+        variants = []
+        missing = copy.deepcopy(META); del missing['backend_pins']; variants.append(missing)
+        missing_archivist = copy.deepcopy(META); del missing_archivist['backend_pins']['archivist']; variants.append(missing_archivist)
+        short = copy.deepcopy(META); short['backend_pins']['actor']['model_digest'] = 'latest'; variants.append(short)
+        conflicting = copy.deepcopy(META); conflicting['model_revision'] = 'another'; variants.append(conflicting)
+        wrong_schema = copy.deepcopy(META); wrong_schema['backend_pins']['actor']['schema'] = 'future'; variants.append(wrong_schema)
+        unknown_role = copy.deepcopy(META); unknown_role['backend_pins']['unknown'] = dict(PIN); variants.append(unknown_role)
+        with tempfile.TemporaryDirectory() as d:
+            for i, metadata in enumerate(variants):
+                path = Path(d) / f'{i}.jsonl'
+                with self.subTest(i=i):
+                    with self.assertRaises(ValueError):
+                        run(CONFIG, ['stub'], path, metadata, self.fixture_adapter)
+                    self.assertFalse(path.exists())
+
+    def test_actor_only_run_does_not_require_archivist_pin(self):
+        cfg = copy.deepcopy(CONFIG)
+        cfg['cases'] = cfg['cases'][:1]
+        cfg['arms'] = ['none']
+        cfg['repeats'] = 1
+        metadata = copy.deepcopy(META)
+        del metadata['backend_pins']['archivist']
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'actor-only.jsonl'
+            run(cfg, ['stub'], path, metadata, self.fixture_adapter)
+            self.assertEqual(summarize(path)['status'], 'complete')
+
+    def test_actor_and_archivist_may_use_distinct_preregistered_pins(self):
+        cfg = copy.deepcopy(CONFIG)
+        cfg['cases'] = cfg['cases'][:1]
+        cfg['arms'] = ['archivist']
+        cfg['repeats'] = 1
+        metadata = copy.deepcopy(META)
+        other = dict(PIN, requested_model='other', reported_model='other:latest',
+                     model_digest='sha256:' + 'b' * 64, runtime_version='other-version')
+        metadata['backend_pins']['archivist'] = other
+        def adapter(command, request, timeout, handoff_chars):
+            response, usage = self.fixture_adapter(command, request, timeout, handoff_chars)
+            role_pin = other if request['role'] == 'archivist' else PIN
+            response['adapter_observation'] = observation(role_pin)
+            return response, usage
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'distinct.jsonl'
+            run(cfg, ['stub'], path, metadata, adapter)
+            self.assertEqual(summarize(path)['status'], 'complete')
+
+    def test_rehashed_backend_observation_cannot_enter_summary(self):
+        cfg = copy.deepcopy(CONFIG)
+        cfg['cases'] = cfg['cases'][:1]
+        cfg['arms'] = ['none']
+        cfg['repeats'] = 1
+        def adapter(command, request, timeout, handoff_chars):
+            response, usage = self.fixture_adapter(command, request, timeout, handoff_chars)
+            response['adapter_observation'] = observation()
+            return response, usage
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'run.jsonl'
+            run(cfg, ['stub'], path, META, adapter)
+            rows = [json.loads(line) for line in path.read_text().splitlines()]
+            row = rows[-2]
+            row['response']['adapter_observation']['after']['model_digest'] = 'sha256:' + 'b' * 64
+            row['record_hash'] = digest({k: v for k, v in row.items() if k != 'record_hash'})
+            altered = Path(d) / 'altered.jsonl'
+            altered.write_text('\n'.join(json.dumps(item) for item in rows))
+            with self.assertRaises(ValueError):
+                summarize(altered)
+
+    def test_rehashed_archivist_pin_mismatch_cannot_enter_summary(self):
+        cfg = copy.deepcopy(CONFIG)
+        cfg['cases'] = cfg['cases'][:1]
+        cfg['arms'] = ['archivist']
+        cfg['repeats'] = 1
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'run.jsonl'
+            run(cfg, ['stub'], path, META, self.fixture_adapter)
+            rows = [json.loads(line) for line in path.read_text().splitlines()]
+            row = rows[-2]
+            row['archivist']['response']['adapter_observation']['before']['runtime_version'] = 'changed'
+            row['record_hash'] = digest({k: v for k, v in row.items() if k != 'record_hash'})
+            altered = Path(d) / 'altered.jsonl'
+            altered.write_text('\n'.join(json.dumps(item) for item in rows))
+            with self.assertRaises(ValueError):
+                summarize(altered)
+
     def test_no_evidence_choices_are_scored_separately_from_world_truth(self):
         config = copy.deepcopy(CONFIG)
         config['arms'] = ['none']
@@ -50,7 +210,7 @@ class ExperimentTests(unittest.TestCase):
         safe_by_task = {case['task']: case['no_evidence_expected'] for case in config['cases']}
         def abstaining_adapter(command, request, timeout, handoff_chars):
             decision = safe_by_task[request['task']]
-            return {'decision': decision, 'handoff': 'unused'}, {
+            return {'decision': decision, 'handoff': 'unused', 'adapter_observation': observation()}, {
                 'seconds': 0.0, 'request_chars': 1, 'response_chars': 1}
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / 'run.jsonl'
@@ -79,7 +239,8 @@ class ExperimentTests(unittest.TestCase):
         config['arms'] = ['none', 'actor', 'archivist', 'actor_evidence']
         config['repeats'] = 1
         def whitespace_adapter(command, request, timeout, handoff_chars):
-            return {'decision': request['options'][0], 'handoff': '  \t'}, {
+            return {'decision': request['options'][0], 'handoff': '  \t',
+                    'adapter_observation': observation()}, {
                 'seconds': 0.0, 'request_chars': 1, 'response_chars': 1}
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / 'run.jsonl'
@@ -258,6 +419,44 @@ class ExperimentTests(unittest.TestCase):
             metadata = ollama_adapter.backend_metadata('http://example.invalid', 'test-model', 1)
         self.assertEqual(metadata['ollama_version'], 'test-version')
         self.assertEqual(metadata['model_digest'], 'test-digest')
+
+    def test_ollama_adapter_observes_both_sides_of_a_mock_call(self):
+        request = request_for(CONFIG['cases'][0], 'actor', 0, '', 1)
+        request['handoff_chars'] = 1200
+        provider_pin = dict(PIN, backend='ollama', requested_model='fixture',
+                            reported_model='fixture:latest')
+        before = {'ollama_version': 'test-version', 'model_digest': 'a' * 64,
+                  'metadata_errors': ''}
+        for after_version in ('test-version', 'different'):
+            with self.subTest(after_version=after_version):
+                after = dict(before, ollama_version=after_version)
+                reply = {'model': 'fixture:latest',
+                         'message': {'content': json.dumps({'decision': 'failed', 'handoff': 'note'})}}
+                response = io.BytesIO(json.dumps(reply).encode())
+                with mock.patch.object(ollama_adapter, 'backend_metadata', side_effect=[before, after]) as meta, \
+                        mock.patch.object(ollama_adapter.urllib.request, 'urlopen', return_value=response) as chat, \
+                        mock.patch.object(sys, 'argv', ['ollama_adapter.py', '--model', 'fixture']), \
+                        mock.patch.object(sys, 'stdin', io.StringIO(json.dumps(request))), \
+                        mock.patch.object(sys, 'stdout', new_callable=io.StringIO) as stdout:
+                    ollama_adapter.main()
+                result = json.loads(stdout.getvalue())
+                self.assertEqual(meta.call_count, 2)
+                self.assertEqual(chat.call_count, 1)
+                self.assertEqual(result['adapter_observation']['before']['model_digest'], PIN['model_digest'])
+                if after_version == 'test-version':
+                    require_backend_observation(result, provider_pin)
+                else:
+                    with self.assertRaises(ValueError):
+                        require_backend_observation(result, provider_pin)
+
+    def test_unparseable_provider_digest_is_not_treated_as_a_pin(self):
+        before = {'ollama_version': 'test-version', 'model_digest': 'not-a-content-digest'}
+        measured = ollama_adapter.pin_observation('fixture', {'model': 'fixture:latest'}, before, before)
+        provider_pin = dict(PIN, backend='ollama', requested_model='fixture',
+                            reported_model='fixture:latest')
+        self.assertIsNone(measured['before']['model_digest'])
+        with self.assertRaises(ValueError):
+            require_backend_observation({'adapter_observation': measured}, provider_pin)
 
     def test_model_cannot_forge_adapter_failure_observation(self):
         metadata = {'ollama_version': 'observed-version', 'model_digest': 'observed-digest'}
