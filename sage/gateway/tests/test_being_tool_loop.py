@@ -241,6 +241,41 @@ def test_attempt_evidence_includes_json_selection_and_failed_argument_draw():
     assert [a["eval_count"] for a in result.generates[1]["attempts"]] == [19]
 
 
+@pytest.mark.parametrize("mode", ["json", "retake"])
+def test_json_done_explanation_never_becomes_a_salvaged_action(mode):
+    """A no-act decision is not an invitation to execute an example in its reason."""
+    import json
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    reason = 'Do not execute this example: {"name":"witness","arguments":{"event":"example"}}'
+    selection = json.dumps({"act": "done", "why": reason})
+
+    class FakeLLM:
+        max_response_tokens = 1000
+        def __init__(self):
+            self.calls = 0
+
+        def get_chat_response(self, messages, **kwargs):
+            self.calls += 1
+            if mode == "retake" and self.calls == 1:
+                return {"content": "[Your complete, well-structured response]"}
+            return {"content": selection}
+
+    dispatched = []
+    def dispatch(intent, verdict):
+        dispatched.append(intent)
+        return ResultEnvelope(ok=True, result="fake")
+
+    result = run_ollama_tool_turn(_client(dispatch), FakeLLM(), [], max_steps=1,
+                                  tools=ollama_tools(["witness"]),
+                                  act_form="json" if mode == "json" else "tools",
+                                  retake_bare_placeholder=(mode == "retake"))
+    assert dispatched == []
+    assert result.trace == [] and result.salvaged == []
+    assert result.reply == reason
+
+
 def test_length_retry_gets_the_room_the_window_has_left_via_the_override():
     """The once-retry must be MORE room than the first attempt, not the same budget again:
     with thinking on OllamaIRP already sends num_predict_think first, and its resolver
