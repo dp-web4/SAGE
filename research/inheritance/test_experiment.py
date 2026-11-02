@@ -218,21 +218,40 @@ class ExperimentTests(unittest.TestCase):
             totals = summarize(path)['arms']['none']
             self.assertEqual(totals['no_evidence_steps'], 24)
             self.assertEqual(totals['no_evidence_appropriate'], 24)
-            self.assertEqual(sum(c['label_overlaps_world_answer'] for c in totals['no_evidence_cells']), 5)
-            self.assertEqual(sum(not c['label_overlaps_world_answer'] for c in totals['no_evidence_cells']), 19)
+            self.assertEqual(sum(c['label_overlaps_world_answer'] is True for c in totals['no_evidence_cells']), 5)
+            self.assertEqual(sum(c['label_overlaps_world_answer'] is False for c in totals['no_evidence_cells']), 19)
             self.assertTrue(all(c['appropriate'] for c in totals['no_evidence_cells']))
+            self.assertEqual(totals['no_evidence_distinct_steps'], 19)
+            self.assertEqual(totals['no_evidence_distinct_appropriate'], 19)
             self.assertLess(totals['correct'], totals['steps'],
                             'world-state accuracy must remain distinct from abstention')
             bad_path = Path(d) / 'guessing.jsonl'
             run(config, ['stub'], bad_path, META, self.fixture_adapter)
             guesses = summarize(bad_path)['arms']['none']
             self.assertLess(guesses['no_evidence_appropriate'], guesses['no_evidence_steps'])
+            guess_distinct = [c for c in guesses['no_evidence_cells']
+                              if c['label_overlaps_world_answer'] is False]
+            self.assertEqual(guesses['no_evidence_distinct_steps'], len(guess_distinct))
+            self.assertEqual(guesses['no_evidence_distinct_appropriate'],
+                             sum(c['appropriate'] is True for c in guess_distinct))
+            self.assertLess(guesses['no_evidence_distinct_appropriate'],
+                            guesses['no_evidence_distinct_steps'])
 
             unlabeled = copy.deepcopy(config)
             del unlabeled['cases'][0]['no_evidence_expected']
             unlabeled_path = Path(d) / 'unlabeled.jsonl'
             run(unlabeled, ['stub'], unlabeled_path, META, self.fixture_adapter)
-            self.assertEqual(summarize(unlabeled_path)['arms']['none']['no_evidence_unscored'], 4)
+            unknown = summarize(unlabeled_path)['arms']['none']
+            self.assertEqual(unknown['no_evidence_unscored'], 4)
+            cells = unknown['no_evidence_cells']
+            distinct = [c for c in cells if c['label_overlaps_world_answer'] is False]
+            self.assertEqual(unknown['no_evidence_distinct_steps'], len(distinct))
+            self.assertEqual(unknown['no_evidence_distinct_appropriate'],
+                             sum(c['appropriate'] is True for c in distinct))
+            self.assertTrue(all(c['appropriate'] is None for c in cells
+                                if c['label_overlaps_world_answer'] is None))
+            self.assertLess(unknown['no_evidence_distinct_steps'],
+                            sum(c['label_overlaps_world_answer'] is not True for c in cells))
 
     def test_whitespace_handoffs_have_separate_denominators(self):
         config = copy.deepcopy(CONFIG)
@@ -250,7 +269,89 @@ class ExperimentTests(unittest.TestCase):
             for arm in ('actor', 'archivist'):
                 self.assertEqual(arms[arm]['empty_handoff_steps'], 24)
                 self.assertNotIn('no_evidence_steps', arms[arm])
+                cells = arms[arm]['empty_handoff_cells']
+                self.assertEqual(len(cells), arms[arm]['empty_handoff_steps'])
+                self.assertEqual(len({(c['case_id'], c['repeat'], c['generation']) for c in cells}), 24)
+                self.assertEqual(sum(c['appropriate'] is True for c in cells),
+                                 arms[arm]['empty_handoff_appropriate'])
             self.assertEqual(arms['actor_evidence']['empty_handoff_steps'], 0)
+            self.assertEqual(arms['actor_evidence']['empty_handoff_cells'], [])
+
+    def test_empty_handoff_cells_include_only_model_selected_steps(self):
+        config = copy.deepcopy(CONFIG)
+        config['arms'] = ['actor']
+        config['repeats'] = 1
+        del config['cases'][0]['no_evidence_expected']
+        calls = 0
+        def alternating_adapter(command, request, timeout, handoff_chars):
+            nonlocal calls
+            handoff = '  ' if calls % 2 == 0 else 'note'
+            calls += 1
+            return {'decision': request['options'][0], 'handoff': handoff}, {
+                'seconds': 0.0, 'request_chars': 1, 'response_chars': 1}
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'run.jsonl'
+            run(config, ['stub'], path, META, alternating_adapter)
+            totals = summarize(path)['arms']['actor']
+            cells = totals['empty_handoff_cells']
+            rows = [json.loads(line) for line in path.read_text().splitlines()]
+            selected = {(r['case_id'], r['repeat'], r['generation']) for r in rows
+                        if r['kind'] == 'step' and not r['request']['observations']
+                        and not r['request']['evidence_overlay']
+                        and not r['request']['inherited'].strip()}
+            self.assertTrue(selected)
+            self.assertLess(len(selected), 24)
+            self.assertEqual({(c['case_id'], c['repeat'], c['generation']) for c in cells}, selected)
+            self.assertGreater(totals['empty_handoff_unscored'], 0)
+            self.assertEqual(totals['empty_handoff_unscored'],
+                             sum(c['appropriate'] is None for c in cells))
+            self.assertTrue(all(c['label_overlaps_world_answer'] is None for c in cells
+                                if c['appropriate'] is None))
+
+    def test_all_unlabeled_cells_do_not_become_distinct_or_appropriate(self):
+        config = copy.deepcopy(CONFIG)
+        config['arms'] = ['none', 'actor']
+        config['repeats'] = 1
+        for case in config['cases']:
+            case.pop('no_evidence_expected', None)
+        def no_handoff_adapter(command, request, timeout, handoff_chars):
+            return {'decision': request['options'][0], 'handoff': ''}, {
+                'seconds': 0.0, 'request_chars': 1, 'response_chars': 1}
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'run.jsonl'
+            run(config, ['stub'], path, META, no_handoff_adapter)
+            arms = summarize(path)['arms']
+            self.assertEqual(arms['none']['no_evidence_steps'], 24)
+            self.assertEqual(arms['none']['no_evidence_unscored'], 24)
+            self.assertEqual(arms['none']['no_evidence_distinct_steps'], 0)
+            self.assertEqual(arms['none']['no_evidence_distinct_appropriate'], 0)
+            self.assertEqual(arms['actor']['empty_handoff_unscored'], 24)
+            self.assertTrue(all(c['appropriate'] is None and c['label_overlaps_world_answer'] is None
+                                for c in arms['actor']['empty_handoff_cells']))
+
+    def test_present_null_option_is_not_an_absent_label(self):
+        # validate() permits JSON null as an option. Its presence as a label
+        # must not be confused with a missing no_evidence_expected key.
+        config = copy.deepcopy(CONFIG)
+        config['arms'] = ['none']
+        config['repeats'] = 1
+        config['cases'] = config['cases'][:1]
+        case = config['cases'][0]
+        case['options'].append(None)
+        case['initial_expected'] = None
+        case['no_evidence_expected'] = None
+        def null_adapter(command, request, timeout, handoff_chars):
+            return {'decision': None, 'handoff': ''}, {
+                'seconds': 0.0, 'request_chars': 1, 'response_chars': 1}
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'run.jsonl'
+            run(config, ['stub'], path, META, null_adapter)
+            totals = summarize(path)['arms']['none']
+            self.assertEqual(totals['no_evidence_unscored'], 0)
+            self.assertEqual(totals['no_evidence_distinct_steps'], 3)
+            self.assertEqual(totals['no_evidence_distinct_appropriate'], 3)
+            self.assertTrue(all(c['label_overlaps_world_answer'] is not None
+                                for c in totals['no_evidence_cells']))
 
     def test_request_has_no_gold_or_future_correction(self):
         case = CONFIG['cases'][0]
