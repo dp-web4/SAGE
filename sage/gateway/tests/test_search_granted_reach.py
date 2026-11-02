@@ -148,6 +148,63 @@ def test_an_exact_grant_covers_itself_only(tree):
     assert not no.ok and "outside the reach" in no.error
 
 
+def test_search_does_not_read_through_a_floor_when_exact_own_grant_lacks_read(tree):
+    target = os.path.realpath(os.path.join(tree.gov, "_shared", "single_gate.py"))
+    reach = [(target, False, "w"), (target, True, "r", "floor")]
+    d = _disp(tree, reach)
+    d._verdict.reach_rule = "nearest"
+    calls = _recording(d)
+    result = _search(d, tree, {"pattern": "GateDecision", "path": target})
+    assert not result.ok, "the exact own grant decides; the floor cannot add read at that node"
+    assert calls == [], "a refused read must not open a witness or execute grep"
+
+
+def test_recursive_search_must_not_read_a_narrowed_own_subtree(tree):
+    parent = os.path.realpath(tree.gov)
+    narrowed = os.path.join(parent, "_shared")
+    reach = [(narrowed, True, "w"), (parent, True, "r", "floor")]
+    d = _disp(tree, reach)
+    d._verdict.reach_rule = "nearest"
+    result = _search(d, tree, {"pattern": "GateDecision", "path": parent})
+    assert not result.ok or not any("_shared/" in line for line in result.result["lines"]), (
+        "recursive search must not disclose files under a non-readable own grant")
+    permitted = os.path.join(parent, "permitted.txt")
+    with open(permitted, "w") as stream:
+        stream.write("GateDecision permitted\n")
+    sibling = _search(d, tree, {"pattern": "GateDecision", "path": permitted})
+    assert sibling.ok and sibling.result["matches"] == 1, sibling
+
+
+def test_worktree_search_does_not_execute_across_a_narrowed_own_subtree(tree, monkeypatch):
+    parent = os.path.realpath(tree.gov)
+    narrowed = os.path.join(parent, "_shared")
+    reach = [(narrowed, True, "w"), (parent, True, "r", "floor")]
+    d = _disp(tree, reach)
+    d.worktree = parent
+    d._verdict.reach_rule = "nearest"
+    args = {"pattern": "GateDecision"}
+    d._verdict.command = B.search_command(args, {"worktree": parent})
+    calls = _recording(d)
+    ran = []
+
+    def never_run(*a, **kw):
+        ran.append(True)
+        raise OSError("synthetic stop")
+
+    monkeypatch.setattr(subprocess, "run", never_run)
+    result = d._do_search(BeingIntent("search", args))
+    assert not result.ok and not calls and not ran, "no recursive search may cross the narrowed subtree"
+
+
+def test_recursive_search_allows_a_readable_own_subtree(tree):
+    parent = os.path.realpath(tree.gov)
+    readable = os.path.join(parent, "_shared")
+    d = _disp(tree, [(readable, True, "r"), (parent, True, "r", "floor")])
+    d._verdict.reach_rule = "nearest"
+    result = _search(d, tree, {"pattern": "GateDecision", "path": parent})
+    assert result.ok and any("_shared/" in line for line in result.result["lines"]), result
+
+
 def test_a_judged_command_that_differs_is_refused(tree):
     d = _disp(tree, [(os.path.realpath(tree.gov), True)], command="grep -r -e x -- /")
     calls = _recording(d)

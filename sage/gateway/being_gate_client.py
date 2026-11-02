@@ -1770,8 +1770,23 @@ def run_grant_mounts(ctx: Optional[dict] = None) -> tuple:
     # hestia #1386 (part C): the nearest grant decides, so a child grant stricter than the mount
     # above it must be mounted after it, not folded into it. Off unless the gate decides that way.
     nearest = (ctx or {}).get("reach_rule") == "nearest"
-    unreadable = []
-    for item in ctx.get("granted_reach") or ():
+    unreadable, unreadable_files = [], []
+    reach = tuple(ctx.get("granted_reach") or ())
+    # A floor at the same node must not lend its modes to a covering own grant.
+    # The fourth field is produced only by the mode-floor integration; legacy
+    # rows without it remain own grants as before.
+    own_rows, floor_rows = [], []
+    for item in reach:
+        try:
+            if len(item) > 3 and item[3] == "floor":
+                root = os.path.realpath(os.path.abspath(os.path.expanduser(str(item[0]))))
+                floor_rows.append((root, bool(item[1])))
+                continue
+            root = os.path.realpath(os.path.abspath(os.path.expanduser(str(item[0]))))
+            own_rows.append((root, bool(item[1]), str(item[2]) if len(item) > 2 else "rwed"))
+        except (TypeError, ValueError, IndexError):
+            continue
+    for item in reach:
         try:
             root, recursive = item[0], item[1]
             modes = str(item[2]) if len(item) > 2 else "rwed"
@@ -1779,11 +1794,27 @@ def run_grant_mounts(ctx: Optional[dict] = None) -> tuple:
             continue
         if not isinstance(root, str) or not root.strip():
             continue
+        if nearest and len(item) > 3 and item[3] == "floor":
+            node = os.path.realpath(os.path.abspath(os.path.expanduser(root.strip())))
+            covering = [(r, m) for r, rec, m in own_rows
+                        if node == r or (rec and node.startswith(r + os.sep))]
+            if covering:
+                depth = max(len(r) for r, _ in covering)
+                modes = "".join(c for c in "rwed" if any(c in m for r, m in covering if len(r) == depth))
+                if recursive and os.path.isdir(node) and any(r == node and not rec for r, rec, _ in own_rows):
+                    skipped.append((node, "an exact own grant and recursive floor need different modes at "
+                                          "the directory and its descendants; this mount may be narrower"))
         if "r" not in modes:
             skipped.append((os.path.abspath(os.path.expanduser(root.strip())),
                             f"your grant there is '{modes}', without r (read)"))
-            if nearest and recursive:
-                unreadable.append(os.path.realpath(os.path.abspath(os.path.expanduser(root.strip()))))
+            node = os.path.realpath(os.path.abspath(os.path.expanduser(root.strip())))
+            floor_covers = any(node == r or (rec and node.startswith(r + os.sep)) for r, rec in floor_rows)
+            if nearest and os.path.isdir(node) and (recursive or floor_covers):
+                unreadable.append(node)
+            elif nearest:
+                # A directory tmpfs cannot mask an unreadable file (or a path
+                # that may become one). Withhold covering mounts below.
+                unreadable_files.append(node)
             continue
         how = "rw" if ("w" in modes and "d" in modes) else "ro"
         lexical = os.path.abspath(os.path.expanduser(root.strip()))
@@ -1799,8 +1830,13 @@ def run_grant_mounts(ctx: Optional[dict] = None) -> tuple:
             continue
         if os.path.isdir(real):
             if not recursive:
-                skipped.append((real, "an exact grant on a directory reaches only the directory"))
-                continue
+                floor_covers = any(real == r or (rec and real.startswith(r + os.sep))
+                                   for r, rec in floor_rows)
+                if not (nearest and floor_covers):
+                    skipped.append((real, "an exact grant on a directory reaches only the directory"))
+                    continue
+                skipped.append((real, "the sandbox cannot express different modes on this exact "
+                                      "directory and its floor-covered descendants; an overlay may narrow them"))
             kind = "dir"
         elif os.path.isfile(real):
             kind = "file"
@@ -1812,6 +1848,12 @@ def run_grant_mounts(ctx: Optional[dict] = None) -> tuple:
             found[real] = (kind, how)
     # De-nesting by the union rule: a mount inside a directory mount adds nothing unless it
     # is WIDER there (rw inside ro). Kept ones bind after their parent (sorted), so they win.
+    if nearest:
+        for path, (kind, _) in list(found.items()):
+            if kind == "dir" and any(node == path or node.startswith(path + os.sep)
+                                     for node in unreadable_files):
+                del found[path]
+                skipped.append((path, "contains a non-readable file boundary that this sandbox cannot mask"))
     dirs = [(p, h) for p, (k, h) in found.items() if k == "dir"]
     if nearest:
         # Keep a child unless it grants exactly what the mount above it already grants.
@@ -1820,7 +1862,7 @@ def run_grant_mounts(ctx: Optional[dict] = None) -> tuple:
         # A recursive grant without r beneath a mounted directory: the parent would show it, the
         # gate would not. Masked with an empty read-only directory, like the home.
         mounts += sorted((u, "mask", "ro") for u in unreadable
-                         if os.path.isdir(u) and any(u.startswith(d + os.sep) for d, _ in dirs))
+                         if os.path.isdir(u) and any(u == d or u.startswith(d + os.sep) for d, _ in dirs))
         mounts.sort()
     else:
         mounts = sorted((p, k, h) for p, (k, h) in found.items()
@@ -3431,6 +3473,32 @@ def _granted_roots(core, policy, workspace: str, granted_paths=()) -> tuple:
 
 
 
+def reach_modes_at(path: str, reach, rule: str) -> str:
+    """Modes at one resolved path, retaining own-versus-floor precedence."""
+    target = os.path.realpath(os.path.expanduser(str(path)))
+    candidates = []
+    for item in reach or ():
+        try:
+            root = os.path.realpath(os.path.expanduser(str(item[0])))
+            recursive = bool(item[1])
+            modes = str(item[2]) if len(item) > 2 else "rwed"
+            floor = len(item) > 3 and item[3] == "floor"
+            covers = target == root or (recursive and os.path.commonpath((target, root)) == root)
+        except (TypeError, ValueError, IndexError):
+            continue
+        if covers:
+            candidates.append((root, modes, floor))
+    if not candidates:
+        return ""
+    if rule == "nearest":
+        own = [entry for entry in candidates if not entry[2]]
+        candidates = own or candidates
+        depth = max(len(os.path.normpath(root).split(os.sep)) for root, _, _ in candidates)
+        candidates = [entry for entry in candidates
+                      if len(os.path.normpath(entry[0]).split(os.sep)) == depth]
+    return "".join(c for c in "rwed" if any(c in modes for _, modes, _ in candidates))
+
+
 def _floor_read_reach(core, policy, workspace: str, own) -> tuple:
     """``((root, recursive, "r"), ...)`` for the society's READ-ONLY floor this member's gate is
     served (`society_floor_read` -> policy.read_scope, hestia #1381), so the dispatcher's own
@@ -3467,7 +3535,7 @@ def _floor_read_reach(core, policy, workspace: str, own) -> tuple:
                or (not orec and not rec and root == r)
                for r, orec in covered):
             continue
-        out.append((root, rec, "r"))
+        out.append((root, rec, "r", "floor"))
     return tuple(out)
 
 def _floor_mode_reach(core, policy, workspace: str, own) -> tuple:
@@ -3513,7 +3581,7 @@ def _floor_mode_reach(core, policy, workspace: str, own) -> tuple:
                    or (not orec and not rec and root == r)
                    for r, orec in covered):
                 continue
-            out.append((root, rec, modes))
+            out.append((root, rec, modes, "floor"))
     return tuple(out)
 
 

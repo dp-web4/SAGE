@@ -6,6 +6,7 @@ write. A run mounts every grant that holds r (`run_grant_mounts`: `--ro-bind` un
 holds both w and d); the live single gate judges a run by its script path, never by that line
 (hestia #1388 README, point 3)."""
 import os
+import pytest
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -199,7 +200,7 @@ def test_a_read_only_floor_entry_is_reach_for_reading_and_never_for_writing():
     open(os.path.join(forum, "note.md"), "w").write("from sprout\n")
     policy = SimpleNamespace(scope=(), read_scope=(f"path:{forum}/**",))
     reach = _granted_reach(_core_with_modes(), policy, ws)
-    assert (forum, True, "r") in reach, reach
+    assert (forum, True, "r", "floor") in reach, reach
     d = ReferenceF1aDispatcher(memory_root=home)
     v = GatewayVerdict("allow", granted=tuple(r for r, *_ in reach), granted_reach=reach)
     r = d(BeingIntent("memory_read", {"path": os.path.join(forum, "note.md")}), v)
@@ -249,7 +250,7 @@ def test_an_exact_own_grant_never_suppresses_a_recursive_floor_beneath_it():
     ws, home, forum = _floor_world()
     policy = SimpleNamespace(scope=(f"path:{forum}",), read_scope=(f"path:{forum}/**",))
     reach = _granted_reach(_core_with_modes(), policy, ws)
-    assert (forum, True, "r") in reach, reach
+    assert (forum, True, "r", "floor") in reach, reach
     read, write = _dispatch_read_and_write(home, forum, reach)
     assert read.ok and "from sprout" in (read.result or ""), read
     assert not write.ok and not os.path.exists(os.path.join(forum, "x.md")), write
@@ -281,7 +282,7 @@ def test_a_narrowed_floor_entry_is_reach_in_its_modes():
     ws, home, forum = _floor_world()
     policy = SimpleNamespace(scope=(), read_scope=(), floor_mode_scope=((f"path:{forum}/**", "rw"),))
     reach = _granted_reach(_core_with_modes(), policy, ws)
-    assert (forum, True, "rw") in reach, reach
+    assert (forum, True, "rw", "floor") in reach, reach
     read, write = _dispatch_read_and_write(home, forum, reach)
     assert read.ok and "from sprout" in (read.result or ""), read
     assert write.ok and os.path.exists(os.path.join(forum, "x.md")), write
@@ -298,7 +299,7 @@ def test_the_narrowed_floor_steps_aside_where_an_own_grant_reaches():
     policy = SimpleNamespace(scope=(f"path:{forum}",), read_scope=(),
                              floor_mode_scope=((f"path:{forum}/**", "rw"),))
     reach = _granted_reach(_core_with_modes(), policy, ws)
-    assert (forum, True, "rw") in reach, reach
+    assert (forum, True, "rw", "floor") in reach, reach
 
 
 def test_a_row_served_as_read_floor_and_by_mode_is_listed_once_with_its_modes():
@@ -307,7 +308,7 @@ def test_a_row_served_as_read_floor_and_by_mode_is_listed_once_with_its_modes():
                              floor_mode_scope=((f"path:{forum}/**", "r"),))
     reach = _granted_reach(_core_with_modes(), policy, ws)
     rows = [x for x in reach if x[0] == forum]
-    assert rows == [(forum, True, "r")], reach
+    assert rows == [(forum, True, "r", "floor")], reach
     read, write = _dispatch_read_and_write(home, forum, reach)
     assert read.ok and not write.ok, (read, write)
 
@@ -319,7 +320,7 @@ def test_a_bare_repo_name_floor_row_and_malformed_modes():
     policy = SimpleNamespace(scope=(), read_scope=(),
                              floor_mode_scope=(("governance", "wr"), (f"path:{forum}/**", "x"), ("", "r")))
     reach = _granted_reach(_core_with_modes(), policy, ws)
-    assert (os.path.realpath(gov), True, "rw") in reach, reach       # canonical order, repo name resolved
+    assert (os.path.realpath(gov), True, "rw", "floor") in reach, reach
     assert not [x for x in reach if x[0] == forum], reach            # a mode outside rwed reads as nothing
     # A set with ANY letter outside rwed is dropped whole, as hestia's _parse_mode_scope does: "rwx"
     # is not repaired into "rw" (legion on #571; "x" alone passed under both rules).
@@ -338,7 +339,7 @@ def test_a_malformed_floor_row_costs_the_floor_row_never_the_own_grants():
     os.makedirs(gov, exist_ok=True)
     policy = SimpleNamespace(scope=(), read_scope=(),
                              floor_mode_scope=((f"path:{forum}/**", "rw", "extra"), ("governance", "r")))
-    assert (os.path.realpath(gov), True, "r") in _granted_reach(_core_with_modes(), policy, ws)
+    assert (os.path.realpath(gov), True, "r", "floor") in _granted_reach(_core_with_modes(), policy, ws)
 
 
 def test_a_core_or_policy_without_the_field_adds_nothing():
@@ -384,7 +385,7 @@ def test_mismatched_core_preserves_own_grants_and_legacy_read_floor():
                              floor_mode_scope=((f"path:{forum}/**", "rw"),))
     reach = _granted_reach(core, policy, ws)
     assert (own, True, "rwed") in reach
-    assert (forum, True, "r") in reach and (forum, True, "rw") not in reach
+    assert (forum, True, "r", "floor") in reach and (forum, True, "rw", "floor") not in reach
     d = ReferenceF1aDispatcher(memory_root=home)
     verdict = GatewayVerdict("allow", granted_reach=reach, reach_rule="union")
     assert d(BeingIntent("memory_read", {"path": os.path.join(forum, "note.md")}), verdict).ok
@@ -413,6 +414,20 @@ def test_exact_own_read_grant_wins_over_recursive_write_floor_at_same_file():
         assert stream.read() == "original"
 
 
+def test_exact_own_node_does_not_remove_recursive_floor_descendants():
+    ws, home, forum = _floor_world()
+    core = _core_with_modes()
+    core.scope_roots_with_modes = lambda p, w: ((forum, False, "r"),)
+    policy = SimpleNamespace(scope=(f"path:{forum}",), read_scope=(),
+                             floor_mode_scope=((f"path:{forum}/**", "rw"),))
+    reach = _granted_reach(core, policy, ws)
+    verdict = GatewayVerdict("allow", granted_reach=reach, reach_rule="nearest")
+    d = ReferenceF1aDispatcher(memory_root=home)
+    assert d(BeingIntent("memory_write", {"path": os.path.join(forum, "child.md"), "content": "x"}), verdict).ok
+    with pytest.raises(ValueError, match="writing needs w"):
+        d._safe_path(forum, writing=True)
+
+
 def test_run_mount_does_not_widen_exact_own_file_from_a_same_node_floor():
     from sage.gateway.being_gate_client import run_grant_mounts
     ws = os.path.realpath(tempfile.mkdtemp(prefix="floor-mount-node-"))
@@ -430,3 +445,66 @@ def test_run_mount_does_not_widen_exact_own_file_from_a_same_node_floor():
                                       "reach_rule": "nearest"})
     assert (target, "file", "ro") in mounts, mounts
     assert (target, "file", "rw") not in mounts, mounts
+
+
+def test_run_mount_does_not_expose_an_exact_own_directory_under_writable_floor():
+    from sage.gateway.being_gate_client import run_grant_mounts
+    ws, home, forum = _floor_world()
+    archive = os.path.join(forum, "archive")
+    os.makedirs(archive)
+    core = _core_with_modes()
+    core.scope_roots_with_modes = lambda p, w: ((archive, False, "r"),)
+    policy = SimpleNamespace(scope=(f"path:{archive}",), read_scope=(),
+                             floor_mode_scope=((f"path:{forum}/**", "rwd"),))
+    reach = _granted_reach(core, policy, ws)
+    mounts, skipped, _ = run_grant_mounts({"memory_root": home, "granted_reach": reach,
+                                            "reach_rule": "nearest"})
+    assert (forum, "dir", "rw") in mounts, mounts
+    assert (archive, "dir", "ro") in mounts or (archive, "mask", "ro") in mounts, (mounts, skipped)
+    assert any(p == archive for p, _ in skipped), "a narrower-than-floor overlay must be disclosed"
+
+
+def test_run_mount_discloses_when_exact_root_forces_a_narrower_subtree():
+    from sage.gateway.being_gate_client import run_grant_mounts
+    ws, home, forum = _floor_world()
+    core = _core_with_modes()
+    core.scope_roots_with_modes = lambda p, w: ((forum, False, "r"),)
+    policy = SimpleNamespace(scope=(f"path:{forum}",), read_scope=(),
+                             floor_mode_scope=((f"path:{forum}/**", "rwd"),))
+    reach = _granted_reach(core, policy, ws)
+    mounts, skipped, _ = run_grant_mounts({"memory_root": home, "granted_reach": reach,
+                                            "reach_rule": "nearest"})
+    assert (forum, "dir", "ro") in mounts and (forum, "dir", "rw") not in mounts
+    assert any(p == forum and "narrow" in why for p, why in skipped), skipped
+
+
+def test_run_mount_masks_an_unreadable_exact_own_directory_under_floor():
+    from sage.gateway.being_gate_client import run_grant_mounts
+    ws, home, forum = _floor_world()
+    archive = os.path.join(forum, "archive")
+    os.makedirs(archive)
+    core = _core_with_modes()
+    core.scope_roots_with_modes = lambda p, w: ((archive, False, "w"),)
+    policy = SimpleNamespace(scope=(f"path:{archive}",), read_scope=(),
+                             floor_mode_scope=((f"path:{forum}/**", "rwd"),))
+    reach = _granted_reach(core, policy, ws)
+    mounts, skipped, _ = run_grant_mounts({"memory_root": home, "granted_reach": reach,
+                                            "reach_rule": "nearest"})
+    assert (forum, "dir", "rw") in mounts, mounts
+    assert (archive, "mask", "ro") in mounts, (mounts, skipped)
+    assert any(p == archive for p, _ in skipped)
+
+
+def test_run_mount_does_not_expose_an_unreadable_file_under_writable_floor():
+    from sage.gateway.being_gate_client import run_grant_mounts
+    ws, home, forum = _floor_world()
+    target = os.path.join(forum, "note.md")
+    core = _core_with_modes()
+    core.scope_roots_with_modes = lambda p, w: ((target, False, "w"),)
+    policy = SimpleNamespace(scope=(f"path:{target}",), read_scope=(),
+                             floor_mode_scope=((f"path:{forum}/**", "rwd"),))
+    reach = _granted_reach(core, policy, ws)
+    mounts, skipped, _ = run_grant_mounts({"memory_root": home, "granted_reach": reach,
+                                            "reach_rule": "nearest"})
+    assert (forum, "dir", "rw") not in mounts, (mounts, skipped)
+    assert any(p in (forum, target) for p, _ in skipped)

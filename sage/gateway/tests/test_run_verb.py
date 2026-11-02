@@ -37,6 +37,31 @@ def _run_dispatcher(tmp_path):
     return d, home
 
 
+def test_run_never_opens_data_hidden_by_an_exact_own_grant(tmp_path, monkeypatch):
+    from sage.gateway import being_gate_client as B
+    d, home = _run_dispatcher(tmp_path)
+    script = home / "scratch" / "script.py"
+    script.write_text("print('synthetic')\n")
+    target = tmp_path / "input.txt"
+    target.write_text("synthetic input\n")
+    reach = ((str(target), False, "w"), (str(target), True, "r", "floor"))
+    d._verdict = types.SimpleNamespace(command=None, granted=(), granted_reach=reach, reach_rule="nearest")
+    monkeypatch.setattr(B, "run_command", lambda *a, **k: "synthetic command")
+    monkeypatch.setattr(B, "run_names", lambda *a, **k: [str(script), str(target)])
+    monkeypatch.setattr(B, "run_budget_s", lambda: (100, "test"))
+    real_open, opened = os.open, []
+
+    def probe(path, flags, *a, **kw):
+        if os.path.realpath(path) == str(target):
+            opened.append(path)
+            raise PermissionError(13, "synthetic stop")
+        return real_open(path, flags, *a, **kw)
+
+    monkeypatch.setattr(os, "open", probe)
+    result = d._do_run(BeingIntent("run", {"path": str(script), "data": [str(target)]}))
+    assert not result.ok and not opened, "the denied data file must never be opened"
+
+
 # -- legion's tests -------------------------------------------------------------------------
 
 @needs_sandbox

@@ -979,10 +979,13 @@ class ReferenceF1aDispatcher:
         # gate admitted was refused here (nomad review of #533, point 1). A grant without modes
         # is full-mode.
         self._extra_modes = {}
+        self._extra_mode_entries = []
         for r, rec, *md in reach:
             k = (Path(r).resolve(), bool(rec))
             got = self._extra_modes.get(k, "") + (str(md[0]) if md else "rwed")
             self._extra_modes[k] = "".join(c for c in "rwed" if c in got)
+            self._extra_mode_entries.append((k[0], k[1], str(md[0]) if md else "rwed",
+                                             len(md) > 1 and md[1] == "floor"))
         # And BY WHICH RULE (hestia #1386): "nearest" when the gate decided by the nearest
         # explicit grant (part C), so this confinement decides the same way.
         self._reach_rule = getattr(verdict, "reach_rule", "union")
@@ -1089,7 +1092,7 @@ class ReferenceF1aDispatcher:
         modes = getattr(self, "_extra_modes", None) or {}
         if (getattr(self, "_reach_rule", "union") == "nearest"
                 and not (p == self.memory_root or self.memory_root in p.parents)):
-            near = self._nearest_modes(p, held, modes)
+            near = self._nearest_modes(p, held, modes, getattr(self, "_extra_mode_entries", None))
             if near is not None:
                 if need in near:
                     return p
@@ -1155,9 +1158,20 @@ class ReferenceF1aDispatcher:
             if "r" in modes.get((r, rec), "rwed"))
 
     @staticmethod
-    def _nearest_modes(p: Path, held, modes) -> Optional[str]:
-        """The modes of the nearest held grant covering `p` (grants on one node union), or None.
-        The gate's rule (hestia #1386), over this verdict's (root, recursive) nodes."""
+    def _nearest_modes(p: Path, held, modes, entries=None) -> Optional[str]:
+        """Own grants decide before floors; the nearest node within that class decides."""
+        if entries:
+            best = {False: -1, True: -1}
+            got = {False: set(), True: set()}
+            for r, rec, m, floor in entries:
+                if p == r or (rec and r in p.parents):
+                    depth = len(r.parts)
+                    if depth > best[floor]:
+                        best[floor], got[floor] = depth, set(m)
+                    elif depth == best[floor]:
+                        got[floor] |= set(m)
+            chosen = False if best[False] >= 0 else True
+            return None if best[chosen] < 0 else "".join(c for c in "rwed" if c in got[chosen])
         best, got = -1, set()
         for r, rec in held:
             if p == r or (rec and r in p.parents):
@@ -1175,7 +1189,8 @@ class ReferenceF1aDispatcher:
                 p == self.memory_root or self.memory_root in p.parents):
             held = tuple((Path(r).resolve(), rec) for r, rec in (getattr(self, "_extra_reach", None) or (
                 (r, True) for r in (getattr(self, "_extra_roots", ()) or ()))))
-            near = self._nearest_modes(p, held, getattr(self, "_extra_modes", None) or {})
+            near = self._nearest_modes(p, held, getattr(self, "_extra_modes", None) or {},
+                                       getattr(self, "_extra_mode_entries", None))
             return near is not None and "r" in near
         pairs = ((self.memory_root, True),) + tuple((Path(r).resolve(), rec) for r, rec in self._reach_pairs())
         return any(p == r or (rec and r in p.parents) for r, rec in pairs)

@@ -3028,14 +3028,10 @@ class HestiaF1aDispatcher:
         # allowed this target, and a target no grant covers is refused here even if it did not.
         target = reach_search_target(cmd)
         reach = _granted_reach_of(getattr(self, "_verdict", None))
-        inside = target is not None and any(
-            target == os.path.realpath(r) or (rec and target.startswith(os.path.realpath(r) + os.sep))
-            for r, rec, *md in reach if _mode_has(md, "r"))
-        if not inside:
-            return ResultEnvelope(ok=False, error=(
-                f"search refused: {target or 'that path'} is outside the reach you hold. "
-                f"Your grants are listed under 'Reach you hold' in your state; search a folder "
-                f"inside one of them."))
+        rule = getattr(getattr(self, "_verdict", None), "reach_rule", "union")
+        error = _search_reach_error(target, reach, rule)
+        if error:
+            return ResultEnvelope(ok=False, error=error)
         pattern = str(intent.args.get("pattern", ""))
         begin = self._call("hestia_begin_action", {"tool_name": "search", "target": pattern[:80]})
         err = _hestia_error(begin)
@@ -3117,6 +3113,13 @@ class HestiaF1aDispatcher:
             return ResultEnvelope(ok=False, error=(
                 "search refused: the command the law judged is not the command this "
                 "dispatcher would execute."))
+        reach = _granted_reach_of(getattr(self, "_verdict", None))
+        rule = getattr(getattr(self, "_verdict", None), "reach_rule", "union")
+        if reach and rule == "nearest":
+            target = os.path.realpath(os.path.join(self.worktree, str(intent.args.get("path", "") or "")))
+            error = _search_reach_error(target, reach, rule)
+            if error:
+                return ResultEnvelope(ok=False, error=error)
         pattern = str(intent.args.get("pattern", ""))
         where = str(intent.args.get("path", "") or "your whole worktree")
         # WITNESSED LIKE git_read, because it is the same kind of act. Both are classed
@@ -3299,7 +3302,8 @@ class HestiaF1aDispatcher:
         import stat
         import subprocess
         from sage.gateway.being_gate_client import (run_command, run_names, run_stage_dir,
-                                                    run_budget_s, RUN_MIN_S, run_grant_mounts)
+                                                    run_budget_s, RUN_MIN_S, run_grant_mounts,
+                                                    reach_modes_at)
         ctx = {"memory_root": self.memory_root,
                "member": getattr(self, "member", None),
                "worktree": getattr(self, "worktree", None),
@@ -3326,15 +3330,15 @@ class HestiaF1aDispatcher:
                 f"record is written, and a run must not outlive its beat. Ask again next beat; "
                 f"the file is unchanged and nothing of yours was touched."))
         root = os.path.realpath(self.memory_root)
-        granted = [(os.path.realpath(r), rec) for r, rec, *md in
-                   _granted_reach_of(getattr(self, "_verdict", None)) if _mode_has(md, "r")]
+        reach = _granted_reach_of(getattr(self, "_verdict", None))
+        rule = getattr(getattr(self, "_verdict", None), "reach_rule", "union")
 
         def _allowed(full: str, is_script: bool) -> bool:
             if full == root or full.startswith(root + os.sep):
                 return True
             if is_script:                 # code it executes is code it wrote, in its home
                 return False
-            return any(full == r or (rec and full.startswith(r + os.sep)) for r, rec in granted)
+            return "r" in reach_modes_at(full, reach, rule)
 
         staged = []                       # (base name, bytes)
         for i, n in enumerate(names):
@@ -4836,6 +4840,28 @@ def _granted_reach_of(verdict) -> tuple:
     if reach:
         return reach
     return tuple((r, True) for r in (getattr(verdict, "granted", ()) or ()))
+
+
+def _search_reach_error(target, reach, rule):
+    from sage.gateway.being_gate_client import reach_modes_at
+    if target is None or "r" not in reach_modes_at(target, reach, rule):
+        return (f"search refused: {target or 'that path'} is outside the reach you hold. "
+                "Your grants are listed under 'Reach you hold' in your state; search a folder inside one of them.")
+    if rule == "nearest" and os.path.isdir(target):
+        # The fixed recursive grep cannot exclude a more restrictive own node.
+        # Refuse the tree rather than reading through it; narrower searches may work.
+        for item in reach:
+            if len(item) > 3 and item[3] == "floor":
+                continue
+            try:
+                node = os.path.realpath(str(item[0]))
+                below = node != target and os.path.commonpath((target, node)) == target
+            except (TypeError, ValueError, IndexError):
+                continue
+            if below and "r" not in reach_modes_at(node, reach, rule):
+                return ("search refused: this recursive search includes a path whose own grant "
+                        "does not allow reading. Search a narrower allowed location.")
+    return None
 
 
 def _resolve_relative_in_reach(rel: str, reach) -> list:
