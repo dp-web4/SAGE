@@ -354,6 +354,39 @@ def test_a_failed_settled_commit_rolls_back_within_the_declared_paths(tmp_path, 
     assert w.paths <= declared, w.paths - declared
 
 
+def test_failed_retirement_restores_exact_todo_bytes(tmp_path, monkeypatch):
+    h = _home(tmp_path)
+    original = TODO.replace("\n", "\r\n").encode("utf-8")
+    (h / bt.TODO).write_bytes(original)
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "finished"}, require=True)
+    monkeypatch.setattr(st, "_commit", lambda *a, **k: (False, "synthetic commit failure"))
+    ok, message, changed = bt.retire_thread(h, args)
+    assert not ok and changed and "restored" in message
+    assert (h / bt.TODO).read_bytes() == original
+
+
+def test_archive_keeps_original_todo_bytes_for_recovery(tmp_path):
+    h = _home(tmp_path)
+    original = TODO.replace("\n", "\r\n").encode("utf-8")
+    (h / bt.TODO).write_bytes(original)
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "finished"}, require=True)
+    assert bt.retire_thread(h, args)[0]
+    archive = (h / bt.archive_name(args)).read_text()
+    encoded = archive.split("## Original todo snapshot (base64; exact bytes)\n\n", 1)[1].splitlines()[0]
+    assert base64.b64decode(encoded) == original
+
+
+def test_invalid_todo_encoding_never_silently_rewrites_unrelated_content(tmp_path):
+    h = _home(tmp_path)
+    original = TODO.encode("utf-8") + b"\n- [ ] unrelated damaged byte: \xff\n"
+    (h / bt.TODO).write_bytes(original)
+    args = {"words": "widget", "reason": "finished"}
+    result = bt.retire_thread(h, {**args, "preview": "true"})
+    assert not result[0] and not result[2]
+    assert "encoding" in result[1].lower() or "utf-8" in result[1].lower()
+    assert (h / bt.TODO).read_bytes() == original
+
+
 def test_a_failed_settled_rollback_preserves_recovery_evidence(tmp_path, monkeypatch):
     """A failed commit can mean the settled replacement happened but undo failed."""
     h = _home(tmp_path)
