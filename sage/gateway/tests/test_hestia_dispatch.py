@@ -1871,6 +1871,34 @@ def test_a_reply_claim_fails_closed(tmp_path):
         restore()
 
 
+def test_reply_timeout_after_remote_acceptance_does_not_release_claim(tmp_path):
+    """A lost response is unknown, not proof that the receiver did nothing."""
+    published, accepted = [], []
+
+    def pub(to, body):
+        published.append((to, body))
+        return f"shared-context/forum/being/q-{len(published)}.md"
+
+    d, root, now, restore = _reply_fixture(tmp_path, pub)
+    try:
+        real_mesh = d._do_mesh
+
+        def accepted_then_timeout(intent, _count=True):
+            accepted.append(intent.args["pointer"])
+            raise TimeoutError("response lost after remote acceptance")
+
+        d._do_mesh = accepted_then_timeout
+        intent = BeingIntent("peer_ask", {"to": "legion-being", "body": "one reply"})
+        first = d(intent, _ALLOW)
+        assert not first.ok and len(accepted) == 1
+        d._do_mesh = real_mesh
+        second = d(intent, _ALLOW)
+        assert not second.ok, "an unknown first outcome must not permit a second exempt send"
+        assert len(published) == 4, published  # three ordinary asks and one attempted reply
+    finally:
+        restore()
+
+
 def test_two_dispatchers_racing_spend_one_notice_once(tmp_path):
     """Two sessions on one home, under the REAL flock, both try to reply to the same notice while the
     first is still publishing: exactly one reply goes."""
