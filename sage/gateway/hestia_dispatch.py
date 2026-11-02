@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import stat
@@ -1025,6 +1026,33 @@ class HestiaF1aDispatcher:
     def _peer_key(self, to: str) -> str:
         return (to or "").split("/", 1)[0].strip().lower()
 
+    def _reply_claim_history(self) -> Optional[List[Dict[str, Any]]]:
+        """Fail closed on visibly unreadable claim history; this is not an integrity proof."""
+        try:
+            lines = self._asks_path().read_text(encoding="utf-8").splitlines()
+            rows = []
+            for line in lines:
+                row = json.loads(line)
+                if not isinstance(row, dict):
+                    return None
+                timestamp = row.get("t")
+                if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
+                    return None
+                if not math.isfinite(timestamp):
+                    return None
+                via = row.get("via")
+                if via not in ("mesh", "peer_ask", *self.REPLY_VIAS):
+                    return None
+                if via in self.REPLY_VIAS and (not isinstance(row.get("re"), str) or not row["re"]):
+                    return None
+                # Legacy releases do not prove that the preceding send had no effect.
+                if via == "reply-release":
+                    return None
+                rows.append(row)
+            return rows
+        except (OSError, UnicodeError, ValueError, OverflowError):
+            return None
+
     def _ask_limit(self, to: str) -> Optional[str]:
         """The refusal text when this being has already reached the cap for `to`, else None.
         Checked BEFORE anything is published or notified, so a refused ask leaves nothing
@@ -1077,13 +1105,19 @@ class HestiaF1aDispatcher:
         lct = self._roster_lct(self.resolve_peer(to))
         if not lct or not self.memory_root:
             return None
-        # A claim spends the notice; a later release (the send failed) un-spends it. In file order.
+        # A claim spends the notice. Legacy releases are refused by _reply_claim_history:
+        # they do not establish whether publication or delivery happened.
+        rows = self._reply_claim_history()
+        if rows is None:
+            return None
+        cutoff = self._now() - self.REPLY_WINDOW_S
         state: Dict[str, str] = {}
-        for r in self.recent_asks(window_s=self.REPLY_WINDOW_S):
+        for r in rows:
+            if r["t"] < cutoff:
+                continue
             if r.get("via") in self.REPLY_VIAS and r.get("re"):
                 state[str(r["re"])] = r["via"]
         replied = {nid for nid, via in state.items() if via == "reply"}
-        cutoff = self._now() - self.REPLY_WINDOW_S
         for row in reversed(drain.delivered_notices(Path(self.memory_root))):
             note, nid = str(row["note"]), str(row["hub_notice_id"])
             if str(row["from"]) != lct or nid in replied or "-coordination-" not in note:

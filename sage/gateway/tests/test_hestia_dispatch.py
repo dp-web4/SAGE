@@ -1953,6 +1953,28 @@ def test_corrupted_reply_claim_does_not_reauthorize_a_reply(tmp_path):
         restore()
 
 
+@pytest.mark.parametrize("bad_row", [
+    '{"via":"reply"',
+    '[]',
+    '{"t":true,"via":"peer_ask"}',
+    '{"t":NaN,"via":"peer_ask"}',
+    '{"t":1,"via":"future_type"}',
+    '{"t":1,"via":"reply"}',
+    '{"t":1,"via":"reply-release","re":"notice-real"}',
+])
+def test_reply_history_refuses_invalid_rows(tmp_path, bad_row):
+    d, root = _disp(publish_fn=lambda to, body: "fixture")
+    d._asks_path().write_text(bad_row + "\n")
+    assert d._reply_claim_history() is None
+
+
+def test_reply_history_refuses_missing_or_non_utf8_ledger(tmp_path):
+    d, root = _disp(publish_fn=lambda to, body: "fixture")
+    assert d._reply_claim_history() is None
+    d._asks_path().write_bytes(b"\xff")
+    assert d._reply_claim_history() is None
+
+
 def test_two_dispatchers_racing_spend_one_notice_once(tmp_path):
     """Two sessions on one home, under the REAL flock, both try to reply to the same notice while the
     first is still publishing: exactly one reply goes."""
