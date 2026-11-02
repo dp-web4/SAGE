@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -53,6 +54,24 @@ RENDER_CHARS = 3200
 _UNCHANGED = "unchanged: "
 
 
+def _read_regular_bytes(path: Path) -> bytes:
+    """Read a single-linked regular file without following its final symlink.
+
+    This is not a guarantee against parent-directory or later same-user races.
+    Fail closed where the no-follow primitive is unavailable.
+    """
+    def opener(name, flags):
+        if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_NONBLOCK"):
+            raise OSError("safe file reads are unavailable on this platform")
+        return os.open(name, flags | os.O_NOFOLLOW | os.O_NONBLOCK)
+
+    with open(path, "rb", opener=opener) as stream:
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise OSError("record is not a single-linked regular file")
+        return stream.read()
+
+
 def _norm(s: str) -> str:
     s = re.sub(r"[`*_\"'?.!:;,]", "", (s or "").lower())
     return re.sub(r"\s+", " ", s).strip()
@@ -62,10 +81,10 @@ def read(instance) -> Tuple[List[dict], int, Optional[str]]:
     """(entries, next id number, error). Entries oldest first. A file that cannot be parsed is reported,
     never guessed at or rewritten."""
     p = Path(instance) / SETTLED_FILE
-    if not p.exists():
-        return [], 1, None
     try:
-        d = json.loads(p.read_text())
+        d = json.loads(_read_regular_bytes(p).decode("utf-8"))
+    except FileNotFoundError:
+        return [], 1, None
     except (OSError, ValueError) as e:
         return [], 1, f"{SETTLED_FILE} could not be read ({type(e).__name__})"
     if not isinstance(d, dict) or not isinstance(d.get("entries"), list):

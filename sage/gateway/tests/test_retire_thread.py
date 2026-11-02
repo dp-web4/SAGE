@@ -431,6 +431,40 @@ def test_retirement_does_not_read_a_record_symlink_swapped_after_preflight(tmp_p
     assert not archive.exists()
 
 
+@pytest.mark.parametrize("stage", ["todo", "settled"])
+def test_retirement_does_not_read_a_hardlinked_record(tmp_path, stage):
+    home = tmp_path / "home"
+    home.mkdir()
+    h = _home(home)
+    args = {"words": "widget", "reason": "finished"}
+    (h / bt.TODO).write_text("- [ ] unrelated one\n- [ ] unrelated two\n")
+    (h / st.SETTLED_FILE).write_text(json.dumps({"next": 1, "entries": []}))
+    victim = tmp_path / "outside.txt"
+    if stage == "todo":
+        victim.write_text("- [ ] widget synthetic-private-marker\n- [ ] unrelated\n")
+        link = h / bt.TODO
+    else:
+        victim.write_text(json.dumps({"next": 2, "entries": [
+            {"id": "s1", "question": "widget synthetic-private-marker", "answer": "outside", "evidence": ""}
+        ]}))
+        link = h / st.SETTLED_FILE
+    link.unlink()
+    os.link(victim, link)
+    ok, _, _ = bt.retire_thread(h, args)
+    assert not ok
+    assert not (h / bt.archive_name(args)).exists()
+
+
+def test_retirement_refuses_fifo_todo_without_waiting_for_a_writer(tmp_path):
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("FIFO creation is unavailable")
+    h = _home(tmp_path)
+    (h / bt.TODO).unlink()
+    os.mkfifo(h / bt.TODO)
+    ok, _, changed = bt.retire_thread(h, {"words": "widget", "reason": "finished"})
+    assert not ok and not changed
+
+
 def test_an_interleaved_retire_cannot_move_this_one_off_its_declared_paths(tmp_path, monkeypatch):
     h = _home(tmp_path)
     mine, other = {"words": "widget", "reason": "mine"}, {"words": "daemon", "reason": "other"}

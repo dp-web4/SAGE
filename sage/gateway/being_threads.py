@@ -141,8 +141,9 @@ _TODO_UNREAD = object()
 
 
 def _read_todo_bytes(instance: Path) -> Optional[bytes]:
+    from sage.gateway.being_settled import _read_regular_bytes
     try:
-        return (instance / TODO).read_bytes()
+        return _read_regular_bytes(instance / TODO)
     except FileNotFoundError:
         return None
 
@@ -278,7 +279,9 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
                            f"changed. Give a different reason (say what is new) to retire again."), False
         settled_path = instance / st.SETTLED_FILE
         try:
-            settled_before = settled_path.read_bytes() if settled_path.exists() else None
+            settled_before = st._read_regular_bytes(settled_path)
+        except FileNotFoundError:
+            settled_before = None
         except OSError as exc:
             return False, f"cannot snapshot the settled list ({type(exc).__name__}); nothing was retired.", False
         head = [f"> RETIRED {stamp:%Y-%m-%d %H:%M}Z with retire_thread"
