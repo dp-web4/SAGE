@@ -249,6 +249,30 @@ def test_real_settled_log_and_restore_failures_do_not_erase_recovery(tmp_path, m
     assert changed
 
 
+def test_todo_restore_failure_preserves_archive_and_reports_partial_effect(tmp_path, monkeypatch):
+    h = _home(tmp_path)
+    args = {"words": "widget", "reason": "r"}
+    real_write = bt._write_atomic
+    todo_writes = 0
+
+    def fail_todo_restore(path, text):
+        nonlocal todo_writes
+        if path == h / bt.TODO:
+            todo_writes += 1
+            if todo_writes == 2:
+                raise OSError("synthetic todo restore failure")
+        return real_write(path, text)
+
+    monkeypatch.setattr(bt, "_write_atomic", fail_todo_restore)
+    monkeypatch.setattr(st, "_commit", lambda *a, **kw: (False, "synthetic commit failure"))
+    ok, msg, changed = bt.retire_thread(h, args)
+    assert not ok and changed and todo_writes == 2
+    assert "todo restoration failed" in msg and "may be partial" in msg
+    assert (h / bt.TODO).read_text() != TODO
+    archive = (h / bt.archive_name(args)).read_text()
+    assert TODO in archive
+
+
 @pytest.mark.parametrize("stage", ["archive", "todo"])
 def test_write_failure_reports_partial_and_preserves_available_evidence(tmp_path, monkeypatch, stage):
     h = _home(tmp_path)
