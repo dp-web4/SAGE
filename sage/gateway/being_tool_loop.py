@@ -320,6 +320,8 @@ def _json_calls(text: str, names) -> List[dict]:
                     # recorded as having done nothing. Emit them all, in written order: dict
                     # iteration preserves the order they appeared in the text, and that order
                     # is the being's, not ours.
+                    if any(set(v) - set(known[k]) for k, v in inner):
+                        return []  # Never execute a prefix when a qualifier is unsupported.
                     for k, v in inner:
                         out.append({"function": {"name": k, "arguments": dict(v)},
                                     "_salvaged": "json"})
@@ -329,6 +331,8 @@ def _json_calls(text: str, names) -> List[dict]:
                     name, args = inner[0]
                 else:
                     continue
+            if args is not None and set(args) - set(known[name]):
+                return []
             if args is None:
                 # flat form: the arguments sit beside the name key; keep only schema params
                 # when the schema is known, so stray keys ("timestamp", "status") never
