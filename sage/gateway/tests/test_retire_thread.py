@@ -387,6 +387,20 @@ def test_invalid_todo_encoding_never_silently_rewrites_unrelated_content(tmp_pat
     assert (h / bt.TODO).read_bytes() == original
 
 
+def test_confirmation_is_bound_to_exact_todo_bytes_not_normalized_text(tmp_path):
+    h = _home(tmp_path)
+    original = TODO.replace("\n", "\r\n").encode("utf-8")
+    (h / bt.TODO).write_bytes(original)
+    args = {"words": "widget", "reason": "finished"}
+    token = _preview_confirmation(h, args)
+    normalized = TODO.encode("utf-8")
+    (h / bt.TODO).write_bytes(normalized)
+    ok, message, changed = bt.retire_thread(h, {**args, "confirmation": token})
+    assert not ok and not changed and "changed" in message.lower()
+    assert (h / bt.TODO).read_bytes() == normalized
+    assert not (h / bt.archive_name(args)).exists()
+
+
 def test_a_failed_settled_rollback_preserves_recovery_evidence(tmp_path, monkeypatch):
     """A failed commit can mean the settled replacement happened but undo failed."""
     h = _home(tmp_path)
