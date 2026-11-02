@@ -1896,6 +1896,63 @@ def test_reply_timeout_after_remote_acceptance_does_not_release_claim(tmp_path):
         restore()
 
 
+def test_unknown_reply_claim_survives_new_dispatcher(tmp_path):
+    """Reconstructing the dispatcher must not turn an unknown outcome into a retry."""
+    published, accepted = [], []
+
+    def pub(to, body):
+        published.append((to, body))
+        return f"shared-context/forum/being/q-{len(published)}.md"
+
+    d, root, now, restore = _reply_fixture(tmp_path, pub)
+    try:
+        def accepted_then_timeout(intent, _count=True):
+            accepted.append(intent.args["pointer"])
+            raise TimeoutError("response lost after remote acceptance")
+
+        d._do_mesh = accepted_then_timeout
+        intent = BeingIntent("peer_ask", {"to": "legion-being", "body": "one reply"})
+        first = d(intent, _ALLOW)
+        assert not first.ok and first.pending and len(accepted) == 1
+
+        fresh = HestiaF1aDispatcher("sprout-being", root,
+                                   mcp_factory=lambda ep, pid: FakeMcp(ep, pid), publish_fn=pub)
+        fresh._now = lambda: now
+        assert not fresh(intent, _ALLOW).ok
+        assert len(published) == 4
+        assert len(accepted) == 1
+    finally:
+        restore()
+
+
+def test_corrupted_reply_claim_does_not_reauthorize_a_reply(tmp_path):
+    """An unreadable persisted claim is unknown, not evidence the notice is unspent."""
+    published = []
+
+    def pub(to, body):
+        published.append((to, body))
+        return f"shared-context/forum/being/q-{len(published)}.md"
+
+    d, root, now, restore = _reply_fixture(tmp_path, pub)
+    try:
+        d._do_mesh = lambda intent, _count=True: (_ for _ in ()).throw(TimeoutError())
+        intent = BeingIntent("peer_ask", {"to": "legion-being", "body": "one reply"})
+        assert not d(intent, _ALLOW).ok
+        log = d._asks_path()
+        lines = log.read_text().splitlines()
+        assert json.loads(lines[-1])["via"] == "reply"
+        lines[-1] = '{"via":"reply"'  # model a truncated last record, only in the fixture
+        log.write_text("\n".join(lines) + "\n")
+
+        fresh = HestiaF1aDispatcher("sprout-being", root,
+                                   mcp_factory=lambda ep, pid: FakeMcp(ep, pid), publish_fn=pub)
+        fresh._now = lambda: now
+        assert not fresh(intent, _ALLOW).ok, "corruption must not mint another exempt reply"
+        assert len(published) == 4
+    finally:
+        restore()
+
+
 def test_two_dispatchers_racing_spend_one_notice_once(tmp_path):
     """Two sessions on one home, under the REAL flock, both try to reply to the same notice while the
     first is still publishing: exactly one reply goes."""
