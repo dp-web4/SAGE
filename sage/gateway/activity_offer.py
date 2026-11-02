@@ -47,10 +47,12 @@ class Offer:
 
 _FIELDS = {
     "beat_started": {"beat"},
+    "presented": {"beat", "request_sha256"},
     "beat_finished": {"beat"},
     "utterance": {"actor", "text"},
     "disposition": {"actor", "decision"},
     "opportunity_claimed": {"observer", "claim"},
+    "result_observed": {"observer", "claim", "receipt"},
     "preempted": set(),
     "closed": set(),
 }
@@ -68,8 +70,8 @@ def project(offer, events, *, now):
         raise ValueError("invalid offer or observation time")
     if not isinstance(events, list) or len(events) > 64:
         raise ValueError("requires a bounded event list")
-    disposition = active = claimed = terminal = None
-    beats, seen = [], {}
+    disposition = active = claimed = terminal = result = None
+    beats, started, seen = [], set(), {}
     last_seq, last_at, late = 0, offer.opened_at, 0
     for event in events:
         if not isinstance(event, dict) or not isinstance(event.get("kind"), str):
@@ -88,8 +90,10 @@ def project(offer, events, *, now):
             raise ValueError("event does not name the offered actor")
         if kind == "disposition" and event["decision"] not in ("accept", "defer", "decline"):
             raise ValueError("disposition must be explicit accept/defer/decline")
-        if kind == "opportunity_claimed" and event["observer"] != offer.observer:
-            raise ValueError("claim does not name the observer")
+        if kind in ("opportunity_claimed", "result_observed") and event["observer"] != offer.observer:
+            raise ValueError("record does not name the observer")
+        if kind == "presented" and event["request_sha256"] != offer.request_sha256:
+            raise ValueError("presentation does not bind the exact request")
         if seq in seen:
             if seen[seq] != event:
                 raise ValueError("conflicting event sequence reuse")
@@ -97,47 +101,60 @@ def project(offer, events, *, now):
         if seq <= last_seq or at < last_at or at > now:
             raise ValueError("events must be ordered and not from the future")
         seen[seq], last_seq, last_at = dict(event), seq, at
+        # An observed receipt may arrive after close/deadline: it adds evidence about
+        # the existing claim, not a new opportunity or proof of successful execution.
+        if kind == "result_observed":
+            if claimed is None or event["claim"] != claimed["id"] or result is not None:
+                raise ValueError("result requires the unique matching claim")
+            result = {"claim": event["claim"], "receipt": event["receipt"], "at": at}
+            continue
         if terminal is not None or at >= offer.deadline:
-            terminal = terminal or "deadline"
+            terminal = terminal or ("deadline_presented" if beats else "deadline_unpresented")
+            # Closing a beat that was already active when the episode terminated is
+            # bookkeeping, not a late attempt to reopen the offer.
+            if kind == "beat_finished" and active == event["beat"]:
+                active = None
+                continue
             late += 1
             continue
         if kind == "beat_started":
-            if active is not None or event["beat"] in beats:
+            if active is not None or event["beat"] in started:
                 raise ValueError("overlapping or reused beat identity")
-            if len(beats) == 2:
-                terminal = "beat_limit"
-            else:
-                active = event["beat"]
-                beats.append(active)
+            active = event["beat"]
+            started.add(active)
+        elif kind == "presented":
+            if active != event["beat"] or active in beats:
+                raise ValueError("presentation requires the unique active beat")
+            beats.append(active)
         elif kind == "beat_finished":
             if active is None or event["beat"] != active:
                 raise ValueError("finish must bind the active beat")
             active = None
-            if len(beats) == 2:
+            if len(beats) == 2 and event["beat"] in beats:
                 terminal = "beat_limit"
         elif kind == "disposition":
-            if active is None:
-                raise ValueError("disposition requires an ordinary beat")
+            if active is None or active not in beats:
+                raise ValueError("disposition requires a presented ordinary beat")
             if disposition is not None and disposition != event["decision"]:
                 raise ValueError("conflicting disposition; close and offer separately")
             disposition = event["decision"]
             if disposition != "accept":
                 terminal = disposition
         elif kind == "opportunity_claimed":
-            if active is None or disposition != "accept" or claimed is not None:
+            if active is None or active not in beats or disposition != "accept" or claimed is not None:
                 raise ValueError("claim requires accepted work and one unused opportunity")
             claimed = {"id": event["claim"], "beat": active, "at": at}
         elif kind in ("preempted", "closed"):
             terminal = kind
         # utterance deliberately has no disposition/action semantics.
     if terminal is None and now >= offer.deadline:
-        terminal = "deadline"
+        terminal = "deadline_presented" if beats else "deadline_unpresented"
     return {
         "schema": "activity-offer-projection/v1", "offer_id": offer.id,
         "request_sha256": offer.request_sha256, "disposition": disposition,
-        "beats_started": len(beats), "active_beat": active,
-        "claim": claimed, "terminal_reason": terminal, "late_records": late,
-        "eligible_to_claim": (terminal is None and active is not None
+        "beats_presented": len(beats), "active_beat": active,
+        "claim": claimed, "result_observed": result, "terminal_reason": terminal, "late_records": late,
+        "eligible_to_claim": (terminal is None and active is not None and active in beats
                               and disposition == "accept" and claimed is None),
         "execution": "not_established", "completion": "not_established",
     }

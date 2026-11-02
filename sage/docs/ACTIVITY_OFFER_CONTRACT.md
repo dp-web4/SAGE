@@ -50,6 +50,13 @@ the being an obligation to accept. Ordinary speech stays ordinary speech.
 
 - At most **two ordinary beats**, including any beat spent considering the offer,
   and the predeclared absolute deadline, whichever ends observation first.
+- Only a beat with a `presented` record spends the presentation budget. The record
+  binds the active beat, exact offer ID and request digest; it is an observer's
+  report, not independent proof that the provider or being saw the request.
+- A deadline closes the episode even if the being was paused: `deadline_unpresented`
+  means no presentation was recorded, whereas `deadline_presented` means at least one
+  was recorded. Neither means the being declined, ignored, or failed the request.
+  Two completed presented beats instead close with `beat_limit`.
 - The second beat remains usable until it ends; starting a third cannot renew the
   budget. Gaps between beats confer no action opportunity.
 - The observer must choose the actual short deadline with the supervising seat,
@@ -68,8 +75,11 @@ the being an obligation to accept. Ordinary speech stays ordinary speech.
 of at most 64 observer records. It validates offer binding, ordered event identity,
 explicit disposition, two-beat/deadline boundaries, preemption and a single claim.
 Exact duplicate records replay idempotently; conflicting sequence reuse is invalid.
-Late records remain counted but cannot reopen a closed episode. Neither execution
-nor completion is established by this projection.
+An active beat may finish normally after the episode closes without becoming a late
+record. Other late activity cannot reopen it. A `result_observed` record can bind a
+receipt to a claim even after closing, distinguishing a recorded receipt from an
+unknown claim outcome; a receipt reference alone proves neither execution nor
+completion. These are observer records, not independently verified effects.
 
 `opportunity_context` preserves the full request and source for an eligible
 candidate. **It is not a dispatch instruction.** The code has no provider, storage,
@@ -84,7 +94,8 @@ are not a substitute for those runtime responsibilities.
    Keep the reference inert until that agreement; do not add prompts/configuration
    while its identity, budget or disposition semantics are unsettled.
 2. **Build the opt-in adapter with fake providers first.** Record the exact
-   send-boundary request/schema evidence; selected context is not enough. Persist
+   send-boundary request/schema evidence sufficient to produce the `presented` record;
+   selected context or an asserted record alone is not enough. Persist
    offer/owner/deadline before delivery. Bind the received structured form to that
    offer and the actual actor. Atomically claim before calling the existing loop,
    then recheck deadline and preemption immediately before the call and each
