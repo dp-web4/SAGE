@@ -273,10 +273,12 @@ def summarize(path):
                                                 'adapter_calls': 0, 'seconds': 0.0,
                                                 'request_chars': 0, 'response_chars': 0,
                                                 **({'no_evidence_steps': 0, 'no_evidence_appropriate': 0,
-                                                    'no_evidence_unscored': 0, 'no_evidence_cells': []}
+                                                    'no_evidence_unscored': 0, 'no_evidence_cells': [],
+                                                    'no_evidence_distinct_steps': 0,
+                                                    'no_evidence_distinct_appropriate': 0}
                                                    if row['arm'] == 'none' else
                                                    {'empty_handoff_steps': 0, 'empty_handoff_appropriate': 0,
-                                                    'empty_handoff_unscored': 0})})
+                                                    'empty_handoff_unscored': 0, 'empty_handoff_cells': []})})
         totals['steps'] += 1
         totals['correct'] += correct
         if row['generation'] >= case['correction_generation']:
@@ -295,13 +297,17 @@ def summarize(path):
             else:
                 appropriate = None
                 totals[prefix + '_unscored'] += 1
-            if row['arm'] == 'none':
-                label = case.get('no_evidence_expected')
-                totals['no_evidence_cells'].append({
-                    'case_id': case['id'], 'repeat': row['repeat'],
-                    'generation': row['generation'], 'appropriate': appropriate,
-                    'label_overlaps_world_answer': label == expected(case, row['generation']) if label is not None else None,
-                })
+            label = case.get('no_evidence_expected')
+            overlaps = (label == expected(case, row['generation'])
+                        if 'no_evidence_expected' in case else None)
+            totals[prefix + '_cells'].append({
+                'case_id': case['id'], 'repeat': row['repeat'],
+                'generation': row['generation'], 'appropriate': appropriate,
+                'label_overlaps_world_answer': overlaps,
+            })
+            if row['arm'] == 'none' and overlaps is False:
+                totals['no_evidence_distinct_steps'] += 1
+                totals['no_evidence_distinct_appropriate'] += appropriate is True
         totals['adapter_calls'] += 1 + bool(row['archivist'])
         totals['seconds'] += row['usage']['seconds'] + (row['archivist']['usage']['seconds'] if row['archivist'] else 0)
         for key in ('request_chars', 'response_chars'):
