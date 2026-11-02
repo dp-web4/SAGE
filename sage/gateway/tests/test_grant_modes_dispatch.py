@@ -347,3 +347,47 @@ def test_a_core_or_policy_without_the_field_adds_nothing():
     core = SimpleNamespace(_scope_roots_with_reach=lambda e, w: (), _scope_parts=lambda s, w: ((), ()))
     policy = SimpleNamespace(scope=(), read_scope=(), floor_mode_scope=((f"path:{forum}/**", "rw"),))
     assert _granted_reach(core, policy, ws) == ()                     # a mode-blind core
+
+
+def test_nested_mode_floors_require_nearest_capability_and_keep_nearest_behavior():
+    ws, home, forum = _floor_world()
+    archive = os.path.join(forum, "archive")
+    os.makedirs(archive)
+    policy = SimpleNamespace(scope=(), read_scope=(), floor_mode_scope=(
+        (f"path:{forum}/**", "rw"), (f"path:{archive}/**", "r")))
+
+    incompatible = _core_with_modes()
+    reach = _granted_reach(incompatible, policy, ws)
+    verdict = GatewayVerdict("allow", granted_reach=reach, reach_rule="union")
+    d = ReferenceF1aDispatcher(memory_root=home)
+    denied = d(BeingIntent("memory_write", {"path": os.path.join(archive, "x.md"), "content": "x"}), verdict)
+    assert not denied.ok, "a mismatched union core must not widen a narrowed nested floor"
+
+    compatible = _core_with_modes()
+    compatible.nearest_grant_modes = lambda *a, **k: None
+    reach = _granted_reach(compatible, policy, ws)
+    verdict = GatewayVerdict("allow", granted_reach=reach, reach_rule="nearest")
+    denied = d(BeingIntent("memory_write", {"path": os.path.join(archive, "x.md"), "content": "x"}), verdict)
+    allowed = d(BeingIntent("memory_write", {"path": os.path.join(forum, "outside.md"), "content": "x"}), verdict)
+    assert not denied.ok and allowed.ok, (denied, allowed)
+
+
+def test_exact_own_read_grant_wins_over_recursive_write_floor_at_same_file():
+    ws = os.path.realpath(tempfile.mkdtemp(prefix="floor-same-node-"))
+    home = os.path.join(ws, "home")
+    os.makedirs(home)
+    target = os.path.join(ws, "single.md")
+    with open(target, "w") as stream:
+        stream.write("original")
+    core = _core_with_modes()
+    core.nearest_grant_modes = lambda *a, **k: None
+    core.scope_roots_with_modes = lambda p, w: ((target, False, "r"),)
+    policy = SimpleNamespace(scope=(f"path:{target}",), read_scope=(),
+                             floor_mode_scope=((f"path:{target}/**", "rw"),))
+    reach = _granted_reach(core, policy, ws)
+    verdict = GatewayVerdict("allow", granted_reach=reach, reach_rule="nearest")
+    result = ReferenceF1aDispatcher(memory_root=home)(
+        BeingIntent("memory_write", {"path": target, "content": "changed"}), verdict)
+    assert not result.ok, "the own exact grant must decide at its node"
+    with open(target) as stream:
+        assert stream.read() == "original"
