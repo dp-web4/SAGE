@@ -124,7 +124,9 @@ def plan(instance: Path, words: List[str]):
     moved = [x for x in items if hit(x[0])]
     kept = [x for x in items if not hit(x[0])]
     entries, nxt, err = st.read(instance)
-    gone = [e for e in entries if hit(f"{e.get('question', '')} {e.get('answer', '')} {e.get('evidence', '')}")]
+    # Evidence explains how a conclusion was supported; a shared citation or
+    # tool name does not make every conclusion about that source's topic.
+    gone = [e for e in entries if hit(f"{e.get('question', '')} {e.get('answer', '')}")]
     return body, kept, moved, entries, nxt, gone, err
 
 

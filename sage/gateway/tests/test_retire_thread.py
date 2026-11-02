@@ -42,6 +42,22 @@ def _open(h):
     return [t for t, _ in _todo_items((h / "todo.md").read_text()).values()]
 
 
+def test_settled_evidence_is_not_a_topic_selector(tmp_path):
+    # Two conclusions share provenance; only one is actually about the topic.
+    assert st.settle(tmp_path, {"question": "Can recall find old work?", "answer": "yes",
+                                "evidence": "journal.md"}, now=0)[0]
+    assert st.settle(tmp_path, {"question": "Do apple trees grow?", "answer": "yes",
+                                "evidence": "recall(idx:4), journal.md"}, now=1)[0]
+    before = (tmp_path / st.SETTLED_FILE).read_bytes()
+    preview = bt.retire_thread(tmp_path, {"words": "recall", "preview": "true"})
+    assert preview[0] and "1 of 2 settled" in preview[1]
+    assert (tmp_path / st.SETTLED_FILE).read_bytes() == before
+    ok, message, changed = bt.retire_thread(tmp_path, {"words": "recall", "reason": "finished"})
+    assert ok and changed, message
+    remaining, _, error = st.read(tmp_path)
+    assert error is None and [e["question"] for e in remaining] == ["Do apple trees grow?"]
+
+
 def test_a_thread_leaves_the_todo_and_the_settled_list_and_the_rest_stays(tmp_path):
     h = _home(tmp_path)
     ok, msg, changed = bt.retire_thread(h, {"words": "widget, daemon", "reason": "dp: drop it"}, now=0)
