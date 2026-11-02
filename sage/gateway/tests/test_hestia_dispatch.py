@@ -693,6 +693,30 @@ def test_request_scope_inside_existing_reach_is_answered_locally_and_files_nothi
     assert env.ok and env.result["request_id"] == "scope-1"
 
 
+def test_request_scope_does_not_call_partial_own_reach_read_and_write(tmp_path):
+    d, _ = _disp()
+    target = str(tmp_path / "input.txt")
+    reach = ((target, False, "w"), (target, True, "r", "floor"))
+    verdict = GatewayVerdict("allow", granted_reach=reach, reach_rule="nearest")
+    env = d(BeingIntent("request_scope", {"path": target, "reason": "need read access"}), verdict)
+    assert env.ok and env.result.get("status") == "pending", env
+    assert any(name == "hestia_request_scope" and args["path"] == target for name, args in FakeMcp.calls)
+
+
+def test_relative_scope_request_does_not_call_partial_reach_already_granted(tmp_path):
+    d, _ = _disp()
+    forum = tmp_path / "shared-context" / "forum"
+    target = str(forum / "post.md")
+    reach = ((target, False, "w"), (str(forum), True, "r", "floor"))
+    verdict = GatewayVerdict("allow", granted_reach=reach, reach_rule="nearest")
+    env = d(BeingIntent("request_scope", {"path": "shared-context/forum/post.md",
+                                           "reason": "need read access"}), verdict)
+    assert env.ok and env.result.get("status") == "pending", env
+    assert env.result.get("path") == target
+    assert env.result.get("as_asked") == "shared-context/forum/post.md"
+    assert any(name == "hestia_request_scope" and args["path"] == target for name, args in FakeMcp.calls)
+
+
 def test_request_scope_relative_forum_pointer_resolves_inside_reach_instead_of_a_guessed_root():
     """cbp-being, 2026-10-15: a repo-relative forum pointer drew a bare 'must be absolute', the
     being guessed <home>/shared-context/..., and that was refused and appealed while the post

@@ -3939,8 +3939,12 @@ class HestiaF1aDispatcher:
         reason; a grant is reach on the path, read AND write. There is no mode to carry: an
         earlier `permits_read` was dropped silently by the daemon while the operator read
         "[.., read]" on a request that, granted, gave write."""
+        from sage.gateway.being_gate_client import reach_modes_at
         path = str(intent.args.get("path", "")).strip()
         reason = str(intent.args.get("reason", "")).strip()
+        reach = _granted_reach_of(getattr(self, "_verdict", None))
+        rule = getattr(getattr(self, "_verdict", None), "reach_rule", "union")
+        as_asked = None
         if not path.startswith("/"):
             # A forum pointer is repo-relative ("shared-context/forum/..."; forum_publisher
             # returns it so, because the roots differ per machine). A bare "must be absolute"
@@ -3948,24 +3952,27 @@ class HestiaF1aDispatcher:
             # workspace, refused, appealed) while the real file sat inside its own forum grant
             # (2026-10-15, scope-42772f2f3d75, appeal c056c022). Resolve against the being's own
             # roots, and name them when nothing matches.
-            reach = _granted_reach_of(getattr(self, "_verdict", None))
             hits = _resolve_relative_in_reach(path, reach)
             if len(hits) == 1:
                 absolute, within = hits[0]
-                return ResultEnvelope(ok=True, result={
-                    "status": "already_granted", "path": absolute, "as_asked": path, "within": within,
-                    "next": f"'{path}' is {absolute}, inside your reach. Read or write that absolute path directly; no request is needed"})
-            if hits:
+                modes = reach_modes_at(absolute, reach, rule)
+                if "r" in modes and "w" in modes:
+                    return ResultEnvelope(ok=True, result={
+                        "status": "already_granted", "path": absolute, "as_asked": path, "within": within,
+                        "next": f"'{path}' is {absolute}, inside your reach. Read or write that absolute path directly; no request is needed"})
+                as_asked, path = path, absolute
+            elif hits:
                 # Two readings land on different files. Picking one (the first root that matched,
                 # as 27f9e6c did) made the answer depend on grant order: a guess again.
                 readings = "; ".join(f"{a} (under {w})" for a, w in hits)
                 return ResultEnvelope(ok=False, error=(
                     f"request_scope: '{path}' is ambiguous, it names different files under the roots "
                     f"you hold: {readings}. Ask again with the absolute path you mean"))
-            roots = ", ".join(str(r) for r, *_ in reach) or "none known"
-            return ResultEnvelope(ok=False, error=(
-                f"request_scope 'path' must be absolute, and '{path}' is not inside any root you hold "
-                f"({roots}). Do not guess a root: a repo-relative pointer names a file under one of those"))
+            else:
+                roots = ", ".join(str(r) for r, *_ in reach) or "none known"
+                return ResultEnvelope(ok=False, error=(
+                    f"request_scope 'path' must be absolute, and '{path}' is not inside any root you hold "
+                    f"({roots}). Do not guess a root: a repo-relative pointer names a file under one of those"))
         if not reason:
             return ResultEnvelope(ok=False, error="request_scope needs a 'reason' (a human reads it)")
         # Already inside the being's reach: answer locally, file nothing. The operator's
@@ -3973,10 +3980,13 @@ class HestiaF1aDispatcher:
         # <home>/config.json, inside the standing home grant, and dp granted it again).
         import os as _os
         rp = _os.path.realpath(_os.path.expanduser(path))
+        modes = reach_modes_at(rp, reach, rule)
+        fully_reached = "r" in modes and "w" in modes
+        covered = bool(modes)
         exact_above = None
-        for r, recursive, *_ in _granted_reach_of(getattr(self, "_verdict", None)):
+        for r, recursive, *_ in reach:
             r = _os.path.realpath(str(r))
-            if rp == r or (recursive and rp.startswith(r + "/")):
+            if fully_reached and (rp == r or (recursive and rp.startswith(r + "/"))):
                 if _HARDWARE_DEV.match(rp):
                     # "read or write it directly" sent sprout-being back to run's sandbox, which has no
                     # devices, five times for /dev/video0 (2026-10-20..23). For a device, reach is used
@@ -3993,7 +4003,7 @@ class HestiaF1aDispatcher:
         # under it). "already granted" here is false — the gate just refused — and filing a
         # child row is what exact-by-default exists to stop (Legion, 2026-09-08). The honest
         # answer names the operator's act and tells the being to stop retrying.
-        if exact_above is not None:
+        if exact_above is not None and not covered:
             return ResultEnvelope(ok=True, result={
                 "status": "beneath_exact_grant", "path": path, "root": exact_above,
                 "next": (f"your grant on {exact_above} is EXACT: it reaches that path and nothing beneath it. "
@@ -4014,6 +4024,8 @@ class HestiaF1aDispatcher:
         rid = out.get("request_id")
         result = {"request_id": rid, "status": out.get("status"), "path": path,
                   "next": _scope_next(rid, out.get("next")), "on_timeout": out.get("on_timeout")}
+        if as_asked is not None:
+            result["as_asked"] = as_asked
         if copies:
             result["copy_in_reach"] = [c for c, _ in copies]
             result["meanwhile"] = copy_alternative(path, copies)
