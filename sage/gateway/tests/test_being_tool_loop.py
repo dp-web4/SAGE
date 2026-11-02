@@ -520,6 +520,26 @@ def test_salvage_keeps_two_valid_fenced_calls_in_order():
     assert [call["function"]["arguments"]["path"] for call in calls] == ["notes/x", "notes/y"]
 
 
+@pytest.mark.parametrize("first", [
+    '```json\n{"name":"memory_write","arguments":{"path":"notes/x","content":"first"}}\n```',
+    '```python\nmemory_write(path="notes/x", content="first")\n```',
+])
+def test_salvage_refuses_prior_block_when_later_python_tool_block_is_invalid(first):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    later = '```python\nif False:\n    memory_write(path="notes/y", content="draft")\n```'
+    assert salvage_tool_calls(first + '\n' + later, ollama_tools(["memory_write"])) == []
+
+
+def test_salvage_keeps_two_valid_python_blocks_in_order():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    body = ('```python\nmemory_write(path="notes/x", content="first")\n```\n'
+            '```python\nmemory_write(path="notes/y", content="second")\n```')
+    calls = salvage_tool_calls(body, ollama_tools(["memory_write"]))
+    assert [call["function"]["arguments"]["path"] for call in calls] == ["notes/x", "notes/y"]
+
+
 def test_run_ollama_tool_turn_gates_a_salvaged_call_and_records_it():
     from sage.gateway.being_gate_client import ollama_tools
     from sage.gateway.being_tool_loop import run_ollama_tool_turn
