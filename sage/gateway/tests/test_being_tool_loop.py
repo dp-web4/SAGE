@@ -564,6 +564,30 @@ def test_salvage_lifts_well_formed_calls_from_the_text_channel_only_for_offered_
     assert salvage_tool_calls("", names) == []
 
 
+def test_python_salvage_never_promotes_conditional_or_unreached_code():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    names = ollama_tools(["memory_write"])
+    bodies = [
+        'if False:\n    memory_write(path="notes/x", content="draft")',
+        'def example():\n    memory_write(path="notes/x", content="draft")',
+        'memory_write(path="notes/x", content="draft")\nif False:\n    pass',
+        'x = "draft"\nx = "changed" if False else "other"\nmemory_write(path="notes/x", content=x)',
+        'x = "draft"\nx = unknown()\nmemory_write(path="notes/x", content=x)',
+        'memory_write(path="notes/x", content=x)\nx = "not yet assigned"',
+        'print(memory_write(path="notes/x", content="draft"))',
+        'print(missing)\nmemory_write(path="notes/x", content="draft")',
+        'unknown().memory_write(path="notes/x", content="draft")',
+        'if False:\n    x = \'{"name":"memory_write","arguments":{"path":"notes/x","content":"draft"}}\'',
+    ]
+    for body in bodies:
+        assert salvage_tool_calls('```python\n' + body + '\n```', names) == [], body
+    assert salvage_tool_calls('```\n' + bodies[-1] + '\n```', names) == []
+    r = salvage_tool_calls('```python\nx = "first"\nmemory_write(path="notes/x", content=x)\n'
+                           'x = "second"\nmemory_write(path="notes/y", content=x)\n```', names)
+    assert [call["function"]["arguments"]["content"] for call in r] == ["first", "second"]
+
+
 def test_run_ollama_tool_turn_gates_a_salvaged_call_and_records_it():
     from sage.gateway.being_gate_client import ollama_tools
     from sage.gateway.being_tool_loop import run_ollama_tool_turn

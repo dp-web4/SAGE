@@ -266,7 +266,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                           window_full=out.get("window_full"))
 
 
-_FENCE = re.compile(r"```[A-Za-z0-9_+-]*[ \t]*\n(.*?)```", re.S)
+_FENCE = re.compile(r"```([A-Za-z0-9_+-]*)[ \t]*\n(.*?)```", re.S)
 
 
 _NAME_KEYS = ("name", "tool", "action", "function", "tool_name")
@@ -346,18 +346,47 @@ def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
     except SyntaxError:
         return []
     consts: Dict[str, Any] = {}
-    for node in ast.walk(tree):
-        if (isinstance(node, ast.Assign) and len(node.targets) == 1
-                and isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.Constant)):
-            consts[node.targets[0].id] = node.value.value
+    assigned: set[str] = set()
     out = []
-    for node in ast.walk(tree):
+    # Interpret only a straight-line, top-level fragment. Walking the tree
+    # promotes calls in `if False`, function definitions, and examples to acts.
+    # Reject the entire fragment on an unsupported statement: partial recovery
+    # can otherwise execute a prefix the being intended to qualify later.
+    for stmt in tree.body:
+        target = None
+        if isinstance(stmt, (ast.Import, ast.ImportFrom)):
+            continue
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+            target = stmt.targets[0].id
+            # A later assignment must not leave an earlier value in scope.
+            consts.pop(target, None)
+            if isinstance(stmt.value, ast.Constant):
+                consts[target] = stmt.value.value
+                assigned.add(target)
+                continue
+            node = stmt.value
+        elif isinstance(stmt, ast.Expr):
+            node = stmt.value
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                continue
+        else:
+            return []
         if not isinstance(node, ast.Call):
-            continue
+            return []
         fn = node.func
-        name = fn.id if isinstance(fn, ast.Name) else (fn.attr if isinstance(fn, ast.Attribute) else None)
-        if name not in names or len(node.args) > len(names[name]):
+        name = fn.id if isinstance(fn, ast.Name) else (
+            fn.attr if isinstance(fn, ast.Attribute) and isinstance(fn.value, ast.Name)
+            and fn.value.id == "tools" else None
+        )
+        # The measured form sometimes prints the result. We never execute it;
+        # only a plain print of already-named results or constants is inert.
+        if target is None and isinstance(fn, ast.Name) and fn.id == "print" and not node.keywords and all(
+            isinstance(arg, ast.Constant) or (isinstance(arg, ast.Name) and arg.id in assigned)
+            for arg in node.args
+        ):
             continue
+        if name not in names or len(node.args) > len(names[name]):
+            return []
         args, ok = {}, True
         # positional arguments map onto the tool's parameters in schema order:
         # memory_write("journal.md", journal_entry) is (path, content) (beat 7, Sprout)
@@ -378,8 +407,11 @@ def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
             else:
                 ok = False
                 break
-        if ok:
-            out.append({"function": {"name": name, "arguments": args}, "_salvaged": "python"})
+        if not ok:
+            return []
+        out.append({"function": {"name": name, "arguments": args}, "_salvaged": "python"})
+        if target is not None:
+            assigned.add(target)
     return out
 
 
@@ -448,13 +480,29 @@ def salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
               for t in tools}
     if not content or not params:
         return []
-    blocks = _FENCE.findall(content)
+    blocks = list(_FENCE.finditer(content))
     found: List[dict] = []
-    for text in (blocks or [content]):
-        found.extend(_json_calls(text, params))
-        found.extend(_python_calls(text, params))
-    if blocks and not found:                    # fenced prose, bare call outside the fence
+    if not blocks:
         found.extend(_json_calls(content, params))
+        found.extend(_python_calls(content, params))
+    for block in blocks:
+        language, text = block.group(1).lower(), block.group(2)
+        if language in ("python", "py"):
+            # Do not reinterpret JSON embedded in Python strings as an act.
+            found.extend(_python_calls(text, params))
+        elif language == "json":
+            found.extend(_json_calls(text, params))
+        else:
+            # For an unlabelled/unknown fence, only a complete JSON value is
+            # eligible for JSON recovery; otherwise treat it as Python.
+            try:
+                json.loads(text)
+            except (TypeError, ValueError):
+                found.extend(_python_calls(text, params))
+            else:
+                found.extend(_json_calls(text, params))
+    if blocks and not found:                    # fenced prose, bare call outside the fence
+        found.extend(_json_calls(_FENCE.sub("", content), params))
     if not found:
         found.extend(_attr_calls(content, params))
     return found
