@@ -445,6 +445,17 @@ def test_python_salvage_accepts_explicit_tool_namespace_imports():
     assert len(calls) == 1 and calls[0]["function"]["name"] == "memory_write"
 
 
+@pytest.mark.parametrize("body", [
+    'memory_write("notes/first", path="notes/second", content="draft")',
+    'memory_write(path="notes/first", path="notes/second", content="draft")',
+    'print = "not callable"\nprint("example")\nmemory_write(path="notes/x", content="draft")',
+])
+def test_python_salvage_refuses_invalid_argument_binding_and_shadowed_print(body):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls('```python\n' + body + '\n```', ollama_tools(["memory_write"])) == []
+
+
 def test_run_ollama_tool_turn_gates_a_salvaged_call_and_records_it():
     from sage.gateway.being_gate_client import ollama_tools
     from sage.gateway.being_tool_loop import run_ollama_tool_turn
