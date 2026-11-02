@@ -370,6 +370,35 @@ def test_home_lock_symlink_after_preflight_is_not_opened_for_writing(tmp_path, m
     assert not result[0], result
 
 
+@pytest.mark.parametrize("stage", ["todo", "settled"])
+def test_retirement_does_not_read_a_record_symlink_swapped_after_preflight(tmp_path, stage):
+    home = tmp_path / "home"
+    home.mkdir()
+    h = _home(home)
+    args = {"words": "widget", "reason": "finished"}
+    (h / bt.TODO).write_text("- [ ] unrelated one\n- [ ] unrelated two\n")
+    (h / st.SETTLED_FILE).write_text(json.dumps({"next": 1, "entries": []}))
+    declared = _declared(h, args)
+    victim = tmp_path / "outside.txt"
+    if stage == "todo":
+        victim.write_text("- [ ] widget synthetic-private-marker\n- [ ] unrelated\n")
+        link = h / bt.TODO
+    else:
+        victim.write_text(json.dumps({"next": 2, "entries": [
+            {"id": "s1", "question": "widget synthetic-private-marker", "answer": "outside", "evidence": ""}
+        ]}))
+        link = h / st.SETTLED_FILE
+    assert os.path.realpath(victim) not in declared
+    link.unlink()
+    link.symlink_to(victim)
+    ok, _, _ = bt.retire_thread(h, args)
+    archive = h / bt.archive_name(args)
+    if archive.exists():
+        assert "synthetic-private-marker" not in archive.read_text(), stage
+    assert not ok
+    assert not archive.exists()
+
+
 def test_an_interleaved_retire_cannot_move_this_one_off_its_declared_paths(tmp_path, monkeypatch):
     h = _home(tmp_path)
     mine, other = {"words": "widget", "reason": "mine"}, {"words": "daemon", "reason": "other"}
