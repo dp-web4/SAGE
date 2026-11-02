@@ -640,6 +640,19 @@ def test_python_salvage_refuses_unknown_qualifiers_and_the_entire_fragment(body)
     assert salvage_tool_calls('```python\n' + body + '\n```', ollama_tools(["memory_write"])) == []
 
 
+@pytest.mark.parametrize("body", [
+    '{"name":"memory_write","arguments":{"path":"notes/x","content":"draft","dry_run":true}}',
+    '[{"name":"memory_write","arguments":{"path":"notes/x","content":"first"}},'
+    '{"name":"memory_write","arguments":{"path":"notes/y","content":"draft","dry_run":true}}]',
+    '{"memory_write":{"path":"notes/x","content":"draft","dry_run":true},'
+    '"recall":{"query":"q"}}',
+])
+def test_json_salvage_refuses_unknown_nested_arguments_and_prior_calls(body):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls(body, ollama_tools(["memory_write", "recall"])) == []
+
+
 def test_run_ollama_tool_turn_gates_a_salvaged_call_and_records_it():
     from sage.gateway.being_gate_client import ollama_tools
     from sage.gateway.being_tool_loop import run_ollama_tool_turn
