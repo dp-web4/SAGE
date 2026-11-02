@@ -248,11 +248,24 @@ _NAME_KEYS = ("name", "tool", "action", "function", "tool_name")
 _ARGS_KEYS = ("arguments", "parameters", "args", "input", "params")
 
 
+class _DuplicateJsonKey(ValueError):
+    """Ambiguous JSON must not become an executable tool call."""
+
+
+def _unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateJsonKey(key)
+        result[key] = value
+    return result
+
+
 def _json_calls(text: str, names) -> List[dict]:
     """`names`: the offered tool names (set) or {name: [param, ...]} (dict) for flat-form
     argument filtering."""
     known = names if isinstance(names, dict) else {n: [] for n in names}
-    out, dec, i = [], json.JSONDecoder(), 0
+    out, dec, i = [], json.JSONDecoder(object_pairs_hook=_unique_json_object), 0
     while True:
         starts = [k for k in (text.find("{", i), text.find("[", i)) if k >= 0]
         if not starts:
@@ -260,6 +273,8 @@ def _json_calls(text: str, names) -> List[dict]:
         j = min(starts)
         try:
             obj, end = dec.raw_decode(text, j)
+        except _DuplicateJsonKey:
+            return []
         except ValueError:
             i = j + 1
             continue
