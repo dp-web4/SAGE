@@ -77,6 +77,49 @@ def test_grants_carrying_modes_match_the_same():
     assert same_path_in_reach(edit, ((gov, False, "rwed"),)) == []
 
 
+def test_copy_hints_exclude_write_only_paths():
+    ws, edit, copy, _ = _ws()
+    gov = str(ws / "governance")
+    assert same_path_in_reach(edit, ((gov, True, "w"),)) == []
+
+
+def test_copy_hints_honor_nearest_narrowed_paths():
+    ws, edit, copy, _ = _ws()
+    gov = str(ws / "governance")
+    narrowed = str(Path(copy).parent)
+    reach = ((gov, True, "r", "floor"), (narrowed, True, "w"))
+    assert same_path_in_reach(edit, reach, "nearest") == []
+    assert same_path_in_reach(edit, reach, "union") == [(copy, gov)]
+
+
+def test_request_scope_does_not_offer_a_write_only_copy():
+    from sage.gateway.tests.test_hestia_dispatch import FakeMcp, _disp
+    ws, edit, copy, _ = _ws()
+    d, _ = _disp()
+    gov = str(ws / "governance")
+    v = GatewayVerdict("allow", granted=(gov,), granted_reach=((gov, True, "w"),),
+                       reach_rule="nearest")
+    FakeMcp.calls.clear()
+    env = d(BeingIntent("request_scope", {"path": edit, "reason": "read the original"}), v)
+    assert env.ok and "copy_in_reach" not in env.result, env
+    assert [a for n, a in FakeMcp.calls if n == "hestia_request_scope"]
+
+
+def test_request_scope_does_not_offer_copy_beneath_a_narrowed_grant():
+    from sage.gateway.tests.test_hestia_dispatch import FakeMcp, _disp
+    ws, edit, copy, _ = _ws()
+    d, _ = _disp()
+    gov = str(ws / "governance")
+    narrowed = str(Path(copy).parent)
+    v = GatewayVerdict("allow", granted=(gov, narrowed),
+                       granted_reach=((gov, True, "r", "floor"), (narrowed, True, "w")),
+                       reach_rule="nearest")
+    FakeMcp.calls.clear()
+    env = d(BeingIntent("request_scope", {"path": edit, "reason": "read the original"}), v)
+    assert env.ok and "copy_in_reach" not in env.result, env
+    assert [a for n, a in FakeMcp.calls if n == "hestia_request_scope"]
+
+
 def test_exact_grants_absent_copies_and_paths_already_in_reach_do_not_match():
     ws, edit, copy, _ = _ws()
     gov = str(ws / "governance")
