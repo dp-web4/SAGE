@@ -113,7 +113,7 @@ def exact_root_above(env: ResultEnvelope, path: str) -> Optional[str]:
     v = env.verdict
     p = os.path.realpath(os.path.expanduser(path))
     best = None
-    for r, recursive in ((getattr(v, "granted_reach", ()) or ()) if v else ()):
+    for r, recursive, *_ in ((getattr(v, "granted_reach", ()) or ()) if v else ()):
         r = os.path.realpath(str(r))
         if recursive and (p == r or p.startswith(r + "/")):
             return None                                   # reachable after all; not this case
@@ -126,7 +126,22 @@ def exact_root_above(env: ResultEnvelope, path: str) -> Optional[str]:
     return best
 
 
-def _file_scope_request(member: str, path: str, why: str, endpoint: str) -> Dict[str, Any]:
+# The capability a daemon advertises in hestia_scope_status's `supports` list when it reads a request's
+# origin (hestia #1425). Only then are `origin`/`deny_witness` sent: a daemon that does not know them
+# must never see them, so a filing never fails on an argument it was not built to read (SAGE #572).
+REQUEST_ORIGIN_CAPABILITY = "request_origin"
+ORIGIN_AFTER_DENY = "dispatcher_after_deny"
+
+
+def _file_scope_request(member: str, path: str, why: str, endpoint: str,
+                        deny_witness: Optional[str] = None) -> Dict[str, Any]:
+    """File the scope ask the gate's deny implies, as the being (the daemon has no other way to receive it).
+
+    THIS IS NOT THE BEING ASKING (SAGE #572). The dispatcher files it after an `mrh.*` deny, so the daemon
+    classed it member-filed: peers could not decide it and it landed on the operator as a deliberate ask
+    (cbp-being, 2026-10-27: 14 pending, all of this shape). With the deny's chain hash in hand and a daemon
+    that advertises it can check one, the ask says where it came from; the daemon verifies the hash before
+    trusting the claim (hestia #1425). No hash means no claim: it stays member-filed, never asserted."""
     m = _Mcp(endpoint, member); m.init()
     conn = _unwrap(m.call("hestia_connect", {"plugin_id": member, "host_agent": "sage-escalate",
                                               "host_agent_version": "sage", "requested_role": "citizen"}))
@@ -135,10 +150,17 @@ def _file_scope_request(member: str, path: str, why: str, endpoint: str) -> Dict
     for r in st.get("requests") or []:
         if r.get("status") == "pending" and (r.get("path") or "").rstrip("/") == path.rstrip("/"):
             return {"request_id": r.get("request_id") or r.get("id"), "status": "already_pending"}
-    r = _unwrap(m.call("hestia_request_scope", {"plugin_id": member, "path": path, "reason": why[:400], "session_id": sid}))
+    args = {"plugin_id": member, "path": path, "reason": why[:400], "session_id": sid}
+    claimed = bool(deny_witness) and REQUEST_ORIGIN_CAPABILITY in (st.get("supports") or [])
+    if claimed:
+        args.update({"origin": ORIGIN_AFTER_DENY, "deny_witness": deny_witness})
+    r = _unwrap(m.call("hestia_request_scope", args))
     if "_hestia_error" in r:
         return {"error": r["_hestia_error"]}
-    return {"request_id": r.get("request_id"), "status": r.get("status"), "expires_at": r.get("expires_at")}
+    out = {"request_id": r.get("request_id"), "status": r.get("status"), "expires_at": r.get("expires_at")}
+    if claimed:
+        out["origin"] = ORIGIN_AFTER_DENY
+    return out
 
 
 def write_note(member: str, intent: BeingIntent, env: ResultEnvelope, kind: str, extra: Dict[str, Any]) -> str:
@@ -198,13 +220,19 @@ def write_note(member: str, intent: BeingIntent, env: ResultEnvelope, kind: str,
                "- This is NOT a law verdict. The referee did not answer (`" + v.rule + "`), so there is no ruling\n"
                "  to approve, appeal or override, and nothing the seat decides makes this call land. The being\n"
                "  re-sends it.\n"
-               "- Two things are worth a seat's look. Was the daemon restarting or stalled at that second?\n"
-               "  `$HESTIA_HOME/telemetry/gate-unavailable.jsonl` carries the refusal's second and member when\n"
-               "  the query timed out. And did a refused WRITE lose content the being believes it kept? This\n"
+               # NOT the daemon's telemetry file (SAGE #577): it lives under the hestia home, outside every
+               # member's grant, so a seat following the note filed a scope ask a peer then had to refuse
+               # (cbp 10-27: scope-765d7b2baba1, scope-2771c4945557), and the question it served is answered
+               # in-grant. Whether the daemon stalled at that second is the operator's to read.
+               "- The one thing worth a seat's look: did a refused WRITE lose content the being believes it\n"
+               "  kept? Read the being's own `journal.md` and its `heartbeats.jsonl`, both in your grant. This\n"
                "  note names only the FIRST society refusal of the beat; that beat's record in the being's\n"
                "  heartbeats.jsonl lists every refused call, and a later one may be the one that lost something.\n"
                "- The `ts` above is when this note was written, after the turns ended. It is not when the call\n"
-               "  was refused.\n")
+               "  was refused.\n"
+               "- Whether the daemon was restarting or stalled then is in its own telemetry, which is the\n"
+               "  operator's to read: do not open it. It is outside every member's grant, and reading it files a\n"
+               "  scope request a peer must refuse.\n")
         protocol = ""
     p.write_text(body + how + "\n" + protocol)
     # Land it. An UNCOMMITTED note in a shared checkout is not just untidy: the same name
@@ -272,6 +300,8 @@ NEEDS_EXISTING = ("retire_note", "memory_read")
 # reference_f1a enforces it AFTER the gate has spoken: retire_note requires the parent to be
 # notes/ or scratch/ directly inside memory_root (reference_f1a.py:179-182).
 HOME_SUBTREE_ONLY = {"retire_note": ("notes", "scratch")}
+# ...and the home-root files each such effector may also act on (reference_f1a.RETIRABLE_RECORDS).
+HOME_ROOT_FILES = {"retire_note": ("todo.md", "journal.md")}
 
 
 def ungrantable(intent: BeingIntent, memory_root: str) -> Optional[Dict[str, Any]]:
@@ -306,7 +336,8 @@ def ungrantable(intent: BeingIntent, memory_root: str) -> Optional[Dict[str, Any
     subs = HOME_SUBTREE_ONLY.get(eff)
     if subs:
         parent = os.path.dirname(target)
-        if os.path.basename(parent) not in subs or os.path.dirname(parent) != root:
+        at_root = parent == root and os.path.basename(target) in HOME_ROOT_FILES.get(eff, ())
+        if not at_root and (os.path.basename(parent) not in subs or os.path.dirname(parent) != root):
             allowed = " or ".join(f"{root}/{x}/" for x in subs)
             reasons.append(f"{eff} only ever acts on a file directly inside {allowed}, "
                            f"whatever scope is granted")
@@ -372,7 +403,9 @@ def escalate(member: str, intent: BeingIntent, env: ResultEnvelope, memory_root:
                 why = (f"{member} was refused {intent.effector} at {path} ({env.verdict.rule if env.verdict else ''}). "
                        f"Its seat's auto session will rule it under delegation if it holds one (hestia #952), "
                        f"else please rule as STANDING if it is the being's own memory.")
-                out["scope_request"] = _file_scope_request(member, path, why, endpoint)
+                out["scope_request"] = _file_scope_request(
+                    member, path, why, endpoint,
+                    deny_witness=(env.verdict.witness_id if env.verdict else None))
         # The note exists to be pointed at by the wake. Without a wake there is no reader, and a
         # beat with nine refused home writes would leave nine near-identical notes (Sprout, #38
         # review); the scope request above is still filed (the daemon dedups it on the path).

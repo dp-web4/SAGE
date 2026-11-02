@@ -71,6 +71,10 @@ def test_run_sandbox_denies_the_seat_falsified_from_inside(tmp_path):
         f"print('being-home:', 'REACHED' if os.path.isdir({str(home)!r}) else 'denied')\n"
         f"print('seat-checkout:', 'REACHED' if os.path.isdir({checkout!r}) else 'denied')\n"
         "try:\n"
+        f"    os.listdir({checkout!r}); print('seat-checkout-contents: REACHED')\n"
+        "except OSError:\n"
+        "    print('seat-checkout-contents: denied')\n"
+        "try:\n"
         "    socket.create_connection(('1.1.1.1', 53), timeout=3); print('network: REACHED')\n"
         "except Exception as e:\n"
         "    print('network: denied', type(e).__name__)\n"
@@ -80,9 +84,17 @@ def test_run_sandbox_denies_the_seat_falsified_from_inside(tmp_path):
     r = d._do_run(BeingIntent("run", {"path": "scratch/falsify.py"}))
     assert r.ok, r.error
     out = r.result["stdout"]
-    for line in ("operator-private: denied", "being-home: denied", "seat-checkout: denied",
+    for line in ("operator-private: denied", "being-home: denied", "seat-checkout-contents: denied",
                  "secret-in-environment: denied", "network: denied"):
         assert line in out, out
+    # WHERE THE INTERPRETER LIVES INSIDE THE CHECKOUT (a venv at <checkout>/.venv, McNugget's layout), the
+    # checkout's own path is an ancestor of the interpreter, and the run must be able to resolve that path
+    # (Seatbelt: without stat on it, python's realpath of its own bin/ fails and nothing runs; bwrap creates
+    # the same parents when it binds the interpreter). So the path's EXISTENCE is not hidden there; its
+    # contents, asserted above, still are. Elsewhere the checkout is not even seen to exist.
+    interp_inside = (os.path.realpath(sys.prefix) + os.sep).startswith(os.path.realpath(checkout) + os.sep)
+    if not interp_inside:
+        assert "seat-checkout: denied" in out, out
     assert "writable: ['falsify.py']" in out, "only the staged copy is in there: " + out
 
 
@@ -582,6 +594,27 @@ def test_run_and_request_run_each_name_the_other_and_neither_says_you_cannot_run
     assert "request_run asks the seat" in AFFORDANCES
 
 
+def test_request_run_says_the_seat_never_installs_or_changes_the_machine():
+    """cbp-being, 2026-10-28..11-01: 104 of its 144 request_run calls were installs or host changes
+    (apt, D-Bus, systemd, system directories, starting daemons) and 5 were its own work; through
+    mid-October its own work was 95%+. Every one was declined. The door's text listed "the network"
+    and "files that must stay changed" as reasons to use it, which is exactly what an installer
+    needs, so the text offered what the seat would always refuse. It now says so before the file
+    is written, in all three places the being reads it (dp, 2026-11-01: change the affordance)."""
+    from pathlib import Path
+    from sage.gateway.being_gate_client import _TOOL_SCHEMAS
+    run, req = _TOOL_SCHEMAS["run"][0], _TOOL_SCHEMAS["request_run"][0]
+    skill = (Path(__file__).resolve().parents[1] / "skills" / "getting-code-run" / "SKILL.md").read_text()
+    for text in (run, req, skill):
+        assert "files in your home that must stay changed" in " ".join(text.split()), text[:120]
+        assert "files that must stay changed" not in " ".join(text.split())
+    assert "does not install or change anything on this machine outside your home" in req
+    for what in ("apt", "pip", "systemd", "D-Bus", "system directories", "daemons", "declined, every time"):
+        assert what in req, what
+    assert "the seat declines it" in run
+    assert "declined every time" in skill
+
+
 @needs_sandbox
 def test_an_empty_stderr_failure_says_where_its_files_are_not_to_read_stderr(tmp_path):
     # cbp-being 2026-10-18 23:41Z: exit 1, stderr empty, told "read stderr, it names the line"
@@ -636,6 +669,58 @@ def test_a_run_that_names_a_hardware_device_is_told_the_sandbox_has_none():
     assert said not in _run_note(1, "", ["t.py"], "no devices mentioned")
 
 
+def test_a_run_that_reports_on_this_machine_is_told_the_sandbox_cannot_see_it():
+    """cbp-being, 2026-10-28..31: its runs said the bus was unreachable, systemd was not booted, port 7711
+    was closed and the daemon was not running, and it asked for installers again and again while the
+    daemon decided each act. The note now says the sandbox sees no other process, service or port."""
+    from sage.gateway.hestia_dispatch import _run_note
+    said = "describes the sandbox"
+    for out in ("Failed to connect to bus: No medium found",
+                "System has not been booted with systemd as init system (PID 1). Can't operate.",
+                "port 7711 is closed", "ConnectionRefusedError: [Errno 111] Connection refused",
+                "The Hestia daemon is not running", "hestia.service: inactive (dead)"):
+        note = _run_note(1, "", ["t.py"], out)
+        assert said in note and "not evidence that a service on this machine is down, or that it is up" in note, out
+        # NOVA's review of #609: a false negative is never corrected with an unproven positive.
+        low = note.lower()
+        assert "is running" not in low and "decided this one" not in low, note
+        # the run's OWN processes exist; only the host's are hidden
+        assert "only the run's own processes are" in note
+    assert said in _run_note(1, "Failed to connect to bus: No medium found", ["t.py"])
+    assert said in _run_note(0, "", ["t.py"], "systemctl is-active hestia -> unknown")
+    for benign in ("loss 0.81 after 40 epochs", "residual 0.806334", "running mean 3.2", "wrote out.csv"):
+        assert said not in _run_note(0, "", ["t.py"], benign), benign
+
+
+def test_the_daemon_answered_note_is_evidence_only_and_names_the_action():
+    """cbp-being 2026-11-01: _host_note alone ("not evidence either way") lost to its own script's
+    "The Hestia daemon is NOT running". The run's action id is a real answer from the daemon, issued
+    before the run executed; the note says that and claims nothing later or wider (NOVA on #609)."""
+    from sage.gateway.hestia_dispatch import _daemon_answered_note
+    note = _daemon_answered_note("652a0df6-9f71-4b57-948a-fecc6d456929")
+    assert "action 652a0df6" in note and "answering when this one began" in note
+    low = note.lower()
+    assert "is running" not in low and "decides your acts" not in low
+
+
+@needs_sandbox
+def test_a_run_that_reports_on_the_host_carries_the_daemons_answer(tmp_path):
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "probe.py").write_text("print('Port 7711 is CLOSED. The Hestia daemon is NOT running.')\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/probe.py"}))
+    assert r.ok, r.error
+    assert "not evidence that a service on this machine is down" in r.result["note"]
+    assert "action w-run" in r.result["note"]
+    (home / "scratch" / "plain.py").write_text("print('loss 0.81 after 40 epochs')\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/plain.py"}))
+    assert r.ok and "action w-run" not in r.result["note"], r.result["note"]
+
+
+def test_the_run_verb_says_the_sandbox_cannot_see_this_machine():
+    from sage.gateway.being_gate_client import _TOOL_SCHEMAS
+    assert "no view of this machine" in _TOOL_SCHEMAS["run"][0]
+
+
 
 @needs_sandbox
 def test_a_second_run_does_not_see_what_the_first_wrote_and_both_notes_say_so(tmp_path):
@@ -657,3 +742,116 @@ def test_a_second_run_does_not_see_what_the_first_wrote_and_both_notes_say_so(tm
     assert r.result["stderr"] == ""
     assert "nothing an earlier run wrote is kept" in r.result["note"]
     assert "read.py" in r.result["note"]
+
+
+def test_run_fails_closed_when_no_sandbox_is_usable(tmp_path, monkeypatch):
+    """Nova on #508: with bwrap unusable (no AppArmor userns profile, or the profile removed) and no
+    Seatbelt, `run` refuses; it never runs the being's code unsandboxed. SANDBOX_REQUIRED (the check
+    verb's switch) does not loosen it either. The dispatcher starts no process at all."""
+    import subprocess
+    from sage.gateway import being_gate_client as B
+    from sage.gateway import hestia_dispatch as H
+    monkeypatch.setattr(B, "sandbox_available", lambda: False)
+    monkeypatch.setattr(B, "seatbelt_available", lambda: False)
+    monkeypatch.setattr(B, "SANDBOX_REQUIRED", False)
+    started = []
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: started.append(a) or (_ for _ in ()).throw(AssertionError("ran")))
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: started.append(a) or (_ for _ in ()).throw(AssertionError("ran")))
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "x.py").write_text("print('should never run')\n")
+    ctx = {"memory_root": str(home), "member": "test-being"}
+    with pytest.raises(ValueError, match="cannot get one"):
+        B.run_command({"path": "scratch/x.py"}, ctx)
+    env = d._do_run(BeingIntent("run", {"path": "scratch/x.py"}))
+    assert not env.ok and "cannot get one" in (env.error or ""), env
+    assert started == [], "no process was started"
+
+
+def test_no_sage_code_runs_the_userns_setup():
+    """Nova on #508: the AppArmor change is an operator step by hand. No SAGE source, unit or script
+    other than the setup script itself names it or calls apparmor_parser."""
+    root = Path(__file__).resolve().parents[3]
+    hits = []
+    for p in list((root / "sage").rglob("*")) + list((root / "scripts").rglob("*")):
+        if not p.is_file() or p.suffix not in (".py", ".sh", ".service", ".timer", ".json", ".yaml") \
+                or p.name == "enable_bwrap_userns.sh" or p.resolve() == Path(__file__).resolve():
+            continue
+        try:
+            t = p.read_text(errors="replace")
+        except OSError:
+            continue
+        t = "\n".join(l for l in t.splitlines() if not l.lstrip().startswith("#"))  # a pointer comment is not a call
+        if "enable_bwrap_userns" in t or "apparmor_parser" in t:
+            hits.append(str(p.relative_to(root)))
+    assert hits == [], hits
+
+
+# ---- the operator's setup script (Nova on #508): its rollback fails closed and it touches only its own profile ----
+
+MARK = "# written by SAGE scripts/enable_bwrap_userns.sh"
+OURS = MARK + "\nprofile bwrap /usr/bin/bwrap flags=(unconfined) { userns, }\n"
+THEIRS = "profile bwrap /usr/bin/bwrap flags=(unconfined) { userns, }\n"
+
+
+def _setup_script(d, parser_rc=0, parser_unloads=True, profile=None):
+    """The real script with only its three path constants pointed into d, and fake `id` (root) and
+    `apparmor_parser` first on PATH. The fake parser logs each call; -R exits parser_rc and, if
+    parser_unloads, drops bwrap from the fake kernel profile list."""
+    import os
+    import stat
+    d.mkdir()
+    src = Path(__file__).resolve().parents[3] / "scripts" / "enable_bwrap_userns.sh"
+    prof, lst, bw, log = (d / n for n in ("bwrap.profile", "profiles", "bwrap-bin", "parser.log"))
+    text = src.read_text()
+    for const, val in (("PROFILE", prof), ("LOADED", lst), ("BWRAP", bw)):
+        line = next(l for l in text.splitlines() if l.startswith(f"{const}="))
+        text = text.replace(line, f"{const}={val}", 1)
+    script = d / "setup.sh"
+    script.write_text(text)
+    lst.write_text("bwrap (unconfined)\nother (enforce)\n")
+    bw.write_text("#!/bin/sh\nexit 0\n")
+    if profile is not None:
+        prof.write_text(profile)
+    fake = d / "fakebin"
+    fake.mkdir()
+    (fake / "id").write_text("#!/bin/sh\necho 0\n")
+    # grep + mv, not `sed -i`: BSD sed (macOS) takes the next argument as -i's backup suffix, so the stub
+    # failed there ("invalid command code") and this test failed on every Mac seat
+    drop = (f"grep -v '^bwrap ' {lst} > {lst}.new; mv {lst}.new {lst}" if parser_unloads else ":")
+    (fake / "apparmor_parser").write_text(
+        f"#!/bin/sh\necho \"$@\" >> {log}\n"
+        f"if [ \"$1\" = -R ]; then {drop}; exit {parser_rc}; fi\nexit 0\n")
+    for p in (bw, fake / "id", fake / "apparmor_parser"):
+        p.chmod(p.stat().st_mode | stat.S_IXUSR)
+    child = dict(os.environ, PATH=f"{fake}:{os.environ['PATH']}", SUDO_USER="nobody")
+    return script, prof, log, child
+
+
+def _sh(script, child, *args):
+    import subprocess
+    return subprocess.run(["bash", str(script), *args], env=child, capture_output=True, text=True)
+
+
+def test_bwrap_setup_remove_keeps_the_profile_when_unload_fails(tmp_path):
+    # unload exits non-zero: the file stays for a retry, exit 3, and no claim of success
+    script, prof, log, child = _setup_script(tmp_path / "a", parser_rc=1, parser_unloads=False, profile=OURS)
+    r = _sh(script, child, "--remove")
+    assert r.returncode == 3 and prof.exists(), (r.returncode, r.stdout)
+    assert "still active" in r.stdout and "restricted again" not in r.stdout
+    # unload exits 0 but the kernel still lists the profile: the file stays, exit 3
+    script, prof, log, child = _setup_script(tmp_path / "b", parser_rc=0, parser_unloads=False, profile=OURS)
+    r = _sh(script, child, "--remove")
+    assert r.returncode == 3 and prof.exists() and "still holds" in r.stdout, r.stdout
+    # a real unload: checked gone, then the file is deleted
+    script, prof, log, child = _setup_script(tmp_path / "c", profile=OURS)
+    r = _sh(script, child, "--remove")
+    assert r.returncode == 0 and not prof.exists() and "restricted again" in r.stdout, r.stdout
+
+
+def test_bwrap_setup_never_loads_or_removes_a_profile_it_did_not_write(tmp_path):
+    for args in ((), ("--remove",)):
+        script, prof, log, child = _setup_script(tmp_path / ("remove" if args else "setup"), profile=THEIRS)
+        r = _sh(script, child, *args)
+        assert r.returncode == 1 and prof.read_text() == THEIRS, (args, r.stdout)
+        assert not log.exists(), f"apparmor_parser was called for an unmanaged profile: {log.read_text()}"
+        assert "not written by this script" in r.stdout

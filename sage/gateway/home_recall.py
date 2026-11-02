@@ -62,7 +62,13 @@ def index_home(instance: Path, max_files: int = 40) -> List[Dict]:
     notes/ and scratch/ file as one unit. Read fresh each call; the home is small."""
     instance = Path(instance)
     units: List[Dict] = []
-    for name in ("journal.md", "todo.md"):
+    # A retired journal or todo (retire_note, journal.retired-<date>.md) stays searchable: retiring
+    # starts the file fresh, it does not take the being's history out of its own recall.
+    names = ["journal.md", "todo.md"]
+    if instance.is_dir():
+        names += sorted(x.name for x in instance.iterdir()
+                        if x.is_file() and x.name.startswith(("journal.retired-", "todo.retired-")))
+    for name in names:
         p = instance / name
         if p.is_file():
             units.extend(_entries(p.read_text(errors="replace"), name))

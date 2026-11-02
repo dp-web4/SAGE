@@ -18,6 +18,10 @@ class ModelCapabilities:
     api_mode: str = 'chat'                   # 'chat' or 'generate'
     bilateral_prone: bool = False             # Generates both sides of conversation?
     supports_tool_calls: bool = False         # Native Ollama tool calling?
+    # Does the chat template render the tool schemas only when the LAST message is a user turn?
+    # Ollama's llama3.1 template does, so a prompt ending in a tool result counts thousands of
+    # tokens fewer than the same list ending in a user turn (being_tool_loop._tail_kind).
+    tools_on_last_user_only: bool = False
     max_context_tokens: int = 4096            # Approximate context window
     max_context_turns: int = 6               # Recommended history turns
     thinking_supported: bool = False          # Qwen 3.5 /think mode?
@@ -36,6 +40,11 @@ class ModelCapabilities:
     ])
     strip_think_tags: bool = False            # Strip <think>...</think> blocks (Qwen 3.5)?
     num_predict: Optional[int] = None         # Family-wide num_predict fallback (thinking budget + response)
+    # Chars per token for the tool loop's step-1 PREFLIGHT estimate (being_tool_loop.PREFLIGHT_CPT,
+    # 2.9, was calibrated on a Qwen-tokenized being and over-counts a denser tokenizer badly: on
+    # llama3.1 it refused every explore for 2.5 days, SAGE #582). Declare it per family from a
+    # MEASURED ratio, set BELOW every measured value so the estimate still errs high. None = 2.9.
+    preflight_chars_per_token: Optional[float] = None
     timeout_seconds: Optional[int] = None     # HTTP wall-clock timeout floor (think+response envelope)
     # Per-size overrides. Requirements differ dramatically by size AND by
     # think/no-think state, so a single family value is wrong. Keyed by the
@@ -75,12 +84,22 @@ class ModelCapabilities:
         variants[size].think_default, then the family think_default, then
         thinking_supported. dp, 2026-09-05: "generally we want the beings to think";
         the exceptions are declared here per size, not hard-coded in callers."""
+        declared = self.declared_think(model_name)
+        if declared is not None:
+            return declared
+        return bool(self.thinking_supported)
+
+    def declared_think(self, model_name: str) -> Optional[bool]:
+        """The think_default a config states for this model (its size's, else its family's); None
+        when neither says. None is what lets the server's own capability list decide
+        (ollama_irp.ollama_can_think): dp, 2026-10-30, "we should be [thinking], whenever that's
+        an option"."""
         variant = self.variant_for(model_name) or {}
         if variant.get('think_default') is not None:
             return bool(variant['think_default'])
         if self.think_default is not None:
             return bool(self.think_default)
-        return bool(self.thinking_supported)
+        return None
 
     def variant_for(self, model_name: str) -> Optional[Dict]:
         """The declared variant for a model's tag: the exact tag, else the longest declared tag that is

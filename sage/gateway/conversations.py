@@ -514,6 +514,11 @@ _ANSWER_NAMES = re.compile(r"\b(?:request seq|answering your seq|about seq|on yo
                            r"(\d+(?:\s*(?:,|and)\s*(?:seq\s+)?\d+)*)", re.I)
 
 
+# Lines the dispatcher appends to a request about OTHER requests (hestia_dispatch, _do_request_run):
+# they are not the being's arguments, so they never make two asks for the same work differ.
+_ANNOTATIONS = ("UNCHANGED since", "SAME AS the request at seq")
+
+
 def _request_key(text: str) -> Optional[tuple]:
     """(path, digest, extra argument lines) of a `[request_run]` turn, or None when it cannot be
     shown to repeat anything: not a request, no sha256 tag, or it asks for a rerun. The extra
@@ -527,7 +532,7 @@ def _request_key(text: str) -> Optional[tuple]:
         return None
     header_index, digest = source
     extra = tuple(sorted(x.strip() for x in lines[header_index + 1:]
-                         if x.strip() and not x.startswith("UNCHANGED since")))
+                         if x.strip() and not x.startswith(_ANNOTATIONS)))
     if any(x.lower().startswith("rerun:") for x in extra):
         return None
     return (lines[0][len("[request_run] "):].strip(), digest, extra)

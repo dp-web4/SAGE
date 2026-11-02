@@ -188,6 +188,14 @@ def _hub_receipt(detail: str) -> Optional[Dict[str, str]]:
     return out or None
 
 
+#: The daemon's local notice kinds (hestia MEMBER_NOTICE_KINDS) spelled for the hub-mesh KINDS gate,
+#: where they differ (hestia #904). The local surface spells the review ask `review_request`, which
+#: the hub vocabulary does not have, so a routed review ask was accepted locally ("queued") and then
+#: refused by every receiver's kind gate: it could never leave the machine. `pr_review_request` is the
+#: legacy atom every receiver accepts, fractal gate or not. The other local kinds exist in both sets.
+_HUB_KIND = {"review_request": "pr_review_request"}
+
+
 def _forward(row: Dict[str, Any], sender=None, plugin_id: str = "sprout-being",
              env_file: Optional[str] = None, signed_as: Optional[str] = None) -> tuple[bool, str]:
     """Hand one row to the fleet mesh under the signer `signer_for` chose. Returns
@@ -195,6 +203,7 @@ def _forward(row: Dict[str, Any], sender=None, plugin_id: str = "sprout-being",
     variables stripped, so the shell sources exactly the file the resolver read."""
     to = row.get("forward_on") or row.get("dest_peer_lct") or row.get("peer")
     kind = row.get("kind") or "coordination"
+    kind = _HUB_KIND.get(kind, kind)
     ptr = row.get("pointer_uri") or row.get("pointer") or ""
     if not to or not ptr:
         return False, f"row missing forward_on/pointer_uri: {row}"

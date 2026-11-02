@@ -13,6 +13,14 @@ more: the same Hearing, the same listening bounds, the same presence wake.
     the room: "only being directly addressed should wake it" -- run with SAGE_LISTEN=wake and SAGE_WAKE_NAME,
     so words become heard lines only after the being's name (listening.py).
 
+  * TRANSCRIBE OUT OF PROCESS: SAGE_LISTEN_BACKEND=whispercpp. The capture is read by a Python thread, so
+    a transcriber that decodes in this process competes with it for the GIL. On McNugget (2026-10-24) the
+    MLX backend, with music in the room, was decoding in 20 of 20 py-spy samples and the reader in none:
+    samples were lost, "hey McNugget" reached whisper as fragments ("Okay." x28, dropped as silence), and
+    five days of tries never chimed. whisper-server (sage/embodiment/whispercpp.py) decodes in its own
+    process; the same audio replayed through it woke and heard correctly, and the first live try chimed.
+    MLX is fine for a quiet room or a test; a room with music needs the out-of-process backend.
+
 Run as a service:  python -m sage.embodiment.ear   (SAGE_INSTANCE / SAGE_MEMBER as for presence.py)
 """
 from __future__ import annotations

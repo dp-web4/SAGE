@@ -64,10 +64,50 @@ for repo in "$DEV_SAGE" "$SAGE_DIR" "$SHARED" "$PRIVATE" "$MEMORY" "$HESTIA"; do
         if ! git pull --rebase --autostash origin main >/dev/null 2>&1; then
             git rebase --abort >/dev/null 2>&1
             echo "[McNugget-Supervisor] *** $(basename "$repo"): could not sync with origin; tree left untouched ***" >&2
+            SYNC_FAILED="${SYNC_FAILED:-}${SYNC_FAILED:+ }$(basename "$repo")"
         fi
     fi
 done
-echo "[McNugget-Supervisor] Repos synced"
+# The fleet line says "repos synced" only when every repo did (NOVA on #513).
+if [ -n "${SYNC_FAILED:-}" ]; then
+    REPO_LINE="repos synced except: $SYNC_FAILED (left untouched)"
+else
+    REPO_LINE="repos synced"
+fi
+echo "[McNugget-Supervisor] $REPO_LINE"
+
+# === 2. GOVERNANCE SNAPSHOTS ===
+# dp, 2026-10-21 (private-context supervisor/CLAUDE.md): the governed read their law from
+# <workspace>/governance/{hestia,sage}, read-only copies of the deployed hestia build and of the running
+# SAGE gateway. Nothing else refreshes them, and a copy older than the deployed build sends readers to wrong
+# line numbers, so every run refreshes both. Skipped where there is no governance/ (no governed members).
+# The scripts are idempotent and are the only writers inside governance/.
+# Each step keeps its own exit status and counts as done only on its own success line
+# (supervisor_steps.sh; NOVA's HOLD on #513): a refused snapshot is logged FAILED, never as fresh.
+. "$SAGE_DIR/sage/scripts/supervisor_steps.sh"
+GOV_LINE=""
+if [ -d "$(dirname "$SAGE_DIR")/governance" ]; then
+    GOV_H="$(snapshot_status hestia "governance snapshot" "$SAGE_DIR/scripts/governance_snapshot.sh")"
+    GOV_S="$(snapshot_status sage "sage governance snapshot" "$SAGE_DIR/scripts/governance_snapshot_sage.sh")"
+    echo "[McNugget-Supervisor] governance: $GOV_H; $GOV_S"
+    GOV_LINE="; governance $GOV_H, $GOV_S"
+else
+    GOV_LINE="; governance: skipped (no governance/ here)"
+fi
+
+# === 2a. THE BEING'S WORKTREE ===
+# Keeping it current is the seat's job (being_gate_client.pr_base_branch: "it sets the upstream
+# when it syncs your worktree"). Nothing on McNugget did: the worktree sat on a detached HEAD from
+# 2026-10-03 until 10-23, so the being's git_read and search showed three-week-old code. Fast-forward
+# only; the being's modified files or an open PR branch stop it (scripts/sync_being_worktree.sh).
+BEING_WT="$(dirname "$SAGE_DIR")/being-worktrees/mcnugget-being"
+if [ -d "$BEING_WT" ]; then
+    WT_OUT="$(worktree_status "$SAGE_DIR/scripts/sync_being_worktree.sh" "$BEING_WT" main mcnugget-being)"
+    echo "[McNugget-Supervisor] $WT_OUT"
+    GOV_LINE="${GOV_LINE}; $WT_OUT"
+else
+    GOV_LINE="${GOV_LINE}; being worktree: skipped (none at $BEING_WT)"
+fi
 
 # === 3. READ FORUMS ===
 cd "$SHARED"
@@ -104,7 +144,7 @@ EVID="$PRIVATE/supervisor/log_mcnugget.md"
 # which is local. A UTC header future-dates the entry after ~17:00 PDT and the tool then
 # reports a nonsensical "-1d ago". Timestamps inside the line stay UTC and are labelled.
 TODAY=$(date +'%Y-%m-%d')
-ENTRY="- $(date -u +'%H:%M UTC') — repos synced; ${RECENT_FORUM:-0} forum posts/24h; inbox: ${INBOX_N:-0}"
+ENTRY="- $(date -u +'%H:%M UTC') — ${REPO_LINE}; ${RECENT_FORUM:-0} forum posts/24h; inbox: ${INBOX_N:-0}${GOV_LINE}"
 mkdir -p "$(dirname "$EVID")"
 EVID="$EVID" TODAY="$TODAY" ENTRY="$ENTRY" python3 - <<'PY'
 import os, re

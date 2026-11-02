@@ -121,7 +121,7 @@ def test_run_ollama_tool_turn_with_fake_llm():
     # request_run and memory_edit, one layer out. It sends a unified diff; the seat parses every
     # path the diff touches OUT OF THE DIFF and the law rules on each under mrh.path, exactly as
     # for a memory_write. See test_patch_apply_is_governed.py for what is judged and what is not.
-    assert len(ollama_tools()) == 35   # + run (2026-10-18)   # + tune (2026-10-07)   # + git_clean (2026-10-05)   # + describe (2026-10-03)   # + pr_sync (2026-10-01)   # + stay_awake (SAGE #295)   # + pr_read (2026-09-29)   # + pair_audio (2026-09-27)   # + game (#56 slice 6)   # + pr_open, pr_amend, git_restore (#56 slice 5)   # + patch_apply (2026-09-25)
+    assert len(ollama_tools()) == 39   # + skill (2026-10-27)   # + settle (2026-10-27)   # + identity_edit (2026-10-24)   # + web_search (2026-10-02)   # + run (2026-10-18)   # + tune (2026-10-07)   # + git_clean (2026-10-05)   # + describe (2026-10-03)   # + pr_sync (2026-10-01)   # + stay_awake (SAGE #295)   # + pr_read (2026-09-29)   # + pair_audio (2026-09-27)   # + game (#56 slice 6)   # + pr_open, pr_amend, git_restore (#56 slice 5)   # + patch_apply (2026-09-25)
 
     calls = {"n": 0}
 
@@ -731,6 +731,39 @@ def test_two_spills_of_the_same_step_in_one_second_do_not_overwrite_each_other()
     assert open(os.path.join(root, b), encoding="utf-8").read().endswith("the second result")
 
 
+def test_a_spilled_run_result_is_readable_by_line_and_still_raw_decodes():
+    """legion-being, 2026-10-30: a run result spilled as ONE physical line (stdout an escaped string), so line ranges
+    could not reach its output; it wrote 7 raw_decode parsers in two beats. The text fields are now written out as
+    lines after the raw JSON, and raw_decode from the first '{' reads exactly the original object."""
+    from sage.gateway.being_tool_loop import _spill, SPILL_DECODED_MARK
+    import json, os, tempfile
+
+    root = tempfile.mkdtemp(prefix="spill-decode-")
+    result = {"script": "probe.py", "exit": 0, "stdout": "".join(f"row {i}\n" for i in range(1, 61)), "stderr": ""}
+    rel = _spill(root, json.dumps(result), 4)
+    raw = open(os.path.join(root, rel), encoding="utf-8").read()
+    obj, _ = json.JSONDecoder().raw_decode(raw, raw.find("{"))
+    assert obj == result, "the being's existing skills parse the raw JSON first, unchanged"
+    lines = raw.splitlines()
+    assert SPILL_DECODED_MARK in lines and "== stdout (60 lines) ==" in lines
+    assert lines[lines.index("== stdout (60 lines) ==") + 37] == "row 37", "a line range reaches line 37 of the output"
+    # the marker names the exact line (nomad's #600 review): reading from it gives the output's first line
+    from sage.gateway.being_tool_loop import _decoded_where
+    where = _decoded_where(json.dumps(result))
+    first = int(where.split("stdout from line ")[1].split()[0].rstrip(","))
+    assert lines[first - 1] == "row 1", (where, lines[first - 2:first + 1])
+    # a stdout line that looks like a heading does not read as one: headings count their lines
+    tricky = {"exit": 0, "stdout": "a\n== stderr ==\nb\n", "stderr": "real\nerror\n"}
+    t = open(os.path.join(root, _spill(root, json.dumps(tricky), 7)), encoding="utf-8").read().splitlines()
+    assert "== stdout (3 lines) ==" in t and "== stderr (2 lines) ==" in t
+    assert "script='probe.py'" in raw and "exit=0" in raw
+    # a body that is not a JSON object, or holds no multi-line text, is spilled exactly as before
+    plain = _spill(root, "the first result\nsecond line", 5)
+    assert open(os.path.join(root, plain), encoding="utf-8").read().endswith("the first result\nsecond line")
+    flat = _spill(root, json.dumps({"exit": 1, "stdout": "one line"}), 6)
+    assert SPILL_DECODED_MARK not in open(os.path.join(root, flat), encoding="utf-8").read()
+
+
 def test_collision_names_preserve_creation_order_at_the_prune_boundary(monkeypatch):
     """The filename is the retention clock. A same-step retry must sort AFTER the file it
     followed, even when there are enough collisions to cross 9 -> 10, so that when the byte
@@ -854,7 +887,8 @@ def test_a_think_only_generate_that_stopped_cleanly_also_retries_without_thinkin
                             "eval_count": 20, "message": {}}}
 
     llm = FakeLLM()
-    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
+    # tools=[]: this fake's num_ctx (8,192) cannot hold the full registry's schemas, which the step-1 preflight now counts (#490); the test is about how a stop is classified, and calls no tool
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}], tools=[])
 
     assert r.reply == "answered", "a think-only stop must not be recorded as the being's silence"
     assert len(seen) == 2, f"expected exactly one retry, got {len(seen)} generates"
@@ -890,7 +924,8 @@ def test_an_empty_stop_with_no_thinking_is_left_alone():
                             "message": {"content": "", "thinking": ""}}}
 
     llm = FakeLLM()
-    run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
+    # tools=[]: this fake's num_ctx (8,192) cannot hold the full registry's schemas, which the step-1 preflight now counts (#490); the test is about how a stop is classified, and calls no tool
+    run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}], tools=[])
     assert len(seen) == 1, f"an empty stop with no thinking must not be retried, got {len(seen)}"
 
 
@@ -1173,7 +1208,8 @@ def test_a_length_stop_names_the_limit_it_actually_hit(prompt, evalc, cause, say
                     "raw": {"done_reason": "stop", "prompt_eval_count": prompt + 50, "eval_count": 20,
                             "message": {}}}
 
-    r = run_ollama_tool_turn(_client(OK_DISPATCH), FakeLLM(), [{"role": "user", "content": "hi"}])
+    # tools=[]: this fake's num_ctx (8,192) cannot hold the full registry's schemas, which the step-1 preflight now counts (#490); the test is about how a stop is classified, and calls no tool
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), FakeLLM(), [{"role": "user", "content": "hi"}], tools=[])
     assert len(seen) == 2
     assert says in seen[1] and never not in seen[1], seen[1]
     assert r.generates[0]["retry_cause"] == cause
@@ -1350,3 +1386,105 @@ def test_a_window_retry_increases_even_a_large_being_answer_reserve(tmp_path, mo
     assert llm.attempts == 2 and result.reply == "done"
     assert result.generates[0]["retry_cause"] == "window"
     assert seen[:2] == [12288, 13312], seen
+
+
+def test_compaction_counts_the_schemas_the_turn_sends_as_the_preflight_does(tmp_path):
+    """2026-10-27: #490 measured the schemas for step 1's preflight only. Compaction still assumed
+    _UNCOUNTED_CHARS (12,900), so with no server count yet and ~30k of schemas it stopped short and the
+    preflight refused the step it had just compacted for (32,762 estimated of 32,768). Both now use the
+    count of what is sent: a seed compaction CAN fit is compacted until it does, and is sent."""
+    import json
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn, _UNCOUNTED_CHARS
+    sent = []
+
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_ctx = 32768
+        num_predict_override = None
+        think = False
+
+        def get_chat_response(self, messages, tools=None):
+            sent.append(len(json.dumps(tools or [])))
+            return {"content": "done", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": 25000, "eval_count": 20, "message": {}}}
+
+    tools = [{"type": "function", "function": {"name": "memory_read", "description": "d" * (_UNCOUNTED_CHARS * 3),
+                                               "parameters": {"type": "object", "properties": {}}}}]
+    seed = [{"role": "system", "content": "s"}, {"role": "user", "content": "go"}]
+    for i in range(10):
+        seed += [{"role": "assistant", "content": "", "tool_calls": [
+                     {"function": {"name": "memory_read", "arguments": {"path": f"f{i}"}}}]},
+                 {"role": "tool", "content": "x" * 7000}]
+    c = _client(OK_DISPATCH)
+    c.memory_root = str(tmp_path)
+    r = run_ollama_tool_turn(c, FakeLLM(), seed, tools=tools)
+    assert sent and r.reply == "done" and not r.window_full, (r.window_full, r.generates)
+
+
+def _cut_llm(num_ctx, first_prompt, first_eval, seen, first_content="The investigation into hub_notify has revealed that the previous search for hub-not"):
+    """A thinking model whose first reply STARTED and was cut at the window wall (prompt + eval ==
+    num_ctx, done_reason length, content but no tool call); the retry answers cleanly."""
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_predict_override = None
+        think = True
+
+        def get_chat_response(self, messages, tools=None):
+            seen.append({"think": self.think, "chars": sum(len(m.get("content") or "") for m in messages)})
+            if len(seen) == 1:
+                return {"content": first_content, "tool_calls": [],
+                        "raw": {"done_reason": "length", "prompt_eval_count": first_prompt,
+                                "eval_count": first_eval,
+                                "message": {"content": first_content, "thinking": "planning ..."}}}
+            return {"content": "done", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": 3000, "eval_count": 20, "message": {}}}
+    llm = FakeLLM()
+    llm.num_ctx = num_ctx
+    return llm
+
+
+def test_a_reply_cut_at_the_window_is_retried_not_kept_as_the_last_word():
+    """mcnugget-being 2026-10-30 22:56Z (gemma4:12b, think on, num_ctx 16,384): 13,563 + 2,821 ==
+    16,384, done_reason length, a half-sentence of content and no call. It stood as the step's
+    reply and the beat ended at 4 explore steps. Now it is retried, and recorded as a window cut;
+    with ~2.7k left against a 3,000 think budget, that one retry answers with thinking off."""
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    seen = []
+    llm = _cut_llm(16384, 13563, 2821, seen)
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
+    assert len(seen) == 2, "a reply the window cut must be retried once"
+    assert r.reply == "done", r.reply
+    assert r.generates[0]["retry_cause"] == "window"
+    assert seen[1]["think"] is False, "no room to think and answer: the retry must not think into the wall"
+    assert llm.think is True, "thinking is turned off for that one retry only"
+
+
+def test_a_cut_reply_with_room_after_compaction_keeps_its_thinking(tmp_path):
+    """The same cut, but compaction frees the window: the retry has more room than a thinking
+    reply needs, so thinking is left alone (a cut answer ran out of room; that is the remedy)."""
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    seen = []
+    llm = _cut_llm(32768, 30768, 2000, seen)
+    seed = [{"role": "system", "content": "s"}, {"role": "user", "content": "go"}]
+    for i in range(4):
+        seed += [{"role": "assistant", "content": "", "tool_calls": [
+                     {"function": {"name": "memory_read", "arguments": {"path": f"f{i}"}}}]},
+                 {"role": "tool", "content": "x" * 6000}]
+    c = _client(OK_DISPATCH)
+    c.memory_root = str(tmp_path)
+    r = run_ollama_tool_turn(c, llm, seed)
+    assert len(seen) == 2 and r.reply == "done"
+    assert seen[1]["chars"] < seen[0]["chars"], "the retry is compacted first, as for an empty window cut"
+    assert seen[1]["think"] is True
+    assert r.generates[0]["retry_cause"] == "window"
+
+
+def test_a_reply_cut_by_its_output_budget_with_room_left_still_stands():
+    """Unchanged: content cut by num_predict while the window still had room is not a window
+    cut, and this change does not retry it."""
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    seen = []
+    llm = _cut_llm(16384, 9000, 3000, seen, first_content="a long answer that ran out of budget")
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
+    assert len(seen) == 1, "an output-budget cut with content is not retried by this change"
+    assert r.reply == "a long answer that ran out of budget"

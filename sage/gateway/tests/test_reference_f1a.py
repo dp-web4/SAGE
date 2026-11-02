@@ -89,6 +89,40 @@ def test_a_relative_miss_names_the_file_under_an_ancestor_of_the_home():
     assert "DOES exist at" not in (r.result or ""), r.result
 
 
+def test_a_relative_miss_never_offers_a_file_outside_reach_as_a_read():
+    """SAGE #530, cbp-being 2026-10-24 (on a tree without #522): `hestia/hooks-gt/_shared/gate.py`
+    relative was answered with the seats' live tree, outside its grants, and "To read it:"; it
+    filed scope requests for that copy. #522 names a copy in reach; with no copy, the file is
+    named as existing and outside reach, never as a read. Exact grants do not count as reach."""
+    ws = tempfile.mkdtemp(prefix="ref-f1a-ws-")
+    root = os.path.join(ws, "SAGE", "sage", "instances", "b")
+    os.makedirs(root)
+    for tree in (os.path.join(ws, "hestia"), os.path.join(ws, "governance", "hestia")):
+        os.makedirs(os.path.join(tree, "_shared"))
+        open(os.path.join(tree, "_shared", "gate.py"), "w").write("x = 1")
+    live = os.path.realpath(os.path.join(ws, "hestia", "_shared", "gate.py"))
+    snap = os.path.realpath(os.path.join(ws, "governance", "hestia", "_shared", "gate.py"))
+    gov = GatewayVerdict("allow", granted=(os.path.join(ws, "governance"),),
+                         granted_reach=((os.path.join(ws, "governance"), True),))
+    disp = ReferenceF1aDispatcher(memory_root=root)
+    r = disp(BeingIntent("memory_read", {"path": "hestia/_shared/gate.py"}), gov)
+    assert r.ok and snap in r.result and "outside your reach" in r.result, r.result
+    assert f"memory_read {{\"path\": \"{live}\"}}" not in r.result, r.result
+
+    # only the live copy exists: it is named as existing and outside reach, never as a read
+    os.remove(snap)
+    r = disp(BeingIntent("memory_read", {"path": "hestia/_shared/gate.py"}), gov)
+    assert r.ok and f"exists at '{live}'" in r.result and "outside what you hold" in r.result, r.result
+    assert "To read it" not in r.result and "Nothing was read" in r.result, r.result
+
+    # an exact grant on the governance dir does not reach a file under it
+    exact = GatewayVerdict("allow", granted=(os.path.join(ws, "governance"),),
+                           granted_reach=((os.path.join(ws, "governance"), False),))
+    open(snap, "w").write("x = 1")
+    r = disp(BeingIntent("memory_read", {"path": "hestia/_shared/gate.py"}), exact)
+    assert "outside what you hold" in r.result and "To read it" not in r.result, r.result
+
+
 def test_a_miss_with_several_same_named_files_lists_them_all_and_prefers_none():
     """GPT review on #140: with notes/script.py AND scratch/script.py, the old answer listed
     both and then called the first in sort order the one the being "probably meant". Nothing
@@ -458,34 +492,26 @@ def test_a_second_write_says_it_appended_and_the_way_to_start_fresh_works():
     assert open(os.path.join(root, path)).read() == "print('v3')\n"
 
 
-def test_the_todo_can_be_retired_and_written_fresh():
+def test_the_todo_can_be_retired_and_starts_fresh_with_what_is_still_open():
     """dp, 2026-10-20: cbp-being was asked to retire old todo items and had no tool that removes
-    anything, so the todo grew. retire_note now takes todo.md: the old list is kept whole and
-    readable, todo.md is gone, and the next write creates a fresh one."""
+    anything, so the todo grew. An append to todo.md names retire_note; retiring keeps the old list
+    whole and readable and starts a fresh todo.md that already carries the items still open (the
+    stop-gap on main left it absent and asked the being to rewrite them; #466 carries them)."""
     disp, root = _disp()
     disp(BeingIntent("memory_write", {"path": "todo.md", "content": "- [ ] old thing"}), _ALLOW)
     env = disp(BeingIntent("memory_write", {"path": "todo.md", "content": "- [ ] old thing again"}), _ALLOW)
     assert env.ok and "retire_note todo.md" in env.result, env.result
     ret = disp(BeingIntent("retire_note", {"path": "todo.md", "reason": "mostly finished"}), _ALLOW)
     assert ret.ok and "todo.retired-" in ret.result and "still open" in ret.result, (ret.result, ret.error)
-    assert not os.path.exists(os.path.join(root, "todo.md"))
     kept = [n for n in os.listdir(root) if n.startswith("todo.retired-")]
     assert len(kept) == 1 and "old thing again" in open(os.path.join(root, kept[0])).read()
-    fresh = disp(BeingIntent("memory_write", {"path": "todo.md", "content": "- [ ] still open"}), _ALLOW)
-    assert fresh.ok and fresh.result.startswith("created todo.md"), fresh.result
-
-
-def test_the_journal_still_cannot_be_retired():
-    disp, root = _disp()
-    disp(BeingIntent("memory_write", {"path": "journal.md", "content": "one"}), _ALLOW)
-    ret = disp(BeingIntent("retire_note", {"path": "journal.md", "reason": "x"}), _ALLOW)
-    assert not ret.ok and "journal" in (ret.error or ""), ret.error
-    assert os.path.exists(os.path.join(root, "journal.md"))
+    fresh = open(os.path.join(root, "todo.md")).read()
+    assert "old thing again" in fresh and kept[0] in fresh, fresh
 
 
 def test_appending_to_the_journal_does_not_offer_retire_note():
-    """The journal is meant to grow; retire_note refuses it, so suggesting it there would hand
-    the being a door that is shut."""
+    """The journal is meant to grow, so an append to it does not suggest starting it fresh; the
+    being can still retire it when it chooses (test_home_records_start_fresh)."""
     disp, _ = _disp()
     disp(BeingIntent("memory_write", {"path": "journal.md", "content": "one"}), _ALLOW)
     env = disp(BeingIntent("memory_write", {"path": "journal.md", "content": "two"}), _ALLOW)
@@ -1163,10 +1189,10 @@ def test_a_record_write_stamps_when_each_named_code_file_last_changed():
     stamp = dt.datetime.fromtimestamp(old, dt.timezone.utc).strftime("%Y-%m-%d %H:%M")
     assert f"mechanism.py was last changed at {stamp} UTC" in r.result, r.result
     assert "notes/helper.py was last changed at" in r.result, "a bare name found under notes/ says where"
-    assert "ghost.py was not found at the top of your home, in notes/ or in scratch/" in r.result, r.result
+    assert "ghost.py" not in r.result, "a miss says nothing (#396): it was read as 'does not exist'"
     # the 09-28 review's case: a bare name that lives elsewhere must not be called absent
     r = disp(BeingIntent("memory_write", {"path": "todo.md", "content": "- [done] fix train.py"}), _ALLOW)
-    assert "not a file" not in r.result and "not found at the top of your home, in notes/ or in scratch/" in r.result
+    assert "not a file" not in r.result and "train.py" not in r.result, r.result
     r = disp(BeingIntent("memory_write", {"path": "todo.md", "content": "- [done] fix experiments/train.py"}), _ALLOW)
     assert "experiments/train.py was last changed at" in r.result, r.result
     # 2026-10-08: request_run files live in scratch/; a bare name there was reported absent,
@@ -1187,7 +1213,7 @@ def test_a_record_write_never_stamps_a_file_outside_the_home():
     rel = os.path.relpath(outside, root)
     r = disp(BeingIntent("memory_write", {"path": "journal.md", "content": f"see {rel}"}), _ALLOW)
     assert r.ok and "last changed" not in r.result, r.result
-    assert "was not found in your home" in r.result, r.result
+    assert "secret.py" not in r.result, "ungranted: neither stamped nor said to be missing"
 
 
 def test_a_record_write_naming_no_code_file_is_unchanged():
@@ -1753,3 +1779,29 @@ def test_an_extension_already_on_disk_is_not_applied_twice():
                                          "new": "x = np.zeros(3) + 1"}), _ALLOW)
     assert r.ok, r.error
     assert "x = np.zeros(3) + 1\n" in f.read_text()
+
+
+def test_a_read_above_the_decoded_section_is_told_where_it_starts():
+    """legion-being, 2026-10-31 06:06Z: it read the top of a spilled run result (the header and the one-line JSON),
+    then wrote a script to raw_decode the same file; #600's plain lines sat below, unread. A read that stops above the
+    decoded section now names its first line; one that reaches it, or a file without one, is unchanged."""
+    import json as _json
+    from sage.gateway.being_tool_loop import SPILL_DECODED_MARK, _decoded_text_fields
+    disp, root = _disp()
+    os.makedirs(os.path.join(root, "scratch", "elided"))
+    body = _json.dumps({"exit_code": 0, "stdout": "".join(f"row {i}\n" for i in range(40))})
+    rel = "scratch/elided/20261031-061748-013-000.txt"
+    open(os.path.join(root, rel), "w").write("[saved tool result: run]\n" + body + _decoded_text_fields(body))
+    lines = open(os.path.join(root, rel)).read().splitlines()
+    at = next(i + 1 for i, line in enumerate(lines) if line.startswith(SPILL_DECODED_MARK))
+    note = f"plain lines from line {at} on"
+
+    r = disp(BeingIntent("memory_read", {"path": rel, "start_line": 1, "end_line": 2}), _ALLOW)
+    assert r.ok and note in r.result.split("\n")[0] and f"start_line={at}" in r.result, r.result[:200]
+    r = disp(BeingIntent("memory_read", {"path": rel, "start_line": at, "end_line": at + 5}), _ALLOW)
+    assert note not in r.result and "row 0" in r.result, r.result[:200]
+    r = disp(BeingIntent("memory_read", {"path": rel}), _ALLOW)
+    assert note not in r.result
+    open(os.path.join(root, "long.py"), "w").write("".join(f"line {i}\n" for i in range(1, 501)))
+    r = disp(BeingIntent("memory_read", {"path": "long.py", "start_line": 100, "end_line": 102}), _ALLOW)
+    assert note not in r.result and r.result.startswith("[lines 100-102 of 500"), r.result[:80]

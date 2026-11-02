@@ -3,6 +3,8 @@
 **As of:** 2026-09-26  
 **Snapshot basis:** public `main` through documentation refresh `a8461d5`
 
+> **Public-main delta checked 2026-10-28 (not a new fleet census):** `settle` ([#574](https://github.com/dp-web4/SAGE/pull/574)), advisory close-question hints ([#584](https://github.com/dp-web4/SAGE/pull/584)) and optional failed-then-worked `skill` prompting ([#585](https://github.com/dp-web4/SAGE/pull/585)) are merged. They are mechanisms, **not** verified per-host deployment or proven cross-beat learning. See [preflight-availability issue #582](https://github.com/dp-web4/SAGE/issues/582). The 2026-09-26 snapshot below is retained as dated evidence; its machine/session census has not been silently recalculated.
+
 This is the **current-status landing page**, not a session chronicle. It is intentionally short, dated, and falsifiable. Detailed raising histories, experiment analyses, instance records, PRs/issues, and git history remain the evidence of record.
 
 ## Current direction

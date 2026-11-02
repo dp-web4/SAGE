@@ -294,6 +294,8 @@ class Transcriber(threading.Thread):
         if BACKEND == "mlx":
             # Apple silicon (McNugget, 2026-10-17): the same whisper model through MLX on the GPU. Measured there:
             # base.en ~0.1 s per short phrase warm. Its segments carry no_speech_prob / avg_logprob like torch's.
+            # IT DECODES IN THIS PROCESS, holding the GIL the capture reader needs: in a room with music it starved
+            # the reader on McNugget (2026-10-24, see ear.py). For a live ear prefer whispercpp (its own process).
             try:
                 import numpy as np
                 import mlx_whisper
