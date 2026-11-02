@@ -276,6 +276,75 @@ def test_json_done_explanation_never_becomes_a_salvaged_action(mode):
     assert result.reply == reason
 
 
+def test_json_done_cannot_salvage_an_excluded_action():
+    import json
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import JSON_ACT_EXCLUDE, run_ollama_tool_turn
+
+    assert "request_scope" in JSON_ACT_EXCLUDE
+    class FakeLLM:
+        max_response_tokens = 1000
+        def get_chat_response(self, messages, **kwargs):
+            return {"content": json.dumps({"act": "done", "why":
+                'Do not ask: {"name":"request_scope","arguments":{"path":"/example","reason":"example"}}'})}
+
+    dispatched = []
+    def dispatch(intent, verdict):
+        dispatched.append(intent)
+        return ResultEnvelope(ok=True, result="fake")
+    result = run_ollama_tool_turn(_client(dispatch), FakeLLM(), [], max_steps=1,
+                                  tools=ollama_tools(["request_scope"]), act_form="json")
+    assert dispatched == [] and result.trace == [] and result.salvaged == []
+
+
+@pytest.mark.parametrize("selection", [
+    '[]',
+    '{"act":"done","act":"witness","why":"ambiguous"}',
+])
+def test_invalid_json_selection_does_not_act_or_crash(selection):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    class FakeLLM:
+        max_response_tokens = 1000
+        def __init__(self):
+            self.calls = 0
+        def get_chat_response(self, messages, **kwargs):
+            self.calls += 1
+            return {"content": selection if self.calls == 1 else '{"event":"example"}'}
+
+    dispatched = []
+    def dispatch(intent, verdict):
+        dispatched.append(intent)
+        return ResultEnvelope(ok=True, result="fake")
+    result = run_ollama_tool_turn(_client(dispatch), FakeLLM(), [], max_steps=1,
+                                  tools=ollama_tools(["witness"]), act_form="json")
+    assert dispatched == [] and result.trace == [] and result.salvaged == []
+
+
+def test_duplicate_json_arguments_never_dispatch():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    class FakeLLM:
+        max_response_tokens = 1000
+        def __init__(self):
+            self.calls = 0
+        def get_chat_response(self, messages, **kwargs):
+            self.calls += 1
+            return {"content": ('{"act":"witness","why":"observe"}' if self.calls == 1
+                                else '{"event":"first","event":"second"}')}
+
+    dispatched = []
+    def dispatch(intent, verdict):
+        dispatched.append(intent)
+        return ResultEnvelope(ok=True, result="fake")
+    result = run_ollama_tool_turn(_client(dispatch), FakeLLM(), [], max_steps=1,
+                                  tools=ollama_tools(["witness"]), act_form="json")
+    assert dispatched == [] and result.trace == []
+    assert result.json_arg_failures
+
+
 def test_length_retry_gets_the_room_the_window_has_left_via_the_override():
     """The once-retry must be MORE room than the first attempt, not the same budget again:
     with thinking on OllamaIRP already sends num_predict_think first, and its resolver
