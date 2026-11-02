@@ -676,6 +676,26 @@ def test_salvage_does_not_drop_qualifiers_or_execute_a_prior_block(body):
     assert salvage_tool_calls(body, ollama_tools(["memory_write"])) == []
 
 
+@pytest.mark.parametrize("body", [
+    '{"name":"memory_write","arguments":{"path":"notes/x","content":"draft"},"dry_run":true}',
+    '{"memory_write":{"path":"notes/x","content":"draft"},"dry_run":true}',
+    '{"memory_write":{"path":"notes/x","content":"draft"},"recall":{"query":"q"},"dry_run":true}',
+    '{"name":"memory_write","action":"recall","arguments":{"path":"notes/x","content":"draft"}}',
+])
+def test_salvage_rejects_wrapper_qualifiers_and_conflicting_tool_selectors(body):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls(body, ollama_tools(["memory_write", "recall"])) == []
+
+
+def test_flat_tool_argument_named_name_is_not_discarded():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    calls = salvage_tool_calls('{"action":"tune","name":"temperature","value":"0.5"}', ollama_tools(["tune"]))
+    assert len(calls) == 1
+    assert calls[0]["function"]["arguments"]["name"] == "temperature"
+
+
 def test_salvage_keeps_two_valid_fenced_calls_in_order():
     from sage.gateway.being_gate_client import ollama_tools
     from sage.gateway.being_tool_loop import salvage_tool_calls
