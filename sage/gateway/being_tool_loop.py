@@ -19,6 +19,7 @@ import ast
 import json
 import os
 import re
+import stat
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,6 +29,29 @@ from sage.gateway.being_gate_client import BeingGateClient, BeingIntent, ResultE
 
 # generate(messages) -> {"content": str, "intents": list[BeingIntent]}
 GenerateFn = Callable[[List[Dict[str, Any]]], Dict[str, Any]]
+
+
+def _append_private_turn_capture(path: Path, text: str) -> None:
+    """Append only to a private, single-link regular file without following its final symlink.
+
+    This is a local file-mode guard, not isolation from other processes with the
+    same user identity or a guarantee about ancestor-directory replacement.
+    """
+    if os.name != "posix" or not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "geteuid"):
+        raise OSError("private turn capture requires POSIX no-follow support")
+    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK
+    fd = os.open(path, flags, 0o600)
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or
+                info.st_uid != os.geteuid() or info.st_mode & 0o077):
+            raise OSError("turn capture is not a private, single-link regular file owned by this user")
+        with os.fdopen(fd, "a", encoding="utf-8") as stream:
+            fd = -1
+            stream.write(text)
+    finally:
+        if fd >= 0:
+            os.close(fd)
 
 
 @dataclass
@@ -1295,8 +1319,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                        "reply": {"content": r.get("content"), "tool_calls": r.get("tool_calls"),
                                  "thinking": ((r.get("raw") or {}).get("message") or {}).get("thinking")},
                        "attempt": attempt}
-                with open(capture, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(row, default=str) + "\n")
+                _append_private_turn_capture(capture, json.dumps(row, default=str) + "\n")
             except Exception as _e:
                 import sys as _sys
                 print(f"[tool-loop] turn_capture failed: {type(_e).__name__}: {_e}", file=_sys.stderr)
