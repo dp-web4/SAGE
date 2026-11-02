@@ -676,6 +676,15 @@ def test_salvage_does_not_drop_qualifiers_or_execute_a_prior_block(body):
     assert salvage_tool_calls(body, ollama_tools(["memory_write"])) == []
 
 
+def test_salvage_keeps_two_valid_fenced_calls_in_order():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    body = ('```json\n{"name":"memory_write","arguments":{"path":"notes/x","content":"first"}}\n```\n'
+            '```json\n{"name":"memory_write","arguments":{"path":"notes/y","content":"second"}}\n```')
+    calls = salvage_tool_calls(body, ollama_tools(["memory_write"]))
+    assert [call["function"]["arguments"]["path"] for call in calls] == ["notes/x", "notes/y"]
+
+
 def test_run_ollama_tool_turn_gates_a_salvaged_call_and_records_it():
     from sage.gateway.being_gate_client import ollama_tools
     from sage.gateway.being_tool_loop import run_ollama_tool_turn
