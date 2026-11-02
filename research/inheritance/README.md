@@ -1,6 +1,7 @@
 # IH-01 — inherited state and correction pilot
 
-**Date:** 2026-09-27. **Status:** executable synthetic instrument; no live model result or deployment claim.
+**Date:** 2026-09-27. **Status:** HELD experimental instrument; no live model result or deployment claim.
+Do not run a pilot until the remaining instrument and protocol holds have independent review.
 
 Companion: [inheritance PRD](../../sage/docs/PRD_INHERITANCE_BOUNDARIES.md).
 Local identifier IH-01 deliberately avoids allocating an unverified fleet RT number.
@@ -68,14 +69,27 @@ A new process alone does not prove stateless inference: the adapter must not use
 
 JSONL contains full delivered requests, parsed responses, chosen successor notes, timing/character costs, parent hashes, external expected-choice labels and simulated policy decisions. Writes flush per event; exclusive file creation prevents replacing earlier runs. Hash chains detect accidental edits against recorded hashes, not malicious rewriting by a process that can rewrite the entire file. Stronger custody belongs in the deployment boundary.
 
-The summarizer rejects incomplete, missing, duplicate, out-of-order, hash-mismatched and inconsistent-scoring traces. It reports denominators, correct choices, post-correction choices, denied attempts and call costs by arm. These are descriptive instrument outputs, not statistical significance or independent generation-level samples. Analyze paired task/repeat trajectories as units; generations are correlated. Preserve failures and null results.
+The summarizer rejects incomplete, missing, duplicate, out-of-order, hash-mismatched,
+inconsistent-scoring, wrong-arm-input and wrong-handoff traces. These consistency checks do not
+authenticate what a backend actually received or prevent a coordinated rewrite of a whole run.
+It reports denominators, correct choices, post-correction choices, denied attempts, adapter
+calls, elapsed time and request/response character counts by arm; characters are not tokens or
+compute. These are descriptive instrument outputs, not statistical significance or independent
+generation-level samples. Generations within a trajectory are correlated. Shared seeds are labels,
+not paired random samples, when the adapter does not enforce them; arm contrasts retain sampling
+variance. Preserve failures and null results.
+
+The bundled adapter observes backend version and an exact-tag digest when available, and records
+bounded content and provider counts for empty or malformed replies without retaining thinking
+text. An unavailable/ambiguous metadata lookup remains explicit; observation is not proof that
+the requested revision stayed fixed. Failed runs retain their error evidence but are not scored.
 
 A successful policy simulation proves only that this toy gate ignores remembered permission. Deployed Hestia revocation/principal separation needs its own integration receipts. Natural-language handoff meaning is not mechanically scored by this first slice.
 
 ## Next gates
 
-1. Run the small protocol smoke on Nomad's available model, with actual manifest and raw trace; publish neither score nor improvement claim from the scripted tests.
-2. Run the frozen pilot, then independent held-out task variants (new facts, phrasing, option orders and correction timing); reproduce on McNugget. Coordinate compute with the current fleet schedule.
+1. Resolve the unknown/no-memory scoring and comparison, ensure pinned backend metadata is verified throughout each run, pre-register confirmatory thresholds and independently review the entire instrument. Do not treat the tests as research results.
+2. Only after that review, run a separately authorized small protocol smoke and then a frozen pilot with independent held-out task variants and replication. Coordinate resources with the fleet.
 3. Wire shadow-only transition records into one real memory promotion/hydration seam. No live memory rewriting as part of the pilot.
 4. Add blinded support-relation labels, correction latency, unknown/abstention cost, and budget-matched full-history control before optimizing.
 5. Fork inherited state onto a fresh instance with all other artifacts controlled; perform remove/swap controls. Persistent transfer alone establishes inheritance, not selection.

@@ -1,12 +1,15 @@
 """Instrument tests. Scripted choices are NOT model behavior results."""
 import copy
+import io
 import json
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
+import ollama_adapter
 from ollama_adapter import payload
 from experiment import call_adapter, digest, gate, request_for, run, summarize, validate
 
@@ -34,6 +37,8 @@ class ExperimentTests(unittest.TestCase):
             summary = summarize(path)
             self.assertEqual(summary['arms']['actor']['steps'], 36)
             self.assertEqual(summary['arms']['archivist']['adapter_calls'], 72)
+            self.assertGreater(summary['arms']['archivist']['request_chars'],
+                               summary['arms']['actor']['request_chars'])
             self.assertGreater(summary['arms']['actor']['denied_attempts'], 0)
             with self.assertRaises(FileExistsError):
                 self.make_run(path)
@@ -81,6 +86,79 @@ class ExperimentTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'incomplete'):
                 summarize(p)
 
+    def test_subprocess_failure_preserves_bounded_diagnostic_evidence(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'failed.jsonl'
+            cmd = [sys.executable, '-c',
+                   "import sys; sys.stderr.write('adapter diagnostic'); sys.exit(42)"]
+            with self.assertRaises(Exception):
+                run(CONFIG, cmd, path, META)
+            error = json.loads(path.read_text().splitlines()[-1])
+            self.assertEqual(error['kind'], 'error')
+            self.assertEqual(error['adapter_failure']['returncode'], 42)
+            self.assertIn('adapter diagnostic', error['adapter_failure']['stderr'])
+            self.assertEqual(error['request']['role'], 'actor')
+
+    def test_archivist_failure_identifies_the_request_that_failed(self):
+        config = copy.deepcopy(CONFIG)
+        config['arms'] = ['archivist']
+        config['repeats'] = 1
+        def adapter(command, request, timeout, handoff_chars):
+            if request['role'] == 'archivist':
+                raise ValueError('archivist failed')
+            return self.fixture_adapter(command, request, timeout, handoff_chars)
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'failed.jsonl'
+            with self.assertRaisesRegex(ValueError, 'archivist failed'):
+                run(config, ['stub'], path, META, adapter)
+            error = json.loads(path.read_text().splitlines()[-1])
+            self.assertEqual(error['request']['role'], 'archivist')
+
+    def test_adapter_reported_failure_reaches_the_run_record(self):
+        failure = {'adapter_failure': {'kind': 'empty_content', 'content': '',
+                   'eval_count': 57, 'done_reason': 'stop', 'has_thinking': True,
+                   'ollama_version': 'test-version', 'model_digest': 'test-digest'}}
+        cmd = [sys.executable, '-c', 'import json; print(json.dumps(' + repr(failure) + '))']
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'failed.jsonl'
+            with self.assertRaises(ValueError):
+                run(CONFIG, cmd, path, META)
+            error = json.loads(path.read_text().splitlines()[-1])['adapter_failure']
+            self.assertEqual(error['kind'], 'adapter_reported')
+            self.assertEqual(error['observation']['eval_count'], 57)
+            self.assertEqual(error['observation']['model_digest'], 'test-digest')
+
+    def test_adapter_timeout_preserves_partial_output(self):
+        request = request_for(CONFIG['cases'][0], 'actor', 0, '', 1)
+        cmd = [sys.executable, '-c',
+               "import sys,time; print('partial', flush=True); time.sleep(5)"]
+        with self.assertRaises(ValueError) as captured:
+            call_adapter(cmd, request, 0.1, 100)
+        self.assertEqual(captured.exception.evidence['kind'], 'timeout')
+        self.assertIn('partial', captured.exception.evidence['stdout'])
+
+    def test_rehashed_arm_contamination_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'run.jsonl'
+            self.make_run(path)
+            original = [json.loads(line) for line in path.read_text().splitlines()]
+            # Change a final step, so there are no descendants whose parent hashes need updating.
+            index = next(i for i, row in enumerate(original)
+                         if row.get('kind') == 'step' and row['arm'] == 'actor'
+                         and row['generation'] == CONFIG['generations'] - 1)
+            for change in ('overlay', 'note'):
+                rows = copy.deepcopy(original)
+                row = rows[index]
+                if change == 'overlay':
+                    row['request']['evidence_overlay'] = ['unauthorized evidence']
+                else:
+                    row['next_handoff'] = 'not the actor handoff'
+                row['record_hash'] = digest({k: v for k, v in row.items() if k != 'record_hash'})
+                altered = Path(d) / f'{change}.jsonl'
+                altered.write_text('\n'.join(json.dumps(item) for item in rows))
+                with self.subTest(change=change), self.assertRaises(ValueError):
+                    summarize(altered)
+
     def test_real_subprocess_protocol_rejects_invalid_and_oversize(self):
         request = request_for(CONFIG['cases'][0], 'actor', 0, '', 1)
         for response in ({'decision': 'invalid', 'handoff': ''},
@@ -104,6 +182,34 @@ class ExperimentTests(unittest.TestCase):
         delivered = json.loads(body['messages'][1]['content'])
         self.assertEqual(delivered['inherited'], 'explicit note')
         self.assertNotIn('seed', delivered)
+
+    def test_ollama_empty_and_malformed_replies_preserve_observation(self):
+        metadata = {'ollama_version': 'test-version', 'model_digest': 'test-digest'}
+        for content, kind in (('', 'empty_content'), ('```json\n{}\n```', 'malformed_content')):
+            reply = {'model': 'test-model', 'message': {'content': content, 'thinking': 'private'},
+                     'eval_count': 57, 'done_reason': 'stop'}
+            result = ollama_adapter.interpret_reply(reply, metadata)
+            failure = result['adapter_failure']
+            self.assertEqual(failure['kind'], kind)
+            self.assertEqual(failure['content'], content)
+            self.assertEqual(failure['eval_count'], 57)
+            self.assertTrue(failure['has_thinking'])
+            self.assertEqual(failure['ollama_version'], 'test-version')
+            self.assertEqual(failure['model_digest'], 'test-digest')
+            self.assertNotIn('private', json.dumps(failure))
+
+    def test_ollama_metadata_resolves_exact_model_without_live_server(self):
+        def fake_urlopen(request, timeout):
+            url = request if isinstance(request, str) else request.full_url
+            if url.endswith('/api/version'):
+                return io.BytesIO(b'{"version":"test-version"}')
+            if url.endswith('/api/tags'):
+                return io.BytesIO(b'{"models":[{"name":"test-model","digest":"test-digest"}]}')
+            raise AssertionError('unexpected endpoint')
+        with mock.patch.object(ollama_adapter.urllib.request, 'urlopen', side_effect=fake_urlopen):
+            metadata = ollama_adapter.backend_metadata('http://example.invalid', 'test-model', 1)
+        self.assertEqual(metadata['ollama_version'], 'test-version')
+        self.assertEqual(metadata['model_digest'], 'test-digest')
 
     def test_invalid_prereg_rejected(self):
         for key, value in [('repeats', 0), ('generations', 2), ('arms', ['actor', 'actor'])]:
