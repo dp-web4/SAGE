@@ -385,8 +385,10 @@ def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
                 break
         for kw in (node.keywords if ok else []):
             v = kw.value
-            if kw.arg in args:
-                return []  # Python would reject a duplicated argument, not pick the last one.
+            if not kw.arg or kw.arg not in names[name] or kw.arg in args:
+                # Unknown qualifiers may change intended meaning (e.g. a dry run);
+                # duplicate arguments are invalid Python. Never execute a prefix.
+                return []
             if kw.arg and isinstance(v, ast.Constant):
                 args[kw.arg] = v.value
             elif kw.arg and isinstance(v, ast.Name) and v.id in consts:
