@@ -11,12 +11,15 @@ to reopen. None of these establish acceptance or inability to act.
 
 ## Existing seams, not a replacement being
 
-At base `14bac6ac2`, `heartbeat.mark_conversations_after_beat` advances conversation
-cursors; it is not a work ledger. The existing `act_after_answer` path requires
-preemption plus a sent answer-form result. It does not follow every reflection
-acknowledgement. `after_answer_messages` already carries the request and reply into
-a bounded tool turn, but merely adding another predicate there would still treat
-agreement as acceptance and would not establish restart-safe ownership.
+Rechecked against main `1672f6a28`: `heartbeat.mark_conversations_after_beat`
+advances conversation cursors when exploration acted or a successful `say` addressed
+the conversation; it is not a work ledger. The existing `act_after_answer` path is
+opt-in and requires preemption, a selected input, and a sent answer-form result.
+It does not follow every reflection acknowledgement. `after_answer_messages` carries
+the request and reply into a bounded tool turn, but merely adding another predicate
+there would still treat agreement as acceptance and would not establish restart-safe
+ownership. This is source inspection and synthetic testing, not evidence of live
+runtime behavior.
 
 Use the existing persistent being and governed tool loop. Do not add another
 runner, reinterpret entrustment as debt, or turn every conversation into a task.
