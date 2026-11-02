@@ -272,8 +272,11 @@ def summarize(path):
                                                 'post_correction_correct': 0, 'denied_attempts': 0,
                                                 'adapter_calls': 0, 'seconds': 0.0,
                                                 'request_chars': 0, 'response_chars': 0,
-                                                'no_evidence_steps': 0, 'no_evidence_appropriate': 0,
-                                                'no_evidence_unscored': 0})
+                                                **({'no_evidence_steps': 0, 'no_evidence_appropriate': 0,
+                                                    'no_evidence_unscored': 0, 'no_evidence_cells': []}
+                                                   if row['arm'] == 'none' else
+                                                   {'empty_handoff_steps': 0, 'empty_handoff_appropriate': 0,
+                                                    'empty_handoff_unscored': 0})})
         totals['steps'] += 1
         totals['correct'] += correct
         if row['generation'] >= case['correction_generation']:
@@ -281,12 +284,24 @@ def summarize(path):
             totals['post_correction_correct'] += correct
         totals['denied_attempts'] += status == 'denied_simulation'
         req = row['request']
-        if not req['observations'] and not req['evidence_overlay'] and not req['inherited']:
-            totals['no_evidence_steps'] += 1
+        if not req['observations'] and not req['evidence_overlay'] and not req['inherited'].strip():
+            # The none arm has a fixed set of cells; memory-arm membership is
+            # selected by the model's previous handoff and is not comparable.
+            prefix = 'no_evidence' if row['arm'] == 'none' else 'empty_handoff'
+            totals[prefix + '_steps'] += 1
             if 'no_evidence_expected' in case:
-                totals['no_evidence_appropriate'] += response['decision'] == case['no_evidence_expected']
+                appropriate = response['decision'] == case['no_evidence_expected']
+                totals[prefix + '_appropriate'] += appropriate
             else:
-                totals['no_evidence_unscored'] += 1
+                appropriate = None
+                totals[prefix + '_unscored'] += 1
+            if row['arm'] == 'none':
+                label = case.get('no_evidence_expected')
+                totals['no_evidence_cells'].append({
+                    'case_id': case['id'], 'repeat': row['repeat'],
+                    'generation': row['generation'], 'appropriate': appropriate,
+                    'label_overlaps_world_answer': label == expected(case, row['generation']) if label is not None else None,
+                })
         totals['adapter_calls'] += 1 + bool(row['archivist'])
         totals['seconds'] += row['usage']['seconds'] + (row['archivist']['usage']['seconds'] if row['archivist'] else 0)
         for key in ('request_chars', 'response_chars'):

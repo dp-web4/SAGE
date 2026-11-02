@@ -58,6 +58,9 @@ class ExperimentTests(unittest.TestCase):
             totals = summarize(path)['arms']['none']
             self.assertEqual(totals['no_evidence_steps'], 24)
             self.assertEqual(totals['no_evidence_appropriate'], 24)
+            self.assertEqual(sum(c['label_overlaps_world_answer'] for c in totals['no_evidence_cells']), 5)
+            self.assertEqual(sum(not c['label_overlaps_world_answer'] for c in totals['no_evidence_cells']), 19)
+            self.assertTrue(all(c['appropriate'] for c in totals['no_evidence_cells']))
             self.assertLess(totals['correct'], totals['steps'],
                             'world-state accuracy must remain distinct from abstention')
             bad_path = Path(d) / 'guessing.jsonl'
@@ -70,6 +73,23 @@ class ExperimentTests(unittest.TestCase):
             unlabeled_path = Path(d) / 'unlabeled.jsonl'
             run(unlabeled, ['stub'], unlabeled_path, META, self.fixture_adapter)
             self.assertEqual(summarize(unlabeled_path)['arms']['none']['no_evidence_unscored'], 4)
+
+    def test_whitespace_handoffs_have_separate_denominators(self):
+        config = copy.deepcopy(CONFIG)
+        config['arms'] = ['none', 'actor', 'archivist', 'actor_evidence']
+        config['repeats'] = 1
+        def whitespace_adapter(command, request, timeout, handoff_chars):
+            return {'decision': request['options'][0], 'handoff': '  \t'}, {
+                'seconds': 0.0, 'request_chars': 1, 'response_chars': 1}
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'run.jsonl'
+            run(config, ['stub'], path, META, whitespace_adapter)
+            arms = summarize(path)['arms']
+            self.assertEqual(arms['none']['no_evidence_steps'], 24)
+            for arm in ('actor', 'archivist'):
+                self.assertEqual(arms[arm]['empty_handoff_steps'], 24)
+                self.assertNotIn('no_evidence_steps', arms[arm])
+            self.assertEqual(arms['actor_evidence']['empty_handoff_steps'], 0)
 
     def test_request_has_no_gold_or_future_correction(self):
         case = CONFIG['cases'][0]
