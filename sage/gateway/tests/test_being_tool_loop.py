@@ -629,6 +629,17 @@ def test_python_salvage_keeps_distinct_positional_and_keyword_arguments():
     assert calls[0]["function"]["arguments"] == {"path": "notes/x", "content": "draft"}
 
 
+@pytest.mark.parametrize("body", [
+    'memory_write(path="notes/x", content="draft", dry_run=True)',
+    'memory_write(path="notes/x", content="first")\n'
+    'memory_write(path="notes/y", content="draft", dry_run=True)',
+])
+def test_python_salvage_refuses_unknown_qualifiers_and_the_entire_fragment(body):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls('```python\n' + body + '\n```', ollama_tools(["memory_write"])) == []
+
+
 def test_run_ollama_tool_turn_gates_a_salvaged_call_and_records_it():
     from sage.gateway.being_gate_client import ollama_tools
     from sage.gateway.being_tool_loop import run_ollama_tool_turn
