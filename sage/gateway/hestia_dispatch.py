@@ -2696,7 +2696,9 @@ class HestiaF1aDispatcher:
         from sage.gateway import being_settled
         ok, text, changed = being_settled.settle(Path(self.memory_root), intent.args or {})
         if not ok:
-            return ResultEnvelope(ok=False, error=text)
+            return ResultEnvelope(ok=False, error=text,
+                                  witness_id=(self._local._witness(f"settle partial: {text[:150]}")
+                                              if changed else None))
         return ResultEnvelope(ok=True, result=text,
                               witness_id=(self._local._witness(f"settle: {text[:160]}") if changed else None))
 

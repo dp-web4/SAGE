@@ -24,6 +24,7 @@ The beat shows when each was settled, so the being can see what is old enough to
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -54,6 +55,12 @@ RENDER_CHARS = 3200
 _UNCHANGED = "unchanged: "
 
 
+def _nofollow_opener(name, flags):
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise OSError("no-follow file access is unavailable on this platform")
+    return os.open(name, flags | os.O_NOFOLLOW, 0o666)
+
+
 def _read_regular_bytes(path: Path) -> bytes:
     """Read a single-linked regular file without following its final symlink.
 
@@ -61,9 +68,9 @@ def _read_regular_bytes(path: Path) -> bytes:
     Fail closed where the no-follow primitive is unavailable.
     """
     def opener(name, flags):
-        if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_NONBLOCK"):
+        if not hasattr(os, "O_NONBLOCK"):
             raise OSError("safe file reads are unavailable on this platform")
-        return os.open(name, flags | os.O_NOFOLLOW | os.O_NONBLOCK)
+        return _nofollow_opener(name, flags | os.O_NONBLOCK)
 
     with open(path, "rb", opener=opener) as stream:
         info = os.fstat(stream.fileno())
@@ -126,15 +133,56 @@ def settle(instance, args: Dict, now: Optional[float] = None) -> Tuple[bool, str
     a = {k: ("" if v is None else str(v).strip()) for k, v in (args or {}).items()}
     if not a.get("question") and not a.get("id"):
         return True, listing(instance), False
-    with _home_lock(Path(instance)):
-        ok, msg = _settle(instance, a, now)
+    try:
+        with _home_lock(Path(instance)):
+            ok, msg = _settle(instance, a, now)
+    except HomeLockError as e:
+        return False, f"could not safely lock the home ({type(e.__cause__).__name__}); nothing was changed.", False
+    except PartialCommitError as e:
+        return False, str(e), True
     return ok, msg, bool(ok and not msg.startswith(_UNCHANGED))
 
 
+class HomeLockError(OSError):
+    """Only acquisition failures before the protected action begins."""
+
+
+class PartialCommitError(OSError):
+    """The write or its witness may have changed despite the failed result."""
+
+
+@contextlib.contextmanager
 def _home_lock(root: Path):
-    """The lock memory_write, memory_edit and identity_edit take, so writes in the home never interleave."""
-    from sage.gateway.reference_f1a import _home_lock as lock
-    return lock(root)
+    """Lock the shared home-lock inode without following a final-component symlink.
+
+    Other home writers use the same name and flock protocol. This protects only
+    acquisition: parent/name swaps by a hostile same-user process remain outside
+    this check's guarantee.
+    """
+    from sage.gateway.reference_f1a import fcntl, HOME_LOCK
+    stream = None
+    try:
+        if fcntl is None or not hasattr(os, "O_NONBLOCK"):
+            raise OSError("safe home locking unavailable on this platform")
+        def opener(name, flags):
+            return _nofollow_opener(name, flags | os.O_NONBLOCK)
+        stream = open(root / HOME_LOCK, "a", opener=opener)
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise OSError("home lock is not a single-linked regular file")
+        fcntl.flock(stream, fcntl.LOCK_EX)
+        _check_named_inode(root / HOME_LOCK, stream)
+    except OSError as e:
+        if stream is not None:
+            stream.close()
+        raise HomeLockError("cannot safely acquire the home lock") from e
+    try:
+        yield
+    finally:
+        try:
+            fcntl.flock(stream, fcntl.LOCK_UN)
+        finally:
+            stream.close()
 
 
 def _truthy(v: str) -> bool:
@@ -268,37 +316,77 @@ def _close_to(entries: List[dict], question: str) -> Optional[dict]:
 
 def _commit(instance, entries: List[dict], nxt: int, log: dict, now, ok_msg: str) -> Tuple[bool, str]:
     path, tmp = Path(instance) / SETTLED_FILE, Path(instance) / SETTLED_TMP
-    prev = path.read_bytes() if path.exists() else None
     try:
-        tmp.write_text(json.dumps({"next": nxt, "entries": entries}, indent=2) + "\n")
-        os.replace(tmp, path)
+        prev = _read_regular_bytes(path)
+    except FileNotFoundError:
+        prev = None
     except OSError as e:
-        try:
-            tmp.unlink(missing_ok=True)
-        except OSError:
-            pass
-        return False, f"could not write {SETTLED_FILE} ({type(e).__name__}); nothing changed"
+        return False, f"could not read {SETTLED_FILE} safely ({type(e).__name__}); nothing changed"
+    try:
+        _write_settled_atomic(path, tmp, (json.dumps({"next": nxt, "entries": entries}, indent=2) + "\n").encode("utf-8"))
+    except OSError as e:
+        raise PartialCommitError(
+            f"could not write {SETTLED_FILE} safely ({type(e).__name__}); "
+            "the outcome may be partial. Preserve the files and tell your seat.") from e
     # AN UNAUDITED CHANGE DOES NOT STAND (being_self's rule).
     try:
         lp = Path(instance) / SETTLED_LOG
-        torn = False
-        if lp.exists() and lp.stat().st_size > 0:
-            with open(lp, "rb") as lf:
-                lf.seek(-1, os.SEEK_END)
-                torn = lf.read(1) != b"\n"
-        with open(lp, "a") as f:
-            f.write(("\n" if torn else "") + json.dumps({"at": _iso(now), **log}) + "\n")
+        def opener(name, flags):
+            if not hasattr(os, "O_NONBLOCK"):
+                raise OSError("safe log access is unavailable on this platform")
+            return _nofollow_opener(name, flags | os.O_NONBLOCK)
+        # Inspect and append through the same no-follow descriptor, so a
+        # symlink swap between a separate read and append cannot redirect it.
+        with open(lp, "a+b", opener=opener) as f:
+            info = os.fstat(f.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise OSError("settled log is not a single-linked regular file")
+            f.seek(0, os.SEEK_END)
+            torn = False
+            if f.tell():
+                f.seek(-1, os.SEEK_END)
+                torn = f.read(1) != b"\n"
+            _check_named_inode(lp, f)
+            f.write((("\n" if torn else "") + json.dumps({"at": _iso(now), **log}) + "\n").encode("utf-8"))
+            f.flush()
+            _check_named_inode(lp, f)
     except OSError as e:
         try:
             if prev is None:
                 path.unlink(missing_ok=True)
             else:
-                path.write_bytes(prev)
+                _write_settled_atomic(path, tmp, prev)
         except OSError as e2:
-            return False, (f"the change was made but could not be recorded in {SETTLED_LOG} "
-                           f"({type(e).__name__}) and could not be undone ({type(e2).__name__}). Tell your seat.")
-        return False, f"the change could not be recorded in {SETTLED_LOG} ({type(e).__name__}), so it was undone; nothing changed"
+            raise PartialCommitError(
+                f"the change could not be recorded in {SETTLED_LOG} ({type(e).__name__}) "
+                f"and could not be undone ({type(e2).__name__}); the outcome may be partial. Tell your seat.") from e2
+        raise PartialCommitError(
+            f"the change could not be recorded in {SETTLED_LOG} ({type(e).__name__}); "
+            "the settled record was undone, but the overall outcome may be partial. Tell your seat.") from e
     return True, ok_msg
+
+
+def _write_settled_atomic(path: Path, tmp: Path, data: bytes) -> None:
+    """Replace settled bytes without following or truncating a pre-existing temp.
+
+    The home lock coordinates normal writers; parent and post-open same-user
+    name swaps still need a stronger boundary and must not be treated as solved.
+    """
+    with open(tmp, "xb", opener=_nofollow_opener) as stream:
+        stream.write(data)
+        stream.flush()
+        os.fsync(stream.fileno())
+        os.replace(tmp, path)
+        _check_named_inode(path, stream)
+
+
+def _check_named_inode(path: Path, stream) -> None:
+    """Detect a name swap at this check; this is not a same-user sandbox."""
+    actual = os.fstat(stream.fileno())
+    named = os.stat(path, follow_symlinks=False)
+    if (not stat.S_ISREG(named.st_mode) or named.st_nlink != 1
+            or (actual.st_dev, actual.st_ino) != (named.st_dev, named.st_ino)):
+        raise OSError("file name no longer identifies the opened regular file")
 
 
 def _short(e: dict, cap: int) -> str:

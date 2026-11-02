@@ -222,6 +222,14 @@ def _consume_confirmation(token, binding):
 
 
 def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "") -> Tuple[bool, str, bool]:
+    from sage.gateway import being_settled as st
+    try:
+        return _retire_thread(instance, args, now, by)
+    except st.HomeLockError as exc:
+        return False, f"cannot safely lock the home ({type(exc.__cause__).__name__}); nothing was changed.", False
+
+
+def _retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "") -> Tuple[bool, str, bool]:
     """Returns (ok, message, changed)."""
     from sage.gateway import being_settled as st
     a = args or {}
@@ -314,6 +322,8 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
                                      {"op": "retire_thread", "words": words, "ids": [e["id"] for e in gone],
                                       "from": gone, "to": name, "why": reason, **({"by": by} if by else {})},
                                      now, "ok")
+            except st.PartialCommitError as exc:
+                ok, msg = False, str(exc)
             except OSError as exc:
                 ok, msg = False, f"settled commit raised {type(exc).__name__}"
             if not ok:

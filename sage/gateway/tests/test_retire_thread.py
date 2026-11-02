@@ -8,6 +8,7 @@ import json
 import os
 import re
 import tempfile
+import threading
 from types import SimpleNamespace
 from pathlib import Path
 
@@ -281,9 +282,10 @@ class _Writes:
         real_open, real_replace, real_unlink = builtins.open, os.replace, os.unlink
 
         def _open(f, mode="r", *a, **k):
+            stream = real_open(f, mode, *a, **k)
             if isinstance(f, (str, bytes, os.PathLike)) and any(c in mode for c in "wax+"):
                 self.paths.add(os.path.realpath(f))
-            return real_open(f, mode, *a, **k)
+            return stream
 
         def _replace(src, dst, *a, **k):
             self.paths.update({os.path.realpath(src), os.path.realpath(dst)})
@@ -402,6 +404,52 @@ def test_home_lock_symlink_after_preflight_is_not_opened_for_writing(tmp_path, m
     assert not result[0], result
 
 
+@pytest.mark.parametrize("kind", ["hardlink", "fifo"])
+def test_home_lock_refuses_unsafe_file_types_without_blocking(tmp_path, kind):
+    h = _home(tmp_path)
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "finished"}, require=True)
+    lock = h / ".home.lock"
+    lock.unlink()
+    if kind == "hardlink":
+        victim = tmp_path / "outside.txt"
+        victim.write_bytes(b"synthetic outside content")
+        os.link(victim, lock)
+    else:
+        if not hasattr(os, "mkfifo"):
+            pytest.skip("FIFO creation is unavailable")
+        os.mkfifo(lock)
+    ok, message, changed = bt.retire_thread(h, args)
+    assert not ok and not changed and "lock" in message.lower()
+    if kind == "hardlink":
+        assert victim.read_bytes() == b"synthetic outside content"
+
+
+@pytest.mark.parametrize("safe_first", [True, False])
+def test_safe_home_lock_serializes_with_existing_home_writers(tmp_path, safe_first):
+    from sage.gateway.reference_f1a import _home_lock as existing_lock
+
+    _home(tmp_path)
+    first, second = (st._home_lock, existing_lock) if safe_first else (existing_lock, st._home_lock)
+    started, acquired = threading.Event(), threading.Event()
+    errors = []
+
+    def contender():
+        started.set()
+        try:
+            with second(tmp_path):
+                acquired.set()
+        except Exception as exc:
+            errors.append(exc)
+
+    with first(tmp_path):
+        worker = threading.Thread(target=contender, daemon=True)
+        worker.start()
+        assert started.wait(2)
+        assert not acquired.wait(0.1), "home writers must not hold the lock together"
+    worker.join(timeout=2)
+    assert not worker.is_alive() and not errors and acquired.is_set()
+
+
 @pytest.mark.parametrize("stage", ["todo", "settled"])
 def test_retirement_does_not_read_a_record_symlink_swapped_after_preflight(tmp_path, stage):
     home = tmp_path / "home"
@@ -463,6 +511,146 @@ def test_retirement_refuses_fifo_todo_without_waiting_for_a_writer(tmp_path):
     os.mkfifo(h / bt.TODO)
     ok, _, changed = bt.retire_thread(h, {"words": "widget", "reason": "finished"})
     assert not ok and not changed
+
+
+def test_settled_target_swapped_after_planning_cannot_contaminate_rollback(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    h = _home(home)
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "finished"}, require=True)
+    victim = tmp_path / "outside.txt"
+    victim.write_text(json.dumps({"next": 2, "entries": [
+        {"id": "s1", "question": "synthetic-private-marker", "answer": "outside"}
+    ]}))
+    real_write, real_open = bt._write_atomic, builtins.open
+    swapped = False
+
+    def swap_after_todo(path, text):
+        nonlocal swapped
+        real_write(path, text)
+        if path == h / bt.TODO and not swapped:
+            swapped = True
+            (h / st.SETTLED_FILE).unlink()
+            (h / st.SETTLED_FILE).symlink_to(victim)
+
+    def fail_log(path, mode="r", *args, **kwargs):
+        if Path(path) == h / st.SETTLED_LOG and mode == "a+b":
+            raise OSError("synthetic log failure")
+        return real_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(bt, "_write_atomic", swap_after_todo)
+    monkeypatch.setattr(builtins, "open", fail_log)
+    result = bt.retire_thread(h, args)
+    assert not result[0]
+    settled = h / st.SETTLED_FILE
+    if not settled.is_symlink():
+        assert "synthetic-private-marker" not in settled.read_text()
+    assert "synthetic-private-marker" in victim.read_text()
+
+
+def test_settled_rollback_does_not_follow_a_swapped_target(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    h = _home(home)
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "finished"}, require=True)
+    victim = tmp_path / "outside.txt"
+    victim.write_bytes(b"synthetic outside content")
+    real_open = builtins.open
+
+    def swap_target_then_fail_log(path, mode="r", *args, **kwargs):
+        if Path(path) == h / st.SETTLED_LOG and mode == "a+b":
+            (h / st.SETTLED_FILE).unlink()
+            (h / st.SETTLED_FILE).symlink_to(victim)
+            raise OSError("synthetic log failure")
+        return real_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", swap_target_then_fail_log)
+    result = bt.retire_thread(h, args)
+    assert not result[0]
+    assert victim.read_bytes() == b"synthetic outside content"
+
+
+def test_settled_temp_swap_during_rename_cannot_report_success(tmp_path, monkeypatch):
+    h = _home(tmp_path)
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "finished"}, require=True)
+    victim = tmp_path / "outside.txt"
+    victim.write_bytes(b"synthetic outside content")
+    temp = h / st.SETTLED_TMP
+    real_replace = os.replace
+
+    def swap_before_rename(src, dst, *a, **kw):
+        if Path(src) == temp:
+            temp.unlink()
+            temp.symlink_to(victim)
+        return real_replace(src, dst, *a, **kw)
+
+    monkeypatch.setattr(os, "replace", swap_before_rename)
+    ok, _, _ = bt.retire_thread(h, args)
+    assert victim.read_bytes() == b"synthetic outside content"
+    assert not ok, "replacing settled with a swapped symlink cannot report success"
+
+
+def test_standalone_settle_reports_potential_change_after_rename_swap(tmp_path, monkeypatch):
+    h = _home(tmp_path)
+    victim = tmp_path / "outside.txt"
+    victim.write_bytes(b"synthetic outside content")
+    temp = h / st.SETTLED_TMP
+    real_replace = os.replace
+
+    def swap_before_rename(src, dst, *a, **kw):
+        if Path(src) == temp:
+            temp.unlink()
+            temp.symlink_to(victim)
+        return real_replace(src, dst, *a, **kw)
+
+    monkeypatch.setattr(os, "replace", swap_before_rename)
+    ok, message, changed = st.settle(h, {"question": "new question", "answer": "new answer"}, now=0)
+    assert not ok and "partial" in message.lower()
+    assert changed, "an uncertain post-rename outcome must not be reported as unchanged"
+
+
+def test_partial_standalone_settle_is_witnessed_by_dispatch(tmp_path, monkeypatch):
+    FakeMcp.calls = []
+    h = _home(tmp_path)
+    victim = tmp_path / "outside.txt"
+    victim.write_bytes(b"synthetic outside content")
+    temp = h / st.SETTLED_TMP
+    real_replace = os.replace
+
+    def swap_before_rename(src, dst, *a, **kw):
+        if Path(src) == temp:
+            temp.unlink()
+            temp.symlink_to(victim)
+        return real_replace(src, dst, *a, **kw)
+
+    monkeypatch.setattr(os, "replace", swap_before_rename)
+    d = HestiaF1aDispatcher("test-being", str(h), mcp_factory=lambda ep, pid: FakeMcp(ep, pid))
+    env = d(BeingIntent("settle", {"question": "new question", "answer": "new answer"}), _ALLOW)
+    assert not env.ok and "partial" in env.error and env.witness_id
+
+
+def test_log_renamed_after_open_cannot_report_a_witnessed_retirement(tmp_path, monkeypatch):
+    h = _home(tmp_path)
+    args = _confirmed_if_broad(h, {"words": "widget", "reason": "finished"}, require=True)
+    log = h / st.SETTLED_LOG
+    old_log = h / "moved-log.jsonl"
+    real_open = builtins.open
+    swapped = False
+
+    def swap_after_open(path, mode="r", *a, **kw):
+        nonlocal swapped
+        stream = real_open(path, mode, *a, **kw)
+        if Path(path) == log and mode == "a+b" and not swapped:
+            swapped = True
+            os.rename(log, old_log)
+            log.write_bytes(b"")
+        return stream
+
+    monkeypatch.setattr(builtins, "open", swap_after_open)
+    ok, _, _ = bt.retire_thread(h, args)
+    assert swapped
+    assert not ok or b'"op": "retire_thread"' in log.read_bytes(), (
+        "success requires the named log to contain the retirement witness")
 
 
 def test_an_interleaved_retire_cannot_move_this_one_off_its_declared_paths(tmp_path, monkeypatch):
@@ -579,22 +767,25 @@ def test_real_settled_log_and_restore_failures_do_not_erase_recovery(tmp_path, m
     h = _home(tmp_path)
     args = _confirmed_if_broad(h, {"words": "widget", "reason": "r"}, require=True)
     original = (h / st.SETTLED_FILE).read_bytes()
-    real_open, real_write_bytes = builtins.open, Path.write_bytes
+    real_open, real_settled_write = builtins.open, st._write_settled_atomic
+    settled_writes = 0
 
     def fail_log(path, mode="r", *args, **kwargs):
-        if Path(path) == h / st.SETTLED_LOG and mode == "a":
+        if Path(path) == h / st.SETTLED_LOG and mode == "a+b":
             raise OSError("synthetic audit-log failure")
         return real_open(path, mode, *args, **kwargs)
 
-    def fail_settled_restore(path, data):
-        if path == h / st.SETTLED_FILE:
+    def fail_settled_restore(path, temp, data):
+        nonlocal settled_writes
+        settled_writes += 1
+        if settled_writes == 2:
             raise OSError("synthetic restore failure")
-        return real_write_bytes(path, data)
+        return real_settled_write(path, temp, data)
 
     monkeypatch.setattr(builtins, "open", fail_log)
-    monkeypatch.setattr(Path, "write_bytes", fail_settled_restore)
+    monkeypatch.setattr(st, "_write_settled_atomic", fail_settled_restore)
     ok, msg, changed = bt.retire_thread(h, args)
-    assert not ok and (h / st.SETTLED_FILE).read_bytes() != original
+    assert not ok and settled_writes == 2 and (h / st.SETTLED_FILE).read_bytes() != original
     assert "could not be undone" in msg
     assert (h / bt.archive_name(args)).exists(), "partial-effect recovery evidence must survive"
     assert "nothing was retired" not in msg.lower()
