@@ -1474,3 +1474,21 @@ def test_turn_capture_refuses_existing_world_readable_capture(tmp_path):
     result = _capture_test_turn(tmp_path)
     assert result.reply == "done"
     assert capture.read_text() == "unchanged\n"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX hard-link contract")
+def test_turn_capture_refuses_hard_link_without_touching_target(tmp_path):
+    target = tmp_path / "other.txt"
+    target.write_text("unchanged")
+    target.chmod(0o600)
+    os.link(target, tmp_path / "turn_capture.jsonl")
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert target.read_text() == "unchanged"
+
+
+def test_turn_capture_without_nofollow_refuses_to_create_file(tmp_path, monkeypatch):
+    monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert not (tmp_path / "turn_capture.jsonl").exists()
