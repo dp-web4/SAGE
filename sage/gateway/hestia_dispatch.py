@@ -2705,7 +2705,9 @@ class HestiaF1aDispatcher:
         from sage.gateway import being_threads
         ok, text, changed = being_threads.retire_thread(Path(self.memory_root), intent.args or {})
         if not ok:
-            return ResultEnvelope(ok=False, error=text)
+            return ResultEnvelope(ok=False, error=text,
+                                  witness_id=(self._local._witness(f"retire_thread partial: {text[:150]}")
+                                              if changed else None))
         return ResultEnvelope(ok=True, result=text,
                               witness_id=(self._local._witness(f"retire_thread: {text[:160]}") if changed else None))
 
