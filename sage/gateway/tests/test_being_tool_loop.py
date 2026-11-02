@@ -456,6 +456,14 @@ def test_python_salvage_refuses_invalid_argument_binding_and_shadowed_print(body
     assert salvage_tool_calls('```python\n' + body + '\n```', ollama_tools(["memory_write"])) == []
 
 
+def test_python_salvage_keeps_distinct_positional_and_keyword_arguments():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    calls = salvage_tool_calls('```python\nmemory_write("notes/x", content="draft")\n```',
+                               ollama_tools(["memory_write"]))
+    assert calls[0]["function"]["arguments"] == {"path": "notes/x", "content": "draft"}
+
+
 def test_run_ollama_tool_turn_gates_a_salvaged_call_and_records_it():
     from sage.gateway.being_gate_client import ollama_tools
     from sage.gateway.being_tool_loop import run_ollama_tool_turn
