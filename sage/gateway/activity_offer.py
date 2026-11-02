@@ -116,6 +116,14 @@ def project(offer, events, *, now):
             continue
         if terminal is not None or at >= offer.deadline:
             terminal = terminal or ("deadline_presented" if beats else "deadline_unpresented")
+            # Remember a reported late beat only for validating later records;
+            # it cannot become active or reopen a closed offer.
+            if kind == "beat_started":
+                if event["beat"] in started:
+                    raise ValueError("reused beat identity")
+                started.add(event["beat"])
+            if kind == "utterance" and event["beat"] not in started:
+                raise ValueError("utterance must bind an observed beat")
             # Closing a beat that was already active when the episode terminated is
             # bookkeeping, not a late attempt to reopen the offer.
             if kind == "beat_finished" and active == event["beat"]:

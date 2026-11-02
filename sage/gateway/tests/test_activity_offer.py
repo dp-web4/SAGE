@@ -132,15 +132,25 @@ def test_closing_beat_speech_is_not_late_but_another_beat_is(closure):
         speech_at = 1600
     rows += [dict(event(4, "utterance", actor="being", beat="b1", text="Moving on."), at=speech_at),
              dict(event(5, "beat_finished", beat="b1"), at=speech_at),
-             dict(event(6, "utterance", actor="being", beat="b2", text="A new turn."), at=speech_at)]
+             dict(event(6, "beat_started", beat="b2"), at=speech_at),
+             dict(event(7, "utterance", actor="being", beat="b2", text="A new turn."), at=speech_at)]
     out = project(offer(), rows, now=speech_at)
-    assert out["active_beat"] is None and out["late_records"] == 1
+    assert out["active_beat"] is None and out["late_records"] == 2
     assert out["terminal_reason"] == ("decline" if closure == "decline" else "deadline_presented")
 
 
 def test_utterance_during_open_episode_must_bind_the_active_beat():
     rows = accepted() + [event(4, "utterance", actor="being", beat="other", text="Hello.")]
     with pytest.raises(ValueError, match="active beat"):
+        project(offer(), rows, now=1010)
+
+
+def test_utterance_after_close_must_name_an_observed_beat():
+    rows = accepted()
+    rows[-1]["decision"] = "decline"
+    rows += [event(4, "beat_finished", beat="b1"),
+             event(5, "utterance", actor="being", beat="never-started", text="Hello.")]
+    with pytest.raises(ValueError, match="observed beat"):
         project(offer(), rows, now=1010)
 
 
@@ -169,9 +179,10 @@ def test_retried_receipt_is_idempotent_but_conflicting_receipt_is_not():
 
 def test_preemption_closes_without_suppressing_or_reclassifying_later_input():
     rows = accepted() + [event(4, "preempted"),
-                         event(5, "utterance", actor="being", beat="b2", text="Answering the newer request.")]
+                         event(5, "beat_started", beat="b2"),
+                         event(6, "utterance", actor="being", beat="b2", text="Answering the newer request.")]
     out = project(offer(), rows, now=1010)
-    assert out["terminal_reason"] == "preempted" and out["late_records"] == 1
+    assert out["terminal_reason"] == "preempted" and out["late_records"] == 2
     assert not out["eligible_to_claim"]
 
 

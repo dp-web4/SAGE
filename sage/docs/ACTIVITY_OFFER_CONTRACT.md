@@ -75,11 +75,20 @@ the being an obligation to accept. Ordinary speech stays ordinary speech.
 of at most 64 observer records. It validates offer binding, ordered event identity,
 explicit disposition, two-beat/deadline boundaries, preemption and a single claim.
 Exact duplicate records replay idempotently; conflicting sequence reuse is invalid.
-An active beat may finish normally after the episode closes without becoming a late
-record. Other late activity cannot reopen it. A `result_observed` record can bind a
+An active beat may finish, or speak in that same explicitly named beat, after the
+episode closes without becoming a late record. This bookkeeping exemption has no
+separate elapsed-time cap in the inert projection: the observer must record the beat
+finish, and a future adapter needs an explicit policy for a missing finish. An
+utterance naming a beat never recorded as started is invalid, including after close;
+a recorded late start and its speech are late and cannot reopen the offer. Before
+close, an utterance after its beat's finish is invalid: adapters must order final
+speech before finish rather than infer reordered events. Other late activity cannot
+reopen it. A `result_observed` record can bind a
 receipt to a claim even after closing, distinguishing a recorded receipt from an
 unknown claim outcome; a receipt reference alone proves neither execution nor
-completion. These are observer records, not independently verified effects.
+completion. A retry of the same claim/receipt pair is idempotent, but its later
+timestamp still advances the ordering watermark: events observed earlier must not
+be appended after that retry. These are observer records, not independently verified effects.
 
 `opportunity_context` preserves the full request and source for an eligible
 candidate. **It is not a dispatch instruction.** The code has no provider, storage,
