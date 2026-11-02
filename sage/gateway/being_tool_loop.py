@@ -338,7 +338,7 @@ def _json_calls(text: str, names) -> List[dict]:
         i = max(end, j + 1)
 
 
-def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
+def _python_calls_impl(text: str, names: Dict[str, List[str]]) -> List[dict]:
     try:
         tree = ast.parse(text)
     except SyntaxError:
@@ -425,6 +425,27 @@ def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
         if target is not None:
             assigned.add(target)
     return out
+
+
+def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
+    recovered = _python_calls_impl(text, names)
+    if recovered:
+        return recovered
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return []  # Unparseable text has no reliable AST to attribute.
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        name = fn.id if isinstance(fn, ast.Name) else (
+            fn.attr if isinstance(fn, ast.Attribute) and isinstance(fn.value, ast.Name)
+            and fn.value.id == "tools" else None
+        )
+        if name in names:
+            raise _UnsafeToolPayload("unsafe Python tool-shaped block")
+    return []
 
 
 _ATTR_VALUE = r'"((?:[^"\\]|\\.)*)"' + "|" + r"'((?:[^'\\]|\\.)*)'"
