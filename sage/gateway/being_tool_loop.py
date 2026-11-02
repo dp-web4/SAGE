@@ -266,8 +266,7 @@ def _unique_json_object(pairs):
 
 
 def _json_calls(text: str, names) -> List[dict]:
-    """`names`: the offered tool names (set) or {name: [param, ...]} (dict) for flat-form
-    argument filtering."""
+    """Recover recognized JSON forms without silently discarding fields."""
     known = names if isinstance(names, dict) else {n: [] for n in names}
     out, dec, i = [], json.JSONDecoder(object_pairs_hook=_unique_json_object), 0
     while True:
@@ -285,55 +284,49 @@ def _json_calls(text: str, names) -> List[dict]:
         for o in (obj if isinstance(obj, list) else [obj]):
             if not isinstance(o, dict):
                 continue
-            # The name key varies by beat: {"name"}, {"tool"}, {"action"}, {"function"}
-            # (Sprout beat 29, 2026-09-05: "action": "peer_ask" and a list of {"tool":
-            # "memory_write", "path": ..., "content": ...} — 3 of 3 turns, 0 lifted).
-            # The FIRST name-shaped key may name the being, not the tool: {"name": "sprout",
-            # "action": "recall", ...} (beat 148, 2026-09-08: three well-formed calls lost,
-            # one of them a real recall about #39). Prefer the key whose value IS a tool.
-            cands = [o[k] for k in _NAME_KEYS if isinstance(o.get(k), str)]
-            name = next((c for c in cands if c in known), cands[0] if cands else None)
-            args = next((o[k] for k in _ARGS_KEYS if isinstance(o.get(k), dict)), None)
-            if name not in known and isinstance(args, dict):
-                # {"name": "tool", "arguments": {"type": "recall", ...}}: the tool named
-                # inside the arguments (Sprout beat 30, 2026-09-05)
-                inner = next((args[k] for k in ("type", "tool", "name", "action") if isinstance(args.get(k), str)), None)
-                if inner in known:
-                    name = inner
-                    args = {k: v for k, v in args.items() if k not in ("type", "tool", "name", "action")}
-            if name not in known:
-                # {"memory_write": {"path": ..., "content": ...}} — the tool name is the KEY and
-                # its arguments the value (measured 2026-09-09, several beats lost this way).
+            # More than one selector is ambiguous; neither is safe to discard.
+            selectors = [(k, o[k]) for k in _NAME_KEYS
+                         if isinstance(o.get(k), str) and o[k] in known]
+            if len(selectors) > 1:
+                raise _UnsafeToolPayload("conflicting tool selectors")
+            arg_keys = [k for k in _ARGS_KEYS if isinstance(o.get(k), dict)]
+            if len(arg_keys) > 1:
+                raise _UnsafeToolPayload("multiple argument objects")
+            name_key, name = selectors[0] if selectors else (None, None)
+            arg_key = arg_keys[0] if arg_keys else None
+            args = o[arg_key] if arg_key else None
+            if name is None and args is not None and o.get("name") == "tool":
+                # Retain the measured {"name":"tool","arguments":{"type":"recall",...}}
+                # form, consuming exactly one recognized inner selector.
+                inner_selectors = [(k, args[k]) for k in ("type", "tool", "name", "action")
+                                   if isinstance(args.get(k), str) and args[k] in known]
+                if len(inner_selectors) > 1:
+                    raise _UnsafeToolPayload("conflicting inner tool selectors")
+                if inner_selectors:
+                    inner_key, name = inner_selectors[0]
+                    name_key = "name"
+                    args = {k: v for k, v in args.items() if k != inner_key}
+            if name is None:
+                # A complete object can hold one or more tool-name keys in order.
                 inner = [(k, v) for k, v in o.items() if k in known and isinstance(v, dict)]
-                if len(inner) > 1:
-                    # ONE object holding a whole beat: {"say": {...}, "memory_write": {...}}.
-                    # Measured 2026-09-18T01:32:11Z — Sprout wrote exactly this, `say` to dp
-                    # FIRST, after two beats of composing an answer it could not send. The
-                    # len == 1 guard discarded every call in the object, so the being's own
-                    # decision to answer a person was dropped on the floor and the beat
-                    # recorded as having done nothing. Emit them all, in written order: dict
-                    # iteration preserves the order they appeared in the text, and that order
-                    # is the being's, not ours.
-                    if any(set(v) - set(known[k]) for k, v in inner):
-                        raise _UnsafeToolPayload("unsupported nested arguments")
-                    for k, v in inner:
-                        out.append({"function": {"name": k, "arguments": dict(v)},
-                                    "_salvaged": "json"})
-                    i = max(end, j + 1)
+                if not inner:
                     continue
-                if len(inner) == 1:
-                    name, args = inner[0]
-                else:
-                    continue
-            if args is not None and set(args) - set(known[name]):
-                raise _UnsafeToolPayload("unsupported nested arguments")
-            if args is None:
-                # flat form: the arguments sit beside the name key; keep only schema params
-                # when the schema is known, so stray keys ("timestamp", "status") never
-                # become arguments of a call.
-                allowed = known.get(name) or []
-                args = {k: v for k, v in o.items()
-                        if k not in _NAME_KEYS and k not in _ARGS_KEYS and (not allowed or k in allowed)}
+                if set(o) != {k for k, _ in inner} or any(set(v) - set(known[k]) for k, v in inner):
+                    raise _UnsafeToolPayload("unsupported tool-map fields")
+                for k, v in inner:
+                    out.append({"function": {"name": k, "arguments": dict(v)},
+                                "_salvaged": "json"})
+                i = max(end, j + 1)
+                continue
+            if args is not None:
+                if set(o) - {name_key, arg_key} or set(args) - set(known[name]):
+                    raise _UnsafeToolPayload("unsupported wrapper or nested arguments")
+            else:
+                # Other keys must all be offered parameters. In particular, a parameter
+                # named "name" is retained when, for example, "action" selected the tool.
+                args = {k: v for k, v in o.items() if k != name_key}
+                if set(args) - set(known[name]):
+                    raise _UnsafeToolPayload("unsupported flat arguments")
             out.append({"function": {"name": name, "arguments": dict(args)}, "_salvaged": "json"})
         i = max(end, j + 1)
 
@@ -509,8 +502,9 @@ def _salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
     array of {"name", "arguments"} (fenced or bare), fenced Python `name(k="v", ...)`
     with literal or locally-assigned arguments, positional ones mapped in schema order, or
     the attribute form `name k="v" ...` (see `_attr_calls`), tried last.
-    `tools` is what was offered this turn (Ollama tool specs); only those names count,
-    so prose that mentions a tool is never a call.
+    `tools` is what was offered this turn (Ollama tool specs); only those names count.
+    This structural recovery does not establish intent: a tool-shaped JSON example in prose
+    may still be lifted. Do not treat successful parsing as evidence that an act was intended.
 
     Measured 2026-09-05, same full-beat prompt: qwen2.5:1.5b emits bare JSON (Legion);
     qwen3.8-distill:2b emits fenced JSON in one beat and fenced Python in the next
