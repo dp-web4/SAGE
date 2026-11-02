@@ -367,7 +367,7 @@ def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
         if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
             target = stmt.targets[0].id
             # A literal or result assigned over a tool or its namespace is not a tool call.
-            if target == "tools" or target in names:
+            if target in ("tools", "print") or target in names:
                 return []
             # A later assignment must not leave an earlier value in scope.
             consts.pop(target, None)
@@ -410,6 +410,8 @@ def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
                 break
         for kw in (node.keywords if ok else []):
             v = kw.value
+            if kw.arg in args:
+                return []  # Python would reject a duplicated argument, not pick the last one.
             if kw.arg and isinstance(v, ast.Constant):
                 args[kw.arg] = v.value
             elif kw.arg and isinstance(v, ast.Name) and v.id in consts:
