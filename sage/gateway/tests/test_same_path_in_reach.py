@@ -167,6 +167,7 @@ def test_request_scope_with_a_copy_in_reach_is_still_filed_and_names_the_copy():
         assert "may differ" in env.result["meanwhile"]
     # with no copy, the result is exactly as before
     FakeMcp.calls.clear()
+    (ws / "hestia" / "other.py").write_text("x\n")   # it must exist to be filed (dp, 2026-10-30)
     env = d(BeingIntent("request_scope", {"path": str(ws / "hestia" / "other.py"), "reason": "to read it"}), v)
     assert [n for n, _ in FakeMcp.calls if n == "hestia_request_scope"], env
     assert "copy_in_reach" not in env.result

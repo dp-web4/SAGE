@@ -33,6 +33,37 @@ def _keep_alive():
     except Exception:
         return '5m'
 
+
+def ollama_can_think(model: str, host: str = 'http://localhost:11434', timeout: float = 5) -> Optional[bool]:
+    """Whether the server lists `thinking` among this model's capabilities (/api/show); None when
+    it can't say (unreachable, unknown model, an older server with no capability list).
+
+    Asked only when no model config declares a think_default. Without it, every model with no
+    config of its own (gemma4: mcnugget, nomad, thor, legion) fell back to default.json's
+    thinking_supported=False and ran without thinking even though it could think. dp,
+    2026-10-30: "we should be, whenever that's an option"."""
+    try:
+        req = urllib.request.Request(f'{host}/api/show', data=json.dumps({'model': model}).encode(),
+                                     headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            caps = json.loads(resp.read()).get('capabilities')
+    except Exception:
+        return None
+    return ('thinking' in caps) if isinstance(caps, list) else None
+
+
+def resolve_think(model: str, host: str = 'http://localhost:11434') -> bool:
+    """Thinking on or off when the caller doesn't say: a config's declared think_default wins
+    (a measured per-size exception); then the server's capability list; then the config's
+    thinking_supported."""
+    from sage.irp.adapters.model_capabilities import load_capabilities
+    caps = load_capabilities(model)
+    declared = caps.declared_think(model)
+    if declared is not None:
+        return declared
+    can = ollama_can_think(model, host)
+    return can if can is not None else bool(caps.thinking_supported)
+
 # Import base directly to avoid sage.irp.__init__ pulling in torch-dependent plugins.
 # This keeps OllamaIRP runnable on machines without PyTorch (e.g. McNugget).
 import importlib.util as _ilu
@@ -94,8 +125,8 @@ class OllamaIRP(IRPPlugin):
         # Thinking: the caller's explicit choice wins; otherwise the model config decides
         # (ModelCapabilities.resolve_think: per size). Was a hard False since 2026-03.
         if self._think_cfg is None:
-            self.think = self._adapter.capabilities.resolve_think(self.model_name)
-            print(f"  [OllamaIRP] think={self.think} (from model config)")
+            self.think = resolve_think(self.model_name, self.ollama_host)
+            print(f"  [OllamaIRP] think={self.think} (model config, else the server's capabilities)")
         else:
             self.think = bool(self._think_cfg)
 

@@ -98,7 +98,7 @@ def listing(instance) -> str:
         return ("You have not settled anything yet. To settle something, give question and answer "
                 "(and optionally evidence: a seq, a file, a frame). It is then shown to you every beat.")
     return (f"What you have settled ({len(entries)}, newest first). To change one, settle the same "
-            "question again or give its id; to take one back, give its id and reopen='true'.\n"
+            "question again (or its id with that question); to take one back, give its id and reopen='true'.\n"
             + "\n".join("- " + _line(e) for e in reversed(entries)))
 
 
@@ -133,9 +133,15 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
         want = want if want.startswith("s") else "s" + want
         target = next((e for e in entries if e["id"] == want), None)
         if target is None:
+            # AN ID NAMES AN ENTRY THAT EXISTS; IT NEVER MAKES ONE. Measured on sprout-being 2026-10-29: it settled
+            # a new question twice with an id of its own choosing ("cbp-scope-escalation-needed", then "s20", the
+            # next free number) and was told only that no such entry existed. A refusal owes the way forward.
+            new_q = bool(a.get("question") and a.get("answer"))
             return False, (f"there is no settled entry {a['id']!r}; "
                            + (f"yours are {', '.join(e['id'] for e in entries)}" if entries else "you have none yet")
-                           + ". Nothing was changed.")
+                           + ". Nothing was changed."
+                           + (" To settle a NEW question, give question and answer without id: ids are given out, not "
+                              "chosen. id is only for changing or reopening an entry you already have." if new_q else ""))
     elif a.get("question"):
         target = next((e for e in entries if _norm(e["question"]) == _norm(a["question"])), None)
 
@@ -153,6 +159,24 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
         # Two entries with one question: a later settle by question would reach only the first (pub's review).
         return False, (f"{other['id']} already holds that question; settle {other['id']} (or the question "
                        "alone) to change its answer. Nothing was changed.")
+    # A SETTLED ANSWER IS READ AS THE ANSWER TO ITS QUESTION, so a change by id restates that question. Measured on
+    # cbp-being 2026-10-28..30: s10 kept "When should I escalate a scope request?" while its answer was replaced five
+    # times by an id-only settle with conclusions about other things (a daemon status report, a unit-file fix, scope
+    # expiry), one of them "consolidating with s10" after the full-list refusal told it to fold. Every beat then
+    # showed that question with an answer to a different one: a settle that does not settle. The being never saw the
+    # question it was answering; this makes it say it.
+    if target is not None and a.get("answer") and not _truthy(a.get("reopen", "")):
+        given = a.get("question", "")
+        if not given:
+            return False, (f"{target['id']} holds the question {target['question'][:160]!r}. To change its answer, "
+                           f"settle id={target['id']} with that question and your new answer, so the answer stays "
+                           "with the question it answers. If your answer answers a different question, settle it "
+                           "as a new one: question and answer, without id. Nothing was changed.")
+        if _norm(given) != _norm(target["question"]) and _close_to([target], given) is None:
+            return False, (f"{target['id']} holds the question {target['question'][:160]!r}; yours, "
+                           f"{given[:160]!r}, reads as a different question. Settle yours as a new one (question "
+                           f"and answer, without id), or reopen {target['id']} first if it no longer holds. "
+                           "Nothing was changed.")
     answer = a.get("answer", "")
     if not answer:
         return False, ("give the answer too: what you have concluded, in your own words (what works, what does "
@@ -173,15 +197,23 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                                                 "why": why}, now,
                        f"{new['id']} now reads: {question[:120]!r} -> {answer[:200]!r}. The earlier answer is "
                        "kept in settled_log.jsonl. It is shown to you at the start of every beat.")
-    if len(entries) >= MAX_ENTRIES:
-        return False, (f"you have {len(entries)} settled entries, the most this list holds, so a new one was "
-                       "not added. Nothing was changed. Reopen one that no longer needs holding (id and "
-                       "reopen='true'), or fold this into one you have by settling that id with a new answer.")
     close = _close_to(entries, question)
+    if len(entries) >= MAX_ENTRIES:
+        # sprout-being, 2026-10-30: four refusals here in its first hour at the cap, and no reopen or fold. Two of
+        # the refused questions read close to one it held; the receipt named neither.
+        # NO "FOLD IT INTO ONE YOU HAVE". That advice, without a close entry, is how cbp-being's questions came to
+        # carry answers to other questions (s10, s20, s42: 10-28..30). A full list is made room in by reopening.
+        oldest = ", ".join(f"{e['id']} ({e['question'][:60]!r}, {str(e.get('at', ''))[:10]})" for e in entries[:3])
+        return False, (f"you have {len(entries)} settled entries, the most this list holds, so a new one was "
+                       "not added. Nothing was changed. To make room, reopen one that no longer needs holding (its "
+                       f"id and reopen='true'); the longest held are {oldest}. Do not put this answer under a "
+                       "different question: every beat reads a settled answer as the answer to its question."
+                       + (f" This reads close to {close['id']} ({close['question'][:120]!r}): if they are the same "
+                          f"question, settle id={close['id']} with that question and your newest answer." if close else ""))
     entries = entries + [new]
     ok, msg = _commit(instance, entries, nxt + 1, {"op": "settle", "id": new["id"], "to": new, "why": why}, now,
                       f"settled {new['id']}: {question[:120]!r} -> {answer[:200]!r}. It is shown to you at the "
-                      "start of every beat. To change it later, settle the same question again or give its id.")
+                      "start of every beat. To change it later, settle the same question again (with its id, if you like).")
     if ok and close:
         msg += (f" It reads close to {close['id']} ({close['question'][:120]!r}). If they are the same question, "
                 f"keep one: reopen {new['id']}, then settle id={close['id']} with your newest answer.")

@@ -2561,7 +2561,8 @@ def skill_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
     reading and searching touch nothing. A name that is not a plain skill name is refused here, before any
     path is built from it."""
     a = args or {}
-    if not (str(a.get("body") or "").strip() or str(a.get("description") or "").strip()):
+    retiring = str(a.get("retire") or "").strip().lower() in ("true", "yes", "1")
+    if not (retiring or str(a.get("body") or "").strip() or str(a.get("description") or "").strip()):
         return []
     from sage.gateway.being_skills import NAME, own_paths
     name = str(a.get("name") or "").strip().lower()
@@ -2905,20 +2906,25 @@ _TOOL_SCHEMAS = {
     "run": ("RUN a Python file you wrote, in a sandbox on COPIES of your files, and read what "
             "it printed: nothing it changes is kept, in your home or your worktree. The sandbox "
             "holds only a Python interpreter, copies of the files you name, and (when you have "
-            "one) your worktree READ-ONLY on the import path. No network, no home, no GPU. "
+            "one) your worktree READ-ONLY on the import path. No network, no home, no GPU, and no view "
+            "of this machine: its other processes, services and ports are invisible from inside. "
             "Nothing it does persists, so PRINT what you want to keep. It may run for up to an "
             "hour, or the time left in your beat if that is less, and your beat waits for it: a "
             "long run is time you are not answering anyone. If it is stopped, what it printed "
             "before the stop comes back. "
             "This is how a claim becomes testable: before you run it, say what it should print "
             "if you are right, and what would mean you are wrong. If your code truly needs what "
-            "the sandbox lacks (the network, files that must stay changed, more than an hour, "
-            "the GPU), ask the seat with request_run and say why.",
+            "the sandbox lacks (the network, files in your home that must stay changed, more "
+            "than an hour, the GPU), ask the seat with request_run and say why. Installing or "
+            "changing anything on this machine outside your home is not one of those: the seat "
+            "declines it.",
             {"path": "a .py file in your home, e.g. 'scratch/evaluator.py'",
              "data": "optional: up to 8 more files, named by their SOURCE path — relative to your "
                      "home, or absolute anywhere you can read. Inside the sandbox each one "
                      "appears under its base name, so name 'scratch/data/train.npy' here and "
-                     "np.load('train.npy') in your code"},
+                     "np.load('train.npy') in your code. Your script gets NO command-line arguments "
+                     "(sys.argv holds only its own name): open data files by their base name and "
+                     "write any other inputs into the script"},
             ["path"]),
     "check": ("Run a test suite in your own worktree and read the result. This is how you "
               "find out whether something you believe about your harness is true, instead of "
@@ -3069,12 +3075,17 @@ _TOOL_SCHEMAS = {
     # own skills in claude-code"). The beat lists them, the matching ones first (being_skills.render).
     "skill": ("Read a skill: a short procedure for a kind of situation. No arguments lists them; name reads "
               "one; query searches them. To write your own, give name, description and body (and when: "
-              "words that show up when it applies); writing it again replaces it, the old one is logged.",
+              "words that show up when it applies); writing it again replaces it, the old one is logged; "
+              "retire takes one of yours off the list.",
               {"name": "the skill, e.g. getting-code-run",
                "query": "optional: words to search all skills for",
                "description": "to write: what it is for and when it applies",
                "when": "to write, optional: comma-separated words that appear when it applies",
                "body": "to write: the procedure",
+               "retire": "optional: 'true' with name takes one of your own skills off the list (its text is kept "
+                         "in the log)",
+               "distinct": "optional: 'true' writes a new skill that reads close to one you have, when it is a "
+                           "different procedure",
                "why": "optional: kept with the version"},
               []),
     "retire_note": ("Mark one of your own notes in notes/ or scratch/ as no longer current. It "
@@ -3100,8 +3111,12 @@ _TOOL_SCHEMAS = {
                     ["path", "new"]),
     "request_run": ("Ask the seat to RUN one of your own files OUTSIDE the sandbox, and tell "
                     "you what happened. Most code you run yourself, with `run`. This is for code "
-                    "that needs what the sandbox does not have: the network, files that must "
-                    "stay changed, more than an hour, or the GPU. Say which, and why, in `why`. "
+                    "that needs what the sandbox does not have: the network, files in your home "
+                    "that must stay changed, more than an hour, or the GPU. Say which, and why, in `why`. "
+                    "The seat does not install or change anything on this machine outside your "
+                    "home: no packages (apt, pip), no services, systemd units or D-Bus, no system "
+                    "directories or owners, and no starting or stopping daemons. A file that does "
+                    "any of that is declined, every time, whatever its reason. "
                     "You name the file — the only thing it needs — and the seat decides whether to run it and "
                     "answers with the real output: exit code, stdout, stderr. Adding what you "
                     "expect to learn is optional and helps the seat decide. It may decline, and "

@@ -42,9 +42,13 @@ def test_a_failed_write_never_raises(tmp_path):
 
 
 def test_the_loop_calls_it_on_an_empty_turn():
+    # Anchored on the branch, not on a log line's wording: #603 made the print conditional
+    # ('WINDOW-CUT reply' / 'EMPTY turn'), the old anchor vanished, and main went red with the behaviour intact.
     src = open(btl.__file__, encoding="utf-8").read()
-    i = src.index('print(f"[tool-loop] EMPTY turn:')
-    assert "keep_empty_thinking(" in src[i:i + 1200]
+    i = src.index("if (not content and not calls) or cut_reply:")
+    branch = src[i:i + 2000]
+    assert "keep_empty_thinking(" in branch
+    assert "None if cut_reply else" in branch, "a window-cut reply has content, not a kept deliberation (#603)"
 
 
 def test_the_retry_names_where_the_deliberation_was_kept(tmp_path):
@@ -144,3 +148,36 @@ def test_recovery_distinguishes_provider_token_count_from_returned_thinking(tmp_
     saved = list((tmp_path / btl.EMPTY_THINKING_DIR).iterdir())
     assert len(saved) == 1 and saved[0].read_text().endswith(draft)
     assert len(seen) == 2 and result.reply == "done" and result.trace == []
+
+
+@pytest.mark.parametrize("thinking,named", [
+    ("The user has ended the beat and instructed me to call specific tools.", False),  # nomad-being, #602
+    ("x" * btl.EMPTY_THINKING_NAME_MIN_CHARS, True),                                   # long deliberation
+    # a short clean stop that quotes the file it just read is not a draft (#602: 14 of 49)
+    ("The code I read is:\n```python\ndef _tokens(text):\n    return text.split(\" \")\n```", False),
+])
+def test_stopped_thinking_nudge_names_the_file_only_when_worth_reusing(tmp_path, thinking, named):
+    """#602: a short clean stop is kept but not offered as a draft; reading it became the act."""
+    from sage.gateway.tests.test_being_tool_loop import _client, OK_DISPATCH
+    seen = []
+
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_ctx = 16384
+        num_predict_override = None
+        think = True
+
+        def get_chat_response(self, messages, tools=None):
+            seen.append(str(messages[-1].get("content", "")))
+            if len(seen) == 1:
+                return {"content": "", "tool_calls": [], "raw": {
+                    "done_reason": "stop", "prompt_eval_count": 9000, "eval_count": 400,
+                    "message": {"thinking": thinking, "content": ""}}}
+            return {"content": "done", "tool_calls": [], "raw": {"done_reason": "stop"}}
+
+    client = _client(OK_DISPATCH)
+    client.memory_root = str(tmp_path)
+    btl.run_ollama_tool_turn(client, FakeLLM(), [{"role": "user", "content": "continue"}])
+    assert ("saved as" in seen[1]) is named
+    assert "one tool call" in seen[1]
+    assert len(list((tmp_path / btl.EMPTY_THINKING_DIR).iterdir())) == 1  # kept either way

@@ -93,3 +93,14 @@ def test_brief_text_says_where_each_writing_verb_writes():
         assert "home" in brief[verb] and "granted" in brief[verb]
     for verb in ("patch_apply", "memory_edit", "memory_write"):
         assert len(brief[verb]) <= toolset.BRIEF_DESC_CHARS
+
+
+def test_run_says_its_script_gets_no_arguments_even_in_brief_mode():
+    """legion-being, 2026-10-31: 8 runs on 6 days failed on sys.argv[1] (IndexError), because `run` copies
+    data files in but passes no arguments; the being wrote a skill (run-tool-script-args) to remember it.
+    It runs with brief descriptions, which cut a verb's text to its first sentence but keep every
+    parameter's, so the fact lives in `data`'s description, where a brief-mode being still reads it."""
+    from sage.gateway import toolset
+    run = next(s for s in toolset.specs(brief=True) if s["function"]["name"] == "run")
+    data = run["function"]["parameters"]["properties"]["data"]["description"]
+    assert "NO command-line arguments" in data and "sys.argv" in data and "base name" in data

@@ -10,12 +10,23 @@
     "thinking_supported": false,
     "tier": "T3",
     "stop_sequences": [],
-    "echo_prefixes": ["[{self_name}]:", "{self_name}:", "[SAGE]:", "SAGE:"],
-    "bilateral_speakers": ["Claude", "System", "User", "Human"],
+    "echo_prefixes": [
+        "[{self_name}]:",
+        "{self_name}:",
+        "[SAGE]:",
+        "SAGE:"
+    ],
+    "bilateral_speakers": [
+        "Claude",
+        "System",
+        "User",
+        "Human"
+    ],
     "variants": {
         "8b": {
             "num_ctx": 12288
         }
     },
-    "notes": "Every field except `family`, `variants` and `tools_on_last_user_only` is default.json verbatim: llama3.1 fell back to the default profile until 2026-09-30. `tools_on_last_user_only` (2026-10-21): ollama's llama3.1 template renders the tool schemas only inside the last user message, so a prompt ending in a tool result carries none (pub-being: step 1 ~10.0k tokens, step 2 ~5.6k); the tool loop keeps its count anchors per tail kind for such a model. WHY 12288 (pub, llama3.1:8b on a Radeon Pro W5500 8 GB via ollama/Vulkan): pub-being's per-beat prompt grew from ~4.7k tokens (09-22) to ~7.2k (09-30) as fleet features landed, against the harness floor of 8192 — leaving ~1k tokens for thought and tool calls, and risking ollama dropping the oldest tokens (the tool definitions) on overrun. Its memory_write calls began splitting `path` and `content` across separate calls on 09-26 (0-2% of writes failing before, 17-18% after, 36% on 09-30), tracking the prompt growth. Measured on pub with nomic-embed-text also loaded: 8192 -> 5.8 GB 100% GPU; 12288 -> 6.3 GB 100% GPU at 32.8 tok/s, unchanged from 8192 (the embedder moves mostly to CPU, 25 ms warm, which the fleet rule allows); 16384 -> 7.3 GB with 13% spilled to CPU; 20480 -> 18% spilled. 12288 is the largest window that keeps the being wholly on this GPU. A different GPU should measure again rather than inherit this number. Same failure shape as Legion beat 46 (2026-09-05), see ModelCapabilities.resolve_num_ctx."
+    "preflight_chars_per_token": 3.6,
+    "notes": "Every field except `family`, `variants` and `tools_on_last_user_only` is default.json verbatim: llama3.1 fell back to the default profile until 2026-09-30. `tools_on_last_user_only` (2026-10-21): ollama's llama3.1 template renders the tool schemas only inside the last user message, so a prompt ending in a tool result carries none (pub-being: step 1 ~10.0k tokens, step 2 ~5.6k); the tool loop keeps its count anchors per tail kind for such a model. WHY 12288 (pub, llama3.1:8b on a Radeon Pro W5500 8 GB via ollama/Vulkan): pub-being's per-beat prompt grew from ~4.7k tokens (09-22) to ~7.2k (09-30) as fleet features landed, against the harness floor of 8192 \u2014 leaving ~1k tokens for thought and tool calls, and risking ollama dropping the oldest tokens (the tool definitions) on overrun. Its memory_write calls began splitting `path` and `content` across separate calls on 09-26 (0-2% of writes failing before, 17-18% after, 36% on 09-30), tracking the prompt growth. Measured on pub with nomic-embed-text also loaded: 8192 -> 5.8 GB 100% GPU; 12288 -> 6.3 GB 100% GPU at 32.8 tok/s, unchanged from 8192 (the embedder moves mostly to CPU, 25 ms warm, which the fleet rule allows); 16384 -> 7.3 GB with 13% spilled to CPU; 20480 -> 18% spilled. 12288 is the largest window that keeps the being wholly on this GPU. A different GPU should measure again rather than inherit this number. Same failure shape as Legion beat 46 (2026-09-05), see ModelCapabilities.resolve_num_ctx. PREFLIGHT 3.6 (2026-10-30, SAGE #582): llama3.1 tokenizes denser than the 2.9 the step-1 preflight assumed. Measured on pub with ollama raw prompt_eval_count: the being's own prose 3.67 chars/token, the tool schemas 3.92; and one same-config pair, preflight estimate 14,569 vs server count 9,806. At 2.9 every explore was refused from 10-27 07:46Z (125 beats). 3.6 sits below every measured ratio, so the guard still errs high by ~2-9%."
 }

@@ -594,6 +594,27 @@ def test_run_and_request_run_each_name_the_other_and_neither_says_you_cannot_run
     assert "request_run asks the seat" in AFFORDANCES
 
 
+def test_request_run_says_the_seat_never_installs_or_changes_the_machine():
+    """cbp-being, 2026-10-28..11-01: 104 of its 144 request_run calls were installs or host changes
+    (apt, D-Bus, systemd, system directories, starting daemons) and 5 were its own work; through
+    mid-October its own work was 95%+. Every one was declined. The door's text listed "the network"
+    and "files that must stay changed" as reasons to use it, which is exactly what an installer
+    needs, so the text offered what the seat would always refuse. It now says so before the file
+    is written, in all three places the being reads it (dp, 2026-11-01: change the affordance)."""
+    from pathlib import Path
+    from sage.gateway.being_gate_client import _TOOL_SCHEMAS
+    run, req = _TOOL_SCHEMAS["run"][0], _TOOL_SCHEMAS["request_run"][0]
+    skill = (Path(__file__).resolve().parents[1] / "skills" / "getting-code-run" / "SKILL.md").read_text()
+    for text in (run, req, skill):
+        assert "files in your home that must stay changed" in " ".join(text.split()), text[:120]
+        assert "files that must stay changed" not in " ".join(text.split())
+    assert "does not install or change anything on this machine outside your home" in req
+    for what in ("apt", "pip", "systemd", "D-Bus", "system directories", "daemons", "declined, every time"):
+        assert what in req, what
+    assert "the seat declines it" in run
+    assert "declined every time" in skill
+
+
 @needs_sandbox
 def test_an_empty_stderr_failure_says_where_its_files_are_not_to_read_stderr(tmp_path):
     # cbp-being 2026-10-18 23:41Z: exit 1, stderr empty, told "read stderr, it names the line"
@@ -646,6 +667,58 @@ def test_a_run_that_names_a_hardware_device_is_told_the_sandbox_has_none():
     for benign in ("wrote to /dev/null", "read /dev/urandom", "/dev/shm full", "/dev/stdout"):
         assert said not in _run_note(0, "", ["t.py"], benign), benign
     assert said not in _run_note(1, "", ["t.py"], "no devices mentioned")
+
+
+def test_a_run_that_reports_on_this_machine_is_told_the_sandbox_cannot_see_it():
+    """cbp-being, 2026-10-28..31: its runs said the bus was unreachable, systemd was not booted, port 7711
+    was closed and the daemon was not running, and it asked for installers again and again while the
+    daemon decided each act. The note now says the sandbox sees no other process, service or port."""
+    from sage.gateway.hestia_dispatch import _run_note
+    said = "describes the sandbox"
+    for out in ("Failed to connect to bus: No medium found",
+                "System has not been booted with systemd as init system (PID 1). Can't operate.",
+                "port 7711 is closed", "ConnectionRefusedError: [Errno 111] Connection refused",
+                "The Hestia daemon is not running", "hestia.service: inactive (dead)"):
+        note = _run_note(1, "", ["t.py"], out)
+        assert said in note and "not evidence that a service on this machine is down, or that it is up" in note, out
+        # NOVA's review of #609: a false negative is never corrected with an unproven positive.
+        low = note.lower()
+        assert "is running" not in low and "decided this one" not in low, note
+        # the run's OWN processes exist; only the host's are hidden
+        assert "only the run's own processes are" in note
+    assert said in _run_note(1, "Failed to connect to bus: No medium found", ["t.py"])
+    assert said in _run_note(0, "", ["t.py"], "systemctl is-active hestia -> unknown")
+    for benign in ("loss 0.81 after 40 epochs", "residual 0.806334", "running mean 3.2", "wrote out.csv"):
+        assert said not in _run_note(0, "", ["t.py"], benign), benign
+
+
+def test_the_daemon_answered_note_is_evidence_only_and_names_the_action():
+    """cbp-being 2026-11-01: _host_note alone ("not evidence either way") lost to its own script's
+    "The Hestia daemon is NOT running". The run's action id is a real answer from the daemon, issued
+    before the run executed; the note says that and claims nothing later or wider (NOVA on #609)."""
+    from sage.gateway.hestia_dispatch import _daemon_answered_note
+    note = _daemon_answered_note("652a0df6-9f71-4b57-948a-fecc6d456929")
+    assert "action 652a0df6" in note and "answering when this one began" in note
+    low = note.lower()
+    assert "is running" not in low and "decides your acts" not in low
+
+
+@needs_sandbox
+def test_a_run_that_reports_on_the_host_carries_the_daemons_answer(tmp_path):
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "probe.py").write_text("print('Port 7711 is CLOSED. The Hestia daemon is NOT running.')\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/probe.py"}))
+    assert r.ok, r.error
+    assert "not evidence that a service on this machine is down" in r.result["note"]
+    assert "action w-run" in r.result["note"]
+    (home / "scratch" / "plain.py").write_text("print('loss 0.81 after 40 epochs')\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/plain.py"}))
+    assert r.ok and "action w-run" not in r.result["note"], r.result["note"]
+
+
+def test_the_run_verb_says_the_sandbox_cannot_see_this_machine():
+    from sage.gateway.being_gate_client import _TOOL_SCHEMAS
+    assert "no view of this machine" in _TOOL_SCHEMAS["run"][0]
 
 
 

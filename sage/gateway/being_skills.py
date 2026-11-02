@@ -196,6 +196,10 @@ def skill(instance, args: Dict) -> Tuple[bool, str, bool]:
         return True, search(instance, a["query"]), False
     if not name:
         return True, listing(instance), False
+    if _truthy(a.get("retire", "")):
+        with _home_lock(Path(instance)):
+            ok, msg = _retire(instance, name, a.get("why", ""))
+        return ok, msg, ok
     if not writing:
         ok, text = read(instance, name)
         return ok, text, False
@@ -204,14 +208,61 @@ def skill(instance, args: Dict) -> Tuple[bool, str, bool]:
     return ok, msg, bool(ok and not msg.startswith(_UNCHANGED))
 
 
+def _truthy(v: str) -> bool:
+    return str(v).strip().lower() in ("true", "yes", "1")
+
+
+def _retire(instance, name: str, why: str) -> Tuple[bool, str]:
+    """Take one of the being's own skills out of its index (dp, 2026-10-28: "does it have ways to update or
+    remove skills?"; it could replace one, never remove one). The whole text goes into skills_log.jsonl
+    FIRST, so nothing is lost, and only a logged retirement removes the file: if the log line cannot be
+    written, the skill stays. Writing the same name later starts a new skill."""
+    if not NAME.match(name):
+        return False, f"{name!r} is not a skill name. Nothing was changed."
+    if any(s["name"] == name for s in _load(FLEET_DIR, "fleet")):
+        return False, (f"{name!r} is a fleet skill (shipped with SAGE, read-only), so it is not yours to retire. "
+                       "Nothing was changed. If it is wrong, say so to your seat.")
+    d = Path(instance) / OWN_DIR / name
+    path = d / SKILL_FILE
+    if not path.is_file():
+        mine = [s["name"] for s in _load(Path(instance) / OWN_DIR, "yours")]
+        return False, (f"you have no skill called {name!r}; yours are: {', '.join(mine) or 'none yet'}. "
+                       "Nothing was changed.")
+    prev = path.read_text(errors="replace")
+    try:
+        lp = Path(instance) / SKILLS_LOG
+        torn = False
+        if lp.exists() and lp.stat().st_size > 0:
+            with open(lp, "rb") as lf:
+                lf.seek(-1, os.SEEK_END)
+                torn = lf.read(1) != b"\n"
+        with open(lp, "a") as f:
+            f.write(("\n" if torn else "") + json.dumps({"at": _iso(), "op": "retire", "name": name, "from": prev,
+                                                         "to": None, "why": str(why)[:WHY_MAX_CHARS]}) + "\n")
+    except OSError as e:
+        return False, f"the retirement could not be recorded in {SKILLS_LOG} ({type(e).__name__}), so the skill stays; nothing changed"
+    try:
+        path.unlink()
+        try:
+            d.rmdir()
+        except OSError:
+            pass                # other files of the being's own in that directory stay where they are
+    except OSError as e:
+        return False, (f"retirement of {name} was recorded but the file could not be removed ({type(e).__name__}); "
+                       "it is still listed. Tell your seat.")
+    return True, (f"retired your skill {name}: it is no longer listed or matched. Its whole text is kept in "
+                  f"{SKILLS_LOG}. Writing a skill with that name again starts a new one.")
+
+
 def _home_lock(root: Path):
     from sage.gateway.reference_f1a import _home_lock as lock
     return lock(root)
 
 
 def own_paths(name: str) -> Tuple[str, ...]:
-    """Every path (relative to the home) a write of skill `name` touches, for the gate."""
-    return (f"{OWN_DIR}/{name}/{SKILL_FILE}.tmp", f"{OWN_DIR}/{name}/{SKILL_FILE}", SKILLS_LOG)
+    """Every path (relative to the home) a write or a retire of skill `name` touches, for the gate: the skill's
+    directory too, which a first write creates and a retire removes."""
+    return (f"{OWN_DIR}/{name}", f"{OWN_DIR}/{name}/{SKILL_FILE}.tmp", f"{OWN_DIR}/{name}/{SKILL_FILE}", SKILLS_LOG)
 
 
 def _write(instance, name: str, a: Dict[str, str]) -> Tuple[bool, str]:
@@ -237,6 +288,16 @@ def _write(instance, name: str, a: Dict[str, str]) -> Tuple[bool, str]:
     prev = path.read_text(errors="replace") if path.exists() else None
     if prev == text:
         return True, f"{_UNCHANGED}your skill {name} already reads exactly that; nothing changed."
+    close = _close_skill(instance, name, description, when) if prev is None else None
+    if close is not None and close["source"] != "fleet" and not _truthy(a.get("distinct", "")):
+        # sprout-being, 2026-10-30..11-01: the after-write note named a close skill on 4 of 4 new ones (4 of 5
+        # names judged the same procedure), and none was merged or retired, so 7 skills held one subject. A
+        # refusal that names the id was acted on in the same step, both times settle's (#595, #608) did.
+        return False, (f"{name} reads close to your skill {close['name']} ({close['description'][:120]!r}), so it "
+                       f"was not written. Nothing was changed. If it is the same procedure, `skill name={close['name']}` "
+                       f"shows it; write {close['name']} again with its steps and your newest ones together (a "
+                       f"write replaces the whole skill). If it is a different procedure, write {name} again with "
+                       f"distinct='true'.")
     try:
         d.mkdir(parents=True, exist_ok=True)
         tmp.write_text(text)
@@ -254,9 +315,11 @@ def _write(instance, name: str, a: Dict[str, str]) -> Tuple[bool, str]:
             with open(lp, "rb") as lf:
                 lf.seek(-1, os.SEEK_END)
                 torn = lf.read(1) != b"\n"
+        entry = {"at": _iso(), "name": name, "from": prev, "to": text, "why": a.get("why", "")[:WHY_MAX_CHARS]}
+        if close is not None and close["source"] != "fleet":
+            entry["distinct"] = close["name"]   # written past a refusal: how often is countable from the log (cbp)
         with open(lp, "a") as f:
-            f.write(("\n" if torn else "") + json.dumps({"at": _iso(), "name": name, "from": prev, "to": text,
-                                                         "why": a.get("why", "")[:WHY_MAX_CHARS]}) + "\n")
+            f.write(("\n" if torn else "") + json.dumps(entry) + "\n")
     except OSError as e:
         try:
             if prev is None:
@@ -268,8 +331,38 @@ def _write(instance, name: str, a: Dict[str, str]) -> Tuple[bool, str]:
                            f"({type(e).__name__}) and could not be undone ({type(e2).__name__}). Tell your seat.")
         return False, f"the change could not be recorded in {SKILLS_LOG} ({type(e).__name__}), so it was undone; nothing changed"
     verb = "replaced" if prev is not None else "wrote"
+    if close is None:
+        near = ""
+    elif close["source"] == "fleet":
+        near = (f" It reads close to the fleet skill {close['name']} ({close['description'][:120]!r}); "
+                f"`skill name={close['name']}` shows it.")
+    else:   # written with distinct='true': the being has said they differ; name it once, nothing more
+        near = f" You said it differs from {close['name']}, which reads close to it."
     return True, (f"{verb} your skill {name}" + (" (the earlier version is kept in skills_log.jsonl)" if prev else "")
-                  + ". It is listed in every beat's skills, and shown first when its when-words appear.")
+                  + ". It is listed in every beat's skills, and shown first when its when-words appear." + near)
+
+
+def _close_skill(instance, name: str, description: str, when: str) -> Optional[dict]:
+    """The existing skill (own or fleet) a NEW one reads most like, at or over settle's CLOSE_AT; None otherwise. It
+    names, never merges: whether two procedures are one is the being's to say. Measured on legion-being 2026-10-30
+    with relevance.Ranker over name + description + when: its two same-procedure pairs scored 0.61
+    (elided-result-recovery / reading-elided-tool-results, written a day apart; the second beat rewrote the
+    parser the first skill already holds) and 0.48 (dump-line-range / narrow-source-extraction, an hour apart);
+    every distinct pair among its own and the fleet's skills scored 0.27 or less. The best OWN hit wins over a
+    higher fleet one: an own duplicate is refused and a fleet one only noted, so a fleet hit must not hide it."""
+    try:
+        from sage.gateway.being_settled import CLOSE_AT
+        from sage.gateway.relevance import Ranker
+        others = [s for s in index(instance) if s["name"] != name]
+        if not others:
+            return None
+        card = lambda n, d, w: f"{n.replace('-', ' ')} {d} {' '.join(w) if isinstance(w, list) else w}"
+        rk = Ranker([card(s["name"], s["description"], s["when"]) for s in others])
+        hits = rk.related(card(name, description, when), CLOSE_AT)
+    except Exception:
+        return None
+    own = [others[i] for _, i in hits if others[i]["source"] != "fleet"]
+    return own[0] if own else (others[hits[0][1]] if hits else None)
 
 
 def _iso() -> str:
@@ -280,7 +373,14 @@ def _iso() -> str:
 
 #: Verbs where "failed, then worked" is measurable from the act's own result, and what names the target.
 #: Not request_run: its ok=True means the request was FILED, and nothing has run yet (#585 reviews).
-WORKED_OUT_VERBS = {"run": "path", "memory_edit": "path", "camera": None, "patch_apply": None}
+#: `game`, by the game it plays: a refused probe is ok=False with the rule it broke, and the corrected call on the
+#: same game is ok=True. Measured on legion-being 2026-10-28: its work had moved from `run` to `game`, so the notice
+#: as shipped fired in 0 of 5 beats; one probe-shape refusal had recurred 140 times on 30 days, and was settled as a
+#: fact twice in one beat and still recurred.
+WORKED_OUT_VERBS = {"run": "path", "memory_edit": "path", "camera": None, "patch_apply": None, "game": "game"}
+#: A target argument the verb itself defaults, so a call that names the default and one that omits it are one target
+#: (mcnugget's #588 review). The game verb's default: being_gate_client, `args.get("game") or "ft09"`.
+WORKED_OUT_DEFAULTS = {"game": "ft09"}
 #: A retried edit of its own records is bookkeeping, not a procedure (replayed on Sprout: `memory_edit todo.md`).
 BOOKKEEPING = ("todo.md", "journal.md")
 
@@ -314,7 +414,8 @@ def worked_out(trace) -> Optional[str]:
         if eff not in WORKED_OUT_VERBS:
             continue
         arg = WORKED_OUT_VERBS[eff]
-        target = str((getattr(intent, "args", None) or {}).get(arg) or "") if arg else ""
+        target = (str((getattr(intent, "args", None) or {}).get(arg) or WORKED_OUT_DEFAULTS.get(eff, "")).strip()
+                  if arg else "")
         target = posixpath.normpath(target) if target else ""   # `./a.py` and `a.py` are one target
         if target.rsplit("/", 1)[-1] in BOOKKEEPING:
             continue

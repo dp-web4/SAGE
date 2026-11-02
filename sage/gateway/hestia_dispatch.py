@@ -2305,6 +2305,8 @@ class HestiaF1aDispatcher:
     _STORED_DUPLICATE = ("Duplicate — already stored",)
     _STORE_CONFIRMED = _STORED_NEW + _STORED_DUPLICATE
     _NOT_MOUNTED = "No cartridge mounted"
+    # membot_server.save_cartridge's success text: "Saved '<name>': <n> memories, <mb> MB, fingerprint=..."
+    _SAVE_RECEIPT = re.compile(r"Saved '[^']+': (\d+) memories")
 
     # MEMBOT GETS ITS OWN TIMEOUT. It shared hestia's 4 s, sized for a local daemon that answers in
     # milliseconds. Measured on Sprout 2026-09-27: 205 successful remember/recall calls, median
@@ -2365,8 +2367,28 @@ class HestiaF1aDispatcher:
         """One membot tool call, unwrapped to its text. RAISES on a JSON-RPC `error` or a
         tool-level `isError` result: both handlers turn the exception into ok=False, so a
         membot that says "Error calling tool save_cartridge" is never witnessed as a
-        memory the being kept (Sprout's review of #36, reproduced against a fake membot)."""
-        return self._unwrap(self._membot().call(name, args), name)
+        memory the being kept (Sprout's review of #36, reproduced against a fake membot).
+
+        AN EXPIRED MEMBOT SESSION IS REMOUNTED, ONCE (2026-10-31). The mount lives in membot's
+        own session, which it expires after SESSION_TIMEOUT_SEC (1800 s) idle; the cached MCP
+        client outlives it, so every later call answered "No cartridge mounted". mcnugget-being,
+        05:30Z: a beat that thought for ~35 min mounted at its start and called remember at its
+        end (membot: "Session expired: default (idle 2098s)"); the memory was refused, not lost
+        to an empty save, but it was not kept either. A store or a read that answers
+        _NOT_MOUNTED drops the session, remounts (which reloads the cartridge from disk), and
+        is sent once more. save_cartridge is never retried this way: a remounted session holds
+        what is on disk, so saving it could only rewrite the file without the act that asked."""
+        reply = self._unwrap(self._membot().call(name, args), name)
+        if self._NOT_MOUNTED in reply and name != "save_cartridge":
+            import sys as _sys
+            if getattr(self, "_mb_dirty", False):
+                print("[membot] session expired with unsaved stores; those are not in the remounted "
+                      "cartridge", file=_sys.stderr)
+            print(f"[membot] {name}: no cartridge mounted (session expired); remounting once",
+                  file=_sys.stderr)
+            self._mb = None
+            reply = self._unwrap(self._membot().call(name, args), name)
+        return reply
 
     # A PREVIEW IS NOT THE MEMORY. memory_search answers with ~550 characters of each hit
     # and an `idx`, and membot's own docstring names get_passage(idx) as the second half of
@@ -2763,6 +2785,23 @@ class HestiaF1aDispatcher:
             saved = self._membot_call("save_cartridge", {"name": self.membot_cartridge})
         except Exception as e:
             return ResultEnvelope(ok=False, error=f"membot ({type(e).__name__}): {e}")
+        # ONLY A SAVE RECEIPT IS A SAVE (NOVA's review of #610). membot answers save_cartridge in
+        # ordinary text whatever happened ("No cartridge to save...", "Save error: ...", or the
+        # receipt "Saved '<name>': N memories, ..."), so the absence of an exception proves
+        # nothing. And with a name given, a session that expired between the store and this save
+        # is saved anyway: membot writes the EMPTY session and answers "Saved '<name>': 0
+        # memories". A store was just confirmed, so a receipt of 0 is that overwrite, not a
+        # success. Anything but a receipt with memories in it is reported as NOT saved, the
+        # session is dropped so the next act remounts, and _mb_dirty stays set.
+        receipt = self._SAVE_RECEIPT.match(saved or "")
+        if not receipt or int(receipt.group(1)) == 0:
+            self._mb = None
+            emptied = bool(receipt)
+            return ResultEnvelope(ok=False, error=(
+                "membot did not confirm saving this memory, so it was NOT saved"
+                + (" -- and it reported saving an EMPTY cartridge over the real one; the operator "
+                   "should restore it from its last good copy" if emptied else "")
+                + f": {saved[:200]}"))
         self._mb_dirty = False
         return ResultEnvelope(ok=True, result=f"{stored}; {saved}",
                               witness_id=self._local._witness(f"remember {content[:80]}"))
@@ -3609,6 +3648,8 @@ class HestiaF1aDispatcher:
             "script": staged[0][0], "files": [b for b, _ in staged],
             "exit": rc, "stdout": out.strip(), "stderr": errtxt.strip(),
             "note": _run_note(rc, errtxt, [b for b, _ in staged], out)}
+        if action_id and _HOST_VIEW.search(f"{out}\n{errtxt}"):
+            result["note"] += " " + _daemon_answered_note(action_id)
         if not seatbelt:
             mounts, skipped, _mask = grant_mounts
             result["note"] += _run_reach_note(mounts, skipped)
@@ -4050,6 +4091,22 @@ class HestiaF1aDispatcher:
                 "next": (f"your grant on {exact_above} is EXACT: it reaches that path and nothing beneath it. "
                          f"Only the operator can make it recursive (path:{exact_above}/**). No request was filed; "
                          f"your seat has been told. Do not retry this write in this beat.")})
+        # A PATH THAT DOES NOT EXIST IS NOT THERE, AND NOTHING IS FILED (dp, 2026-10-30: "a
+        # nonexistent path should never escalate to a scope request, it should be flatly denied as
+        # not there"). Measured that day: five of cbp-being's seven requests named paths that do
+        # not exist (a tripled workspace root, a system directory), and each reached the operator.
+        # The daemon applies the same rule (hestia #1411); answering here as well means it holds
+        # before any daemon is rebuilt, and says it in the being's own receipt. `lexists`: a
+        # dangling link is an entry, so it still files. `create: true` keeps a new path a real ask.
+        create = str(intent.args.get("create", "")).strip().lower() in ("true", "1", "yes")
+        if not create and not _os.path.lexists(_os.path.expanduser(path)):
+            hint = same_path_in_reach(path, _granted_reach_of(getattr(self, "_verdict", None)))
+            return ResultEnvelope(ok=True, result={
+                "status": "not_there", "path": path,
+                "next": (f"{path} does not exist, so there is nothing to grant and no request was filed. "
+                         + (f"The path you hold that matches it is {hint[0][0]}; read that. " if hint else
+                            "Check the spelling against the roots you hold. ")
+                         + "If you mean to CREATE it, ask again with create: true.")})
         # A copy at the same path under a grant it holds (cbp-being, 2026-10-22..23: at least
         # six asks for the editable hestia tree's closure file while its governance grant held
         # a copy it had read). The ask is STILL FILED: a copy is a different file that may
@@ -4058,6 +4115,8 @@ class HestiaF1aDispatcher:
         copies = same_path_in_reach(path, _granted_reach_of(getattr(self, "_verdict", None)))
         args: Dict[str, Any] = {"plugin_id": self.plugin_id, "path": path,
                                 "reason": f"[{self.plugin_id}] {reason}"}
+        if create:
+            args["create"] = True     # the daemon's existence-first rule reads the same flag
         out = self._call("hestia_request_scope", args)
         err = _hestia_error(out)
         if err:
@@ -5227,11 +5286,58 @@ def _run_reach_note(mounts: list, skipped: list) -> str:
 
 
 def _run_note(rc: int, stderr: str, files: list, stdout: str = "") -> str:
-    """The run's note, plus one fact when its output names a hardware device (_device_note)."""
+    """The run's note, plus one fact when its output names a hardware device (_device_note), and one when
+    it reports on this machine's processes, services or ports (_host_note)."""
     note = _run_note_core(rc, stderr, files)
-    if _HARDWARE_DEV.search(f"{stdout}\n{stderr}"):
+    said = f"{stdout}\n{stderr}"
+    if _HARDWARE_DEV.search(said):
         note += " " + _device_note()
+    if _HOST_VIEW.search(said):
+        note += " " + _host_note()
     return note
+
+
+def _daemon_answered_note(action_id: str) -> str:
+    """THE ONE FACT ABOUT THE HOST THAT A RUN DOES CARRY. cbp-being, 2026-11-01 18:27Z: dp told it the
+    daemon is running and is the gate; in the same beat it ran three port checks seven times, each
+    receipt carried _host_note ("not evidence that a service on this machine is down, or that it is
+    up"), and its own scripts printed "The Hestia daemon is NOT running". It replied that the daemon
+    was down. A note that only says "this proves nothing" loses to a sentence the being wrote itself.
+
+    NOVA's review of #609 refused "the daemon that decides your acts is running" because nothing in a
+    run's output proves it. This is not that claim. Before a run executes, _do_run calls
+    hestia_begin_action on the daemon and refuses the run ("run UNVERIFIED ... not executed") unless
+    the daemon answers with an action id. So a run that executed holds an id the daemon issued for it
+    moments earlier: evidence that the daemon answered when the run started, and nothing beyond that."""
+    return (f"One fact from outside the sandbox: before this run started, the Hestia daemon on this "
+            f"machine was asked to open its record and answered (action {str(action_id)[:8]}). A run "
+            f"the daemon does not answer for is not executed, so the daemon was answering when this "
+            f"one began.")
+
+
+#: Output that reports on the machine outside the sandbox: services, systemd, D-Bus, ports, processes.
+_HOST_VIEW = re.compile(
+    r"systemctl|systemd|\bd-?bus\b|connect to bus|connection refused|not listening|\bport \d{2,5}\b"
+    r"|\bpgrep\b|\bpidof\b|\bnetstat\b|no such process|\bnot running\b|\binactive \(dead\)", re.I)
+
+
+def _host_note() -> str:
+    """THE SANDBOX CANNOT SEE THIS MACHINE, SO WHAT A RUN SAYS ABOUT IT IS ABOUT THE SANDBOX. cbp-being,
+    2026-10-28..31: its runs reported "Failed to connect to bus", "System has not been booted with systemd",
+    port 7711 closed and "the Hestia daemon is not running", and it concluded the daemon was down and asked
+    for systemd, D-Bus and Docker installers, over and over, while the daemon decided every one of its acts.
+    The run is --unshare-pid --unshare-net: PID 1 is the run itself and there is no network. The note said
+    "no network"; it never said that this also hides every other process, service and port. That is the
+    sandbox's design, not a guess about this run, so saying it keeps the note evidence-only (_device_note).
+
+    IT CORRECTS A FALSE NEGATIVE WITHOUT ASSERTING A POSITIVE (NOVA's review of #609). The first cut ended
+    "the daemon that decides your acts is running", which nothing in a run's output proves. The note says
+    only what isolation proves: a probe from here is not evidence that a host service is up or down."""
+    return ("The sandbox has its own process space and no network, by design: this machine's other "
+            "processes, its services, systemd, D-Bus and its listening ports (7711 included) are not visible "
+            "from inside it; only the run's own processes are. So 'not running', 'connection refused' or 'not "
+            "booted with systemd' from a probe like this describes the sandbox. It is not evidence that a "
+            "service on this machine is down, or that it is up.")
 
 
 def _device_note() -> str:

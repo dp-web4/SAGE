@@ -549,6 +549,22 @@ _OWN_SIGIL = "chars of this argument elided: the call already ran, and its recei
 # the being's own scratch (private), by age like the spills.
 EMPTY_THINKING_DIR = "scratch/empty-thinking"
 EMPTY_THINKING_KEEP_S = 7 * 24 * 3600
+# THE NUDGE NAMES THE KEPT FILE ONLY WHEN IT IS WORTH REUSING (#602). The pointer was built
+# for legion-being's cut drafts: 204 kept files since 10-24, smallest 7,203 bytes, median
+# 23,250. nomad-being (gemma4:e2b, think on via #599) stops cleanly after 379-2,827 chars
+# that restate its instructions; told to read that, it did, as the one act the nudge asked
+# for: 14 of 30 explore/posture acts in its first seven think-on beats. Every file is still
+# kept; a short clean stop is just not offered as a draft. NOT "contains code": 14 of
+# nomad-being's 49 kept files hold a ```python block, and every one is the task file it had
+# just read with git_read, quoted back, not code it drafted (checked 2026-10-31).
+EMPTY_THINKING_NAME_MIN_CHARS = 4000
+
+
+def empty_thinking_worth_naming(raw: dict, thinking: str) -> bool:
+    """Whether the stopped-thinking nudge should point the being at its kept thinking:
+    a `length` cut (a draft stopped mid-way), or thinking long enough to hold one."""
+    return ((raw or {}).get("done_reason") == "length"
+            or len(thinking) >= EMPTY_THINKING_NAME_MIN_CHARS)
 
 
 def keep_empty_thinking(root: Optional[str], raw: dict, msg: dict) -> Optional[str]:
@@ -626,6 +642,56 @@ def _prune_spills(d: str, pinned: Iterable[str] = ()) -> None:
         pass
 
 
+#: Marks the readable copy after a spilled JSON result. The raw JSON stays first and whole, so `raw_decode` from the
+#: first '{' reads exactly what it read before; this section is only ever after it.
+SPILL_DECODED_MARK = "── the same result's text fields, decoded line by line (read them with start_line/end_line) ──"
+
+
+def _decoded_text_fields(body: str) -> str:
+    """A spilled JSON result's multi-line string fields (a run's stdout/stderr, ...) written out as real lines, after
+    the raw JSON. Measured on legion-being 2026-10-30: a run result is ONE physical line, its stdout an escaped string,
+    so memory_read's line ranges could not reach inside it; the being wrote 7 raw_decode parsers in two beats and three
+    skills for the same procedure (reading-elided-tool-results, elided-result-recovery, read-elided-tool-result).
+    '' for a body that is not a JSON object or has no multi-line text field: it is spilled exactly as before."""
+    s = body.lstrip()
+    if not s.startswith("{"):
+        return ""
+    try:
+        obj, _ = json.JSONDecoder().raw_decode(s)
+    except ValueError:
+        return ""
+    if not isinstance(obj, dict):
+        return ""
+    # Each heading counts its lines, so a field whose text holds a line like "== stderr ==" still reads unambiguously,
+    # and a ranged read knows how far to go (nomad's #600 review).
+    parts = [f"== {k} ({len(v.rstrip(chr(10)).splitlines())} lines) ==\n{v.rstrip(chr(10))}\n"
+             for k, v in obj.items() if isinstance(v, str) and "\n" in v]
+    if not parts:
+        return ""
+    head = ", ".join(f"{k}={obj[k]!r}" for k in obj if not isinstance(obj[k], (str, list, dict)) or
+                     (isinstance(obj[k], str) and "\n" not in obj[k] and len(obj[k]) <= 120))
+    return "\n\n" + SPILL_DECODED_MARK + "\n" + (head + "\n" if head else "") + "\n".join(parts)
+
+
+def _decoded_where(body: str) -> str:
+    """What a spill marker adds so the readable copy is FOUND, not only present (nomad's #600 review): the line each
+    decoded field starts on in the spill file. A ranged read of the first lines shows only the header and the one-line
+    JSON, which is what led legion-being to write parsers. '' when the spill has no decoded section. The lines are
+    exact: _spill writes a two-line header, then the body, then the section."""
+    tail = _decoded_text_fields(body)
+    if not tail:
+        return ""
+    before = 2 + body.count("\n")               # header line + blank line + the body's own lines (1-based, last line)
+    at, said = {}, []
+    for n, line in enumerate(tail.split("\n")):
+        m = re.match(r"^== (\S+) \(\d+ lines\) ==$", line)
+        if m and m.group(1) not in at:
+            at[m.group(1)] = before + n + 2   # +1: the heading is line before+n, the field's first line the next
+    for k, ln in at.items():
+        said.append(f"{k} from line {ln}")
+    return " Its " + ", ".join(said) + " are written out as plain lines after the raw JSON: read those lines."
+
+
 def _spill(root: Optional[str], body: str, step: int,
            pinned: Optional[set] = None) -> Optional[str]:
     """Save one elided tool-result body under the being's home. Returns the bare path to
@@ -658,6 +724,7 @@ def _spill(root: Optional[str], body: str, step: int,
             fh.write(f"[{_t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime())} — the whole tool "
                      f"result the harness elided from your window, {len(body)} characters]\n\n")
             fh.write(body)
+            fh.write(_decoded_text_fields(body))
         name_rel = f"{COMPACT_SPILL_DIR}/{name}"
         if pinned is not None:
             pinned.add(name_rel)
@@ -817,6 +884,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
         saved = _spill(spill_root, body, i, pinned)
         where = (f"The WHOLE result is saved as {saved} and outlives this beat — "
                  f"memory_read a narrow range of it (start_line and end_line) when you need the middle."
+                 + _decoded_where(body)
                  if saved else
                  "If you need part of it, read a NARROW range of the source rather than the "
                  "whole file again — a full re-read costs more room than this elision freed.")
@@ -866,7 +934,8 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
             ptr = (f"[result {_COLLAPSED_SIGIL} to leave room for your answer. It began: "
                    f"{first!r}" + (f" and ended: {last!r}" if last else "")
                    + f". The WHOLE result is saved as {m.group(1)} -- memory_read a narrow "
-                     f"range of it (start_line and end_line) if you need it.]")
+                     f"range of it (start_line and end_line) if you need it; a JSON result's text fields "
+                     f"are written out as plain lines after its raw JSON.]")
             if len(ptr) >= len(body):
                 continue
             out[i]["content"] = ptr
@@ -916,7 +985,7 @@ def compact_convo(msgs: List[Dict[str, Any]], llm, reserve: int = _ANSWER_RESERV
             h = keep // 2
             elided_n = len(body) - keep
             saved = _spill(spill_root, body, i, pinned)
-            where = (f"the whole thing is saved as {saved}"
+            where = (f"the whole thing is saved as {saved}" + _decoded_where(body)
                      if saved else "read it again in a smaller range if you need the middle")
             out[i]["content"] = (body[:h] +
                                  f"\n[… {elided_n} {_ELIDED_SIGIL} of your NEWEST result to leave "
@@ -949,6 +1018,28 @@ WINDOW_SEND_MARGIN = 256
 # grossly over the window, not one that tokenizes denser than 2.9; that residue is what the
 # server_cut path below still catches after the fact.
 PREFLIGHT_CPT = _CPT
+
+
+def preflight_cpt(llm) -> float:
+    """The chars-per-token the step-1 preflight divides by, for THIS model.
+
+    PREFLIGHT_CPT (2.9) is right for the tokenizer it was calibrated on and badly wrong for a
+    denser one: pub-being (llama3.1:8b) tokenizes its own prose at 3.67 chars/token and the tool
+    schemas at 3.92 (measured 2026-10-30, ollama `raw` prompt_eval_count). At 2.9 its step-1 seed
+    was estimated at 14,569 tokens when the server counted 9,806 for the same seed, so every explore
+    from 2026-10-27 07:46Z was refused before it was sent — 125 beats with no step (SAGE #582).
+    A family declares `preflight_chars_per_token` in its model config, from a measured ratio and
+    BELOW every measured value, so the guard still errs high. Absent, unreadable or implausible
+    (outside 1.5..8) -> PREFLIGHT_CPT, so no undeclared model changes behaviour."""
+    try:
+        v = llm._adapter.capabilities.preflight_chars_per_token
+    except AttributeError:
+        return PREFLIGHT_CPT
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return PREFLIGHT_CPT
+    return v if 1.5 <= v <= 8.0 else PREFLIGHT_CPT
 
 # A count far below a server-anchored estimate means the server truncated what was sent: the
 # server's prompt_eval_count is then of what survived its own cut, not of the list we sent.
@@ -1018,6 +1109,20 @@ def _retry_budget(llm, raw: Optional[dict] = None) -> int:
     if num_ctx <= 0 or prompt <= 0:
         return floor
     return max(floor, num_ctx - prompt - RETRY_MARGIN)
+
+
+def _window_left(llm, raw: Optional[dict] = None) -> int:
+    """Tokens the window has left after this prompt for a reply (num_ctx - prompt_eval_count -
+    RETRY_MARGIN), or a very large number when either count is unknown, so that an unknown
+    window never reads as a tight one."""
+    try:
+        num_ctx = int(getattr(llm, "num_ctx", None) or 0)
+        prompt = int((raw or {}).get("prompt_eval_count") or 0)
+    except (TypeError, ValueError):
+        return 1 << 30
+    if num_ctx <= 0 or prompt <= 0:
+        return 1 << 30
+    return num_ctx - prompt - RETRY_MARGIN
 
 
 class _no_think:
@@ -1452,9 +1557,9 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 _est, _cause = _est_tokens(_convo_chars(msgs), measured), "over_window"
                 if not _same_tail and _tail == _TAIL_USER:
                     # anchored on a count made WITHOUT the tool schemas, which this prompt carries
-                    _est = max(_est, (_convo_chars(msgs) + uncounted) / PREFLIGHT_CPT)
+                    _est = max(_est, (_convo_chars(msgs) + uncounted) / preflight_cpt(llm))
             else:
-                _est, _cause = (_convo_chars(msgs) + uncounted) / PREFLIGHT_CPT, "preflight"
+                _est, _cause = (_convo_chars(msgs) + uncounted) / preflight_cpt(llm), "preflight"
             if _est > _ctx - WINDOW_SEND_MARGIN:
                 return _window_full(_cause, int(_est), _ctx)
         retried = 0
@@ -1485,17 +1590,29 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 sent = budget
             content = resp.get("content", "") or ""
             calls = resp.get("tool_calls", []) or []
-        if not content and not calls:
+        # A REPLY THE WINDOW CUT IS NOT THE BEING'S LAST WORD (2026-10-30). The remedies below
+        # were reached only by an EMPTY turn, so a reply that had started and was then cut at the
+        # wall (prompt + eval == num_ctx, done_reason "length", no tool call) stood as the step's
+        # final answer: no retry, nothing recorded. mcnugget-being, gemma4:12b at num_ctx 16,384,
+        # the first five beats after #599 turned its thinking on: three ended this way, mid-
+        # sentence, at prompts of 14,428, 13,563 and 13,701, each beat stopping at 4-7 explore
+        # steps instead of 7-8. A cut with content gets the window-cut retry an empty one gets.
+        _raw0 = resp.get("raw") or {}
+        cut_reply = bool(content and not calls and _raw0.get("done_reason") == "length"
+                         and retry_cause_of(llm, _raw0) == "window")
+        if (not content and not calls) or cut_reply:
             # An empty turn is a harness signal, not a being's choice: say why on stderr
             # (budget exhausted in deliberation, adapter stripped everything, ...).
             import sys as _sys
             raw = resp.get("raw") or {}
             msg = raw.get("message") or {}
-            print(f"[tool-loop] EMPTY turn: done_reason={raw.get('done_reason')} "
+            print(f"[tool-loop] {'WINDOW-CUT reply' if cut_reply else 'EMPTY turn'}: "
+                  f"done_reason={raw.get('done_reason')} "
                   f"prompt_eval={raw.get('prompt_eval_count')} eval={raw.get('eval_count')} "
                   f"raw_content={str(msg.get('content', ''))[:200]!r} "
                   f"thinking={str(msg.get('thinking', ''))[:200]!r}", file=_sys.stderr)
-            _kept = keep_empty_thinking(getattr(client, "memory_root", None), raw, msg)
+            _kept = (None if cut_reply else
+                     keep_empty_thinking(getattr(client, "memory_root", None), raw, msg))
             if _kept:
                 print(f"[tool-loop] EMPTY turn's whole thinking kept: {_kept}", file=_sys.stderr)
             # Qwen3.8 (heretic) sometimes re-opens a think block even with think=false and
@@ -1563,7 +1680,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                               f"narrow range of it to reuse what you drafted rather than "
                               f"deriving it again, and draft long code in a scratch file "
                               f"(memory_write) rather than in your thinking. "
-                              if _kept else "")
+                              if _kept and empty_thinking_worth_naming(
+                                  raw, str(msg.get("thinking") or "")) else "")
                     _usage = (f"The provider reported {raw['eval_count']} output tokens"
                               if raw.get("eval_count") is not None else
                               "The provider did not report an output token count")
@@ -1598,7 +1716,12 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 from contextlib import ExitStack
                 with ExitStack() as _stack:
                     budget = _stack.enter_context(_retry_room(llm, _retry_budget(llm, _budget_raw)))
-                    unthought = bool(thought_only and _stack.enter_context(_no_think(llm)))
+                    # NO ROOM TO THINK AND ANSWER: a cut reply whose retry has less window left than
+                    # one thinking reply's budget would only think into the same wall again (the
+                    # cuts above left 1.9-2.8k tokens, against a 3,000 think budget), so that one
+                    # retry answers without thinking. With room enough, thinking is left alone.
+                    _tight = bool(cut_reply and sent and _window_left(llm, _budget_raw) < int(sent))
+                    unthought = bool((thought_only or _tight) and _stack.enter_context(_no_think(llm)))
                     print(f"[tool-loop] retrying once with num_predict={budget}"
                           f"{' , thinking OFF and a nudge' if unthought else ''} "
                           f"(num_ctx={getattr(llm, 'num_ctx', None)} prompt_eval={raw.get('prompt_eval_count')})",

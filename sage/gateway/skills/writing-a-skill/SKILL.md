@@ -19,5 +19,9 @@ what did not work. The skills that match your state are listed at the top of the
 Writing the same name again replaces it; the earlier version is kept in skills_log.jsonl. Fleet skills
 (shipped with SAGE) are read-only, so yours need names of their own.
 
+**When one of yours turns out wrong.** If you try its steps and they don't do what it says, rewrite it with
+what actually worked. If nothing in it holds, `skill name=<name> retire=true why=<what you found>` takes it
+off your list; its whole text stays in skills_log.jsonl.
+
 **When to write one.** After you worked something out the long way, and expect to meet it again. A skill
 holds HOW; `settle` holds WHAT you concluded. They work together.

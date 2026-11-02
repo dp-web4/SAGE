@@ -101,7 +101,7 @@ def test_a_when_word_ending_in_punctuation_matches_what_follows_it():
 
 def test_the_index_stays_within_its_budget_and_says_how_many_more(tmp_path):
     for i in range(40):
-        _write(tmp_path, name=f"probe-{i:02d}", description="x" * 200)
+        _write(tmp_path, name=f"probe-{i:02d}", description="x" * 200, distinct="true")   # 40 alike on purpose
     block = sk.render(tmp_path, "")
     assert len(block) <= sk.INDEX_CHARS + 200 and "more (skill with no arguments lists them all)" in block
 
@@ -261,12 +261,124 @@ def test_a_filed_request_run_is_not_reported_as_worked():
                           (_I("request_run", path="a.py"), _E(True, "filed"))]) is None
 
 
+def test_a_refused_game_probe_then_a_corrected_one_is_worked_out():
+    """legion-being, 2026-10-28: a probe refused for its shape, then the corrected probe on the same game, was the
+    beat's real discovery, and the notice did not count `game`."""
+    refused = _E(False, "gate.raised: ValueError: game probe 1: LOOK bounds are INCLUSIVE ... at most 16x16")
+    said = sk.worked_out([(_I("game", game="g1", probes='[["LOOK", 40, 0, 63, 24]]'), refused),
+                          (_I("game", game="g1", probes='[["LOOK", 40, 0, 55, 15]]'), _E(True, {"looks": []}))])
+    assert said and "`game g1` failed 1 time and then worked, on try 2" in said
+    assert sk.worked_out([(_I("game", game="g1"), refused), (_I("game", game="g2"), _E(True, {}))]) is None, \
+        "another game is not the same task"
+    assert sk.worked_out([(_I("game", game="g1"), _E(True, {})), (_I("game", game="g1"), _E(True, {}))]) is None
+
+
+def test_naming_the_default_game_and_omitting_it_are_one_target():
+    """mcnugget's #588 review: `game` is optional (default ft09), so a refused call that names the default and a
+    corrected one that omits it are the same task."""
+    for first, second in (({"game": "ft09"}, {}), ({}, {"game": "ft09"}), ({"game": None}, {"game": " ft09 "})):
+        said = sk.worked_out([(_I("game", **first), _E(False, "gate.raised: ValueError: game probe 1: ...")),
+                              (_I("game", **second), _E(True, {}))])
+        assert said and "`game ft09` failed 1 time" in said, (first, second)
+
+
 def test_worked_out_counts_the_last_struggle_and_one_spelling_of_a_path():
     said = sk.worked_out([(_I("run", path="a.py"), _E(True, {"exit": 1})), (_I("run", path="a.py"), _E(True, {"exit": 0})),
                           (_I("run", path="a.py"), _E(True, {"exit": 1})), (_I("run", path="a.py"), _E(True, {"exit": 0}))])
     assert "failed 1 time and then worked, on try 2" in said
     assert "`run a.py` failed 1 time" in sk.worked_out([(_I("run", path="./a.py"), _E(True, {"exit": 1})),
                                                        (_I("run", path="a.py"), _E(True, {"exit": 0}))])
+
+
+def test_a_skill_of_its_own_can_be_retired_with_its_text_kept(tmp_path):
+    # dp, 2026-10-28: "does it have ways to update or remove skills?" It could replace one, never remove one.
+    _write(tmp_path)
+    ok, msg, changed = sk.skill(tmp_path, {"name": "probe-skill", "retire": "true", "why": "the steps did not work"})
+    assert ok and changed and "retired your skill probe-skill" in msg
+    assert "probe-skill" not in [s["name"] for s in sk.index(tmp_path)]
+    assert not (tmp_path / sk.OWN_DIR / "probe-skill").exists()
+    last = json.loads((tmp_path / sk.SKILLS_LOG).read_text().splitlines()[-1])
+    assert last["op"] == "retire" and "2. note what you saw" in last["from"] and last["why"] == "the steps did not work"
+    ok, msg, _ = _write(tmp_path, body="new steps")              # the name is free again
+    assert ok and "wrote your skill probe-skill" in msg
+
+
+def test_a_new_skill_close_to_one_it_has_is_refused_with_the_id_and_a_distinct_one_is_not(tmp_path):
+    """legion-being, 2026-10-30: it wrote elided-result-recovery a day after reading-elided-tool-results, rewriting in
+    that beat the parser the first skill already held (#598 named the close one after the write). sprout-being,
+    10-30..11-01: 4 named after the write, 0 merged or retired; now the write is refused with the id."""
+    first = {"name": "reading-elided-tool-results", "when": "elided, tool result, scratch/elided, raw_decode",
+             "description": "Re-read a tool result the harness elided from your window, and parse its JSON payload.",
+             "body": "Read scratch/elided/<file>, find the first '{', json.JSONDecoder().raw_decode(raw, i)."}
+    assert sk.skill(tmp_path, first)[0]
+    second = {"name": "elided-result-recovery", "when": "elided, tool result, scratch/elided, full result",
+              "description": "Recover the full tool result when the harness elided it from your window.",
+              "body": "Open the scratch/elided file it names and parse it."}
+    before = sorted(p.name for p in tmp_path.rglob("*"))
+    ok, msg, changed = sk.skill(tmp_path, second)
+    assert not ok and not changed and "reads close to your skill reading-elided-tool-results" in msg, msg
+    assert "skill name=reading-elided-tool-results" in msg and "distinct='true'" in msg, msg
+    assert "its steps and your newest ones together" in msg, "a merge keeps the old steps: a write is a replace"
+    assert sorted(p.name for p in tmp_path.rglob("*")) == before, "a refused write changes nothing"
+    ok, msg, changed = sk.skill(tmp_path, dict(second, distinct="true"))
+    assert ok and changed and "wrote your skill elided-result-recovery" in msg
+    assert "differs from reading-elided-tool-results" in msg
+    last = json.loads((tmp_path / sk.SKILLS_LOG).read_text().splitlines()[-1])
+    assert last["distinct"] == "reading-elided-tool-results", "a write past the refusal is countable from the log"
+    assert "with its steps and your newest ones together" not in msg
+    ok, msg, _ = sk.skill(tmp_path, {"name": "tile-a-board-probe", "when": "LOOK, probe, 16x16",
+                                     "description": "Split a board into 16x16 windows, at most 8 per call.",
+                                     "body": "x1 = x0 + 15; two calls for a 64x64 board."})
+    assert ok and "reads close to" not in msg, "a distinct procedure names nothing"
+    ok, msg, _ = sk.skill(tmp_path, dict(first, body="Read the file; raw_decode from the first '{'."))
+    assert ok and "replaced" in msg and "reads close to" not in msg, "replacing a skill is not writing a new one"
+
+
+def test_a_close_fleet_skill_does_not_hide_a_close_own_one(tmp_path, monkeypatch):
+    """pub, cbp, mcnugget on #617: _close_skill took only the top hit, so a fleet skill ranked over a close own one
+    turned the refusal into a fleet note and the own duplicate was written."""
+    own = {"name": "reading-elided-tool-results", "when": "elided, tool result",
+           "description": "Re-read a tool result the harness elided.", "body": "Read scratch/elided/<file>."}
+    assert sk.skill(tmp_path, own)[0]
+    fleet = {"name": "fleet-elided", "description": "x", "when": "", "source": "fleet", "body": "", "path": None}
+    mine = [s for s in sk.index(tmp_path) if s["source"] != "fleet"]
+    monkeypatch.setattr(sk, "index", lambda inst: [fleet] + mine)
+    from sage.gateway import relevance
+    monkeypatch.setattr(relevance.Ranker, "related", lambda self, q, t=0, among=None: [(0.9, 0), (0.5, 1)])
+    close = sk._close_skill(tmp_path, "elided-result-recovery", "Recover an elided tool result.", "")
+    assert close["name"] == "reading-elided-tool-results", close
+    monkeypatch.setattr(relevance.Ranker, "related", lambda self, q, t=0, among=None: [(0.9, 0)])
+    assert sk._close_skill(tmp_path, "elided-result-recovery", "x", "")["name"] == "fleet-elided"
+
+
+@pytest.mark.parametrize("name,says", [("getting-code-run", "fleet skill"), ("no-such-skill", "no skill called"),
+                                       ("Bad Name", "not a skill name")])
+def test_a_refused_retire_says_why_and_changes_nothing(tmp_path, name, says):
+    _write(tmp_path)
+    before = sorted(p.name for p in tmp_path.rglob("*"))
+    ok, msg, changed = sk.skill(tmp_path, {"name": name, "retire": "true"})
+    assert not ok and not changed and says in msg, msg
+    assert sorted(p.name for p in tmp_path.rglob("*")) == before
+
+
+def test_a_retire_that_cannot_be_logged_removes_nothing(tmp_path):
+    _write(tmp_path)
+    (tmp_path / sk.SKILLS_LOG).unlink()
+    (tmp_path / sk.SKILLS_LOG).mkdir()
+    ok, msg, _ = sk.skill(tmp_path, {"name": "probe-skill", "retire": "true"})
+    assert not ok and "skill stays" in msg and (tmp_path / sk.OWN_DIR / "probe-skill" / sk.SKILL_FILE).exists()
+
+
+def test_the_gate_declares_what_a_retire_touches(tmp_path):
+    from sage.gateway import being_gate_client as g
+    _write(tmp_path)
+    declared = set(g.skill_paths({"name": "probe-skill", "retire": "true"}, {"memory_root": str(tmp_path)}))
+    before = {str(p.resolve()) for p in tmp_path.rglob("*")}
+    assert sk.skill(tmp_path, {"name": "probe-skill", "retire": "true"})[0]
+    after = {str(p.resolve()) for p in tmp_path.rglob("*")}
+    gone = before - after
+    assert gone and gone <= declared, gone - declared
+    assert str((tmp_path / sk.SKILLS_LOG).resolve()) in declared
 
 
 def test_reflection_names_skill_and_offers_it():
