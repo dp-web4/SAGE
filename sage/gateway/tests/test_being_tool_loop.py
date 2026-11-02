@@ -403,6 +403,7 @@ def test_empty_object_schema_rejects_extra_unless_explicitly_open():
     assert _check_args('{}', closed) == ({}, None)
     assert _check_args('{"value":1}', dict(closed, additionalProperties=True)) == ({"value": 1}, None)
     assert _check_args('{"value":1}', {"type": "object"}) == ({"value": 1}, None)
+    assert _check_args('{"value":1}', {"type": "object", "additionalProperties": False})[1] is not None
 
 
 def test_length_retry_gets_the_room_the_window_has_left_via_the_override():

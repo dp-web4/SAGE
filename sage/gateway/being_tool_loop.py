@@ -1285,7 +1285,7 @@ def _violation(value, schema: dict, where: str) -> Optional[str]:
         for k in schema.get("required") or []:
             if k not in value or (isinstance(value[k], str) and not value[k].strip()):
                 return f"'{k}' is required and was empty"
-        if props and schema.get("additionalProperties", False) is False:
+        if ("properties" in schema or "additionalProperties" in schema) and schema.get("additionalProperties", False) is False:
             extra = [k for k in value if k not in props]
             if extra:
                 return f"'{extra[0]}' is not an argument of this tool"
