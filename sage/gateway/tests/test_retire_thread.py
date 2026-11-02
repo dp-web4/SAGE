@@ -197,6 +197,52 @@ def test_a_failed_settled_commit_rolls_back_within_the_declared_paths(tmp_path, 
     assert w.paths <= declared, w.paths - declared
 
 
+def test_a_failed_settled_rollback_preserves_recovery_evidence(tmp_path, monkeypatch):
+    """A failed commit can mean the settled replacement happened but undo failed."""
+    h = _home(tmp_path)
+    args = {"words": "widget", "reason": "r"}
+    original = (h / "settled.json").read_bytes()
+
+    def commit_with_failed_undo(instance, entries, nxt, log, now, msg):
+        # Model the documented _commit outcome where the replacement landed,
+        # logging failed, and restoring the prior settled bytes failed too.
+        (Path(instance) / st.SETTLED_FILE).write_text(json.dumps({"next": nxt, "entries": entries}))
+        return False, "the change was made but could not be recorded and could not be undone"
+
+    monkeypatch.setattr(st, "_commit", commit_with_failed_undo)
+    ok, msg, changed = bt.retire_thread(h, args)
+    assert not ok and (h / "settled.json").read_bytes() != original
+    assert (h / bt.archive_name(args)).exists(), "partial-effect recovery evidence must survive"
+    assert "nothing was retired" not in msg.lower(), "unknown or partial effect is not a no-op"
+    assert changed, "caller must not record a partial effect as unchanged"
+
+
+def test_real_settled_log_and_restore_failures_do_not_erase_recovery(tmp_path, monkeypatch):
+    h = _home(tmp_path)
+    args = {"words": "widget", "reason": "r"}
+    original = (h / st.SETTLED_FILE).read_bytes()
+    real_open, real_write_bytes = builtins.open, Path.write_bytes
+
+    def fail_log(path, mode="r", *args, **kwargs):
+        if Path(path) == h / st.SETTLED_LOG and mode == "a":
+            raise OSError("synthetic audit-log failure")
+        return real_open(path, mode, *args, **kwargs)
+
+    def fail_settled_restore(path, data):
+        if path == h / st.SETTLED_FILE:
+            raise OSError("synthetic restore failure")
+        return real_write_bytes(path, data)
+
+    monkeypatch.setattr(builtins, "open", fail_log)
+    monkeypatch.setattr(Path, "write_bytes", fail_settled_restore)
+    ok, msg, changed = bt.retire_thread(h, args)
+    assert not ok and (h / st.SETTLED_FILE).read_bytes() != original
+    assert "could not be undone" in msg
+    assert (h / bt.archive_name(args)).exists(), "partial-effect recovery evidence must survive"
+    assert "nothing was retired" not in msg.lower()
+    assert changed
+
+
 def test_the_verb_retires_and_witnesses():
     FakeMcp.calls = []
     root = Path(tempfile.mkdtemp(prefix="rt-"))
