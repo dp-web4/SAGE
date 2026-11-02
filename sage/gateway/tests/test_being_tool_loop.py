@@ -436,6 +436,15 @@ def test_python_salvage_does_not_promote_quoted_or_rebound_names(body):
     assert salvage_tool_calls('```python\n' + body + '\n```', ollama_tools(["memory_write"])) == []
 
 
+def test_python_salvage_accepts_explicit_tool_namespace_imports():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    tools = ollama_tools(["memory_write"])
+    body = 'import tools\ntools.memory_write(path="notes/x", content="draft")'
+    calls = salvage_tool_calls('```python\n' + body + '\n```', tools)
+    assert len(calls) == 1 and calls[0]["function"]["name"] == "memory_write"
+
+
 def test_run_ollama_tool_turn_gates_a_salvaged_call_and_records_it():
     from sage.gateway.being_gate_client import ollama_tools
     from sage.gateway.being_tool_loop import run_ollama_tool_turn
