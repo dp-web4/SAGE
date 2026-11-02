@@ -1429,3 +1429,48 @@ def test_turn_capture_is_not_the_beings_to_set(tmp_path):
     from sage.gateway import being_params as bp
     (tmp_path / "tuned.json").write_text(_json.dumps({"turn_capture": "on"}))
     assert bp.value(str(tmp_path), "turn_capture") == "off"
+
+
+def _capture_test_turn(root):
+    import json
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    class FakeLLM:
+        def get_chat_response(self, messages, **kwargs):
+            return {"content": "done", "tool_calls": []}
+
+    (root / "instance.json").write_text(json.dumps({"params": {"turn_capture": "on"}}))
+    client = _client(OK_DISPATCH)
+    client.memory_root = str(root)
+    return run_ollama_tool_turn(client, FakeLLM(), [{"role": "user", "content": "synthetic"}])
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file-mode contract")
+def test_turn_capture_creates_private_file_under_permissive_umask(tmp_path):
+    old_umask = os.umask(0o022)
+    try:
+        result = _capture_test_turn(tmp_path)
+    finally:
+        os.umask(old_umask)
+    assert result.reply == "done"
+    assert (tmp_path / "turn_capture.jsonl").stat().st_mode & 0o077 == 0
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX symlink and file-mode contract")
+def test_turn_capture_refuses_symlink_without_touching_target(tmp_path):
+    target = tmp_path / "other.txt"
+    target.write_text("unchanged")
+    (tmp_path / "turn_capture.jsonl").symlink_to(target)
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done", "capture failure must not prevent the turn"
+    assert target.read_text() == "unchanged"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file-mode contract")
+def test_turn_capture_refuses_existing_world_readable_capture(tmp_path):
+    capture = tmp_path / "turn_capture.jsonl"
+    capture.write_text("unchanged\n")
+    capture.chmod(0o644)
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert capture.read_text() == "unchanged\n"
