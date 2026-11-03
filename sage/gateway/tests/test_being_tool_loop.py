@@ -715,6 +715,27 @@ def test_salvage_keeps_two_valid_fenced_calls_in_order():
     assert [call["function"]["arguments"]["path"] for call in calls] == ["notes/x", "notes/y"]
 
 
+@pytest.mark.parametrize("extra", ["do not execute", None, 3, {"note": "example only"},
+                                  {"name": "not_offered", "arguments": {}}])
+@pytest.mark.parametrize("extra_first", [True, False])
+def test_salvage_refuses_mixed_json_arrays_instead_of_dropping_elements(extra, extra_first):
+    import json
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    call = {"name": "recall", "arguments": {"query": "synthetic"}}
+    members = [extra, call] if extra_first else [call, extra]
+    assert salvage_tool_calls(json.dumps(members), ollama_tools(["recall"])) == []
+
+
+def test_salvage_keeps_an_array_of_only_recognized_calls():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    body = '[{"name":"recall","arguments":{"query":"one"}},' \
+           '{"name":"recall","arguments":{"query":"two"}}]'
+    result = salvage_tool_calls(body, ollama_tools(["recall"]))
+    assert [call["function"]["arguments"]["query"] for call in result] == ["one", "two"]
+
+
 @pytest.mark.parametrize("first", [
     '```json\n{"name":"memory_write","arguments":{"path":"notes/x","content":"first"}}\n```',
     '```python\nmemory_write(path="notes/x", content="first")\n```',
