@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ast
 import json
+import math
 import os
 import re
 import stat
@@ -33,6 +34,99 @@ GenerateFn = Callable[[List[Dict[str, Any]]], Dict[str, Any]]
 # A provisional per-file ceiling, not a retention or rotation policy. An
 # operator needs an explicit way to archive/remove captures after the limit.
 _TURN_CAPTURE_MAX_BYTES = 16 * 1024 * 1024
+_TURN_CAPTURE_MAX_NODES = 100_000
+_TURN_CAPTURE_MAX_DEPTH = 64
+
+
+def _serialize_bounded_turn_capture(value: Any) -> str:
+    """Build one complete ASCII JSON line under explicit byte and structure limits.
+
+    Strings are escaped in small chunks; unsupported objects are refused instead
+    of calling arbitrary ``str`` methods. This is a capture failure, not a
+    truncated or silently coerced replay record. Limits remain policy proposals.
+    """
+    output = bytearray()
+    active: set[int] = set()
+    nodes = 0
+
+    def put(piece: str) -> None:
+        encoded = piece.encode("ascii")
+        if len(output) + len(encoded) + 1 > _TURN_CAPTURE_MAX_BYTES:  # reserve newline
+            raise OSError("turn capture byte limit exceeded")
+        output.extend(encoded)
+
+    def emit_string(text: str) -> None:
+        put('"')
+        if len(text) > _TURN_CAPTURE_MAX_BYTES - len(output) - 1:
+            raise OSError("turn capture byte limit exceeded")
+        for start in range(0, len(text), 1024):
+            put(json.dumps(text[start:start + 1024], ensure_ascii=True)[1:-1])
+        put('"')
+
+    def scalar_text(item: Any) -> str:
+        if item is None:
+            return "null"
+        if type(item) is bool:
+            return "true" if item else "false"
+        if type(item) is int:
+            # A lower bound on decimal length: 301029/1e6 < log10(2).
+            # Refuse obviously oversized integers before decimal conversion,
+            # without rejecting a valid exact-limit integer by rounding up.
+            bits = item.bit_length()
+            digits_lower = max(0, bits - 1) * 301029 // 1_000_000 + 1
+            available = _TURN_CAPTURE_MAX_BYTES - len(output) - 1
+            if digits_lower + (1 if item < 0 else 0) > available:
+                raise OSError("turn capture byte limit exceeded")
+            return str(item)
+        if type(item) is float:
+            if not math.isfinite(item):
+                raise ValueError("non-finite turn capture value")
+            return repr(item)
+        raise TypeError("unsupported turn capture value")
+
+    def emit(item: Any, depth: int) -> None:
+        nonlocal nodes
+        nodes += 1
+        if nodes > _TURN_CAPTURE_MAX_NODES or depth > _TURN_CAPTURE_MAX_DEPTH:
+            raise OSError("turn capture structure limit exceeded")
+        if type(item) is str:
+            emit_string(item)
+            return
+        if type(item) not in (dict, list, tuple):
+            put(scalar_text(item))
+            return
+        identity = id(item)
+        if identity in active:
+            raise ValueError("cyclic turn capture value")
+        active.add(identity)
+        try:
+            if type(item) is dict:
+                put("{")
+                seen_keys: set[str] = set()
+                for index, (key, child) in enumerate(item.items()):
+                    if index:
+                        put(",")
+                    key_text = key if type(key) is str else scalar_text(key)
+                    if key_text in seen_keys:
+                        raise ValueError("ambiguous turn capture keys")
+                    seen_keys.add(key_text)
+                    emit_string(key_text)
+                    put(":")
+                    emit(child, depth + 1)
+                put("}")
+            else:
+                put("[")
+                for index, child in enumerate(item):
+                    if index:
+                        put(",")
+                    emit(child, depth + 1)
+                put("]")
+        finally:
+            active.remove(identity)
+
+    emit(value, 0)
+    output.extend(b"\n")
+    return output.decode("ascii")
 
 
 def _append_private_turn_capture(path: Path, text: str) -> None:
@@ -1350,7 +1444,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                        "reply": {"content": r.get("content"), "tool_calls": r.get("tool_calls"),
                                  "thinking": ((r.get("raw") or {}).get("message") or {}).get("thinking")},
                        "attempt": attempt}
-                _append_private_turn_capture(capture, json.dumps(row, default=str) + "\n")
+                _append_private_turn_capture(capture, _serialize_bounded_turn_capture(row))
                 capture_stats["written"] += 1
             except Exception as _e:
                 capture_stats["failed"] += 1
