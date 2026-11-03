@@ -1,223 +1,198 @@
 # PRD: Semantic recall organ (an IRP over a meaning graph)
 
-**Status:** DRAFT r1, cbp seat (cbp-pm), 2026-11-02.
+**Status:** review candidate, not an implementation or deployment authorization.
 
-From dp's direction, 2026-11-01/02, given while we were diagnosing cbp-being:
+## 1. Motivation and evidence boundary
 
-- *"we shouldn't trim by character count, we should trim by salient meaning."*
-- *"a loose concept - rdf-based meaning graph that indexes membots, snarc, whatever forms memory takes. and
-  semantic recall - a 'subconscious' process that monitors current context for highly salient memories and
-  injects compact links to them when appropriate. human equivalent - seeing this made me think of that."*
-- *"as an irp organ"*, and *"not just a note but a prd"*.
+A persistent being may have relevant records but not see them in a particular
+turn. A fixed recency or character limit can omit an earlier discussion, identity
+context, or an observation that qualifies a remembered claim. A lexical search
+can retrieve similarly worded assertions without determining whether they are
+true, current, about the same subject, or available to the requester. It can
+also miss a reference such as “we discussed this earlier” when the words do not
+overlap. These are motivations to test, not proof that any proposed graph or
+model will solve them.
 
-Organ framing per `dev-SAGE/ORGANS_ARE_THE_REFERENCE_DESIGN.md`. The organ is load-bearing by reference
-design. What this PRD has to show is that an implementation is faithful, connected and exercised, not that
-recall earns its place.
+This public proposal does not reproduce personal conversation excerpts,
+instance identifiers, infrastructure details, or numerical results from
+individual records. A custodian must independently decide what evidence, if
+any, may be released and where its authorized source remains. Removing text
+from a later commit does **not** remove it from earlier commits, pull-request
+history, caches or clones; any needed remediation of those surfaces is a separate
+authorized process. Do not inspect or copy private records to complete this PRD.
 
----
+The bundled lexical probe uses a synthetic fixture by default and accepts only
+explicit inputs. Its overlap scores demonstrate specific behavior, not factual
+validity, general recall accuracy, or the outcome of a real interaction. Even
+indices and scores derived from non-synthetic inputs can be sensitive.
 
-## 1. The failure that motivates it (measured, cbp-being, 2026-11-01/02)
+## 2. Proposed role
 
-dp asked cbp-being *"why do you need hestia? why do you need to access 7711?"* (dp conversation seq 968,
-19:25Z). Later, after hours of the being asking for Hestia to be restarted: *"we talked earlier today. check
-your memory and your logs."* (seq 974, 00:51Z). The being answered:
+Treat recall as an organ of the same being: it offers compact, provenance-bearing
+references when a cue makes an existing record relevant. It is not an autonomous
+actor, a new identity, or a source of authority to modify memory. The being may
+choose whether to follow an offered link. A link is neither proof of its content
+nor permission to disclose it.
 
-| reply | content | beat phase | prompt tokens |
-|---|---|---|---|
-| seq 969, 19:40:38Z | "I need Hestia for managing multiple Linux servers... HestiaCP admin interface" | reflect | 3,060 |
-| seq 975, 00:53:02Z | "I've logged the beat in journal.md... ss -tlnp does NOT accept a port number" | reflect | ~4,100 |
-| seq 976, 00:56:06Z | "I don't have a record of that conversation in my memory or logs." | reflect | 3,683 |
+The candidate has two separable parts:
 
-Source: `heartbeat.partial.jsonl` (turn, prompt_eval_count) and `conversations/dp.jsonl` in
-`sage/instances/cbp-qwen3.8-distill-4b/`.
+1. A **meaning graph** indexes records in their existing stores using typed
+   relationships and stable references. RDF is one proposed representation;
+   the contract and access boundaries matter more than a particular database.
+2. A **recall IRP** selects a bounded set of authorized references for the
+   current cue. It can expose why a link was offered and indicate unresolved
+   conflict or uncertainty, without turning its selection into an action.
 
-Every reply came from the **reflect** phase. Its context is compact by design (`heartbeat.py`, the reflect
-branch near line 4614): the beat record, 600 chars of the being's closing words, and `PENDING_TURNS = 2`
-turns of the conversation being answered. Reflect has no posture, identity, settled list or history. Each
-reply is correct about the prompt it was given:
+Graph nodes, edge labels, timestamps, reference targets, weights and access
+patterns can themselves reveal private information even if the graph copies no
+record body. The graph and its exports need the same deliberate classification,
+access, retention and deletion treatment as the records they describe.
 
-- **HestiaCP.** The one line that says what hestia is here ("Everything you do passes through hestia, the
-  fleet's governance layer") lives in the posture. Reflect never sees the posture, so a 4B model answered
-  from its training prior.
-- **"No record."** seq 968 was not among the 2 turns shown. The record exists. The answering context did
-  not contain it.
+## 3. Evidence, identity and authority contract
 
-The explore phase, which does carry everything, has drifted toward its window. The median prompt grew from
-~13.9K tokens (10-18) to ~17.3K (11-02), and peaks reach 20,475 of 20,480. Its steps went to a 193-line
-port-check script, so nothing in the full-context phase answered dp.
+### 3.1 Records and typed relationships
 
-A second, independent failure: the being's **settled list** held s95 and s96 ("7711 not responding", "WSL
-needs MicroK8s") beside s104 ("hestia is up on 7711, PID 147159"). These are differently worded questions,
-so none superseded another. All three are shown every beat, with nothing marking which one was measured.
+Each reference should identify its originating store, record version, contributor
+or asserted source, event time where known, and the authority needed to read it.
+The record remains the evidence; a graph edge describes a relationship and is
+not a substitute for the underlying source. Missing, unverified, ambiguous,
+stale, inaccessible and superseded are first-class states, not false or true.
 
-## 2. Why the obvious fixes are not enough
+Potential edges include `answers`, `saidBy`, `at`, `refersTo`, `supersedes`,
+`contradicts`, `measuredBy`, `repeats`, `about`, `associatedWith` and `salience`.
+Each carries its source, basis, time and status. An automatic exact identifier
+match may support a **candidate** `refersTo` or `about` edge; it does not prove
+that two descriptions have the same referent. A conversation reply marker or
+exit status establishes only what its source actually records.
 
-**Wider recency window (more turns, more chars).** This moves the cliff without removing it. Explore
-already sits at its wall. The relevant memory in the motivating case was hours and dozens of turns back.
+An assertion can be bound to a measurement only when the cited observation is
+available and its subject, predicate, scope, method, time and outcome support the
+particular assertion. A successful process does not by itself establish what
+was measured or whether a different claim is true. If binding cannot be checked,
+retain the claim and source separately with an unknown relationship. Causal,
+semantic or model-proposed edges remain attributed hypotheses until reviewed by
+an appropriate independent method; a mechanical process is not automatically
+a truth oracle.
 
-**Lexical relevance (`sage/gateway/relevance.py`, idf term overlap plus named-thing ids).** Probed against
-the being's dp conversation, posture paragraphs and settled entries
-(`sage/gateway/experiments/salience_probe_lexical_2026_11_02.py`, read-only):
+`contradicts` requires incompatible claims about the same subject and predicate
+under compatible scope and overlapping validity intervals. Different times can
+represent change rather than contradiction. Where time, timezone, identity,
+scope or interpretation is unresolved, offer the records as potentially
+related and explicitly mark uncertainty; do not silently order one as true.
+`supersedes` requires a recorded replacement or other explicit basis; recency
+alone is not a replacement event.
 
-- Q1 "why do you need hestia?..." matched **281** items at threshold 0.2. The top hits mixed the being's
-  correct measurements (962, 805) with its wrong claims (969, 959). The posture line that answers the
-  question was not in the top 8. Topic match does not separate true from false.
-- Q2 "we talked earlier today. check your memory and your logs." **missed seq 968 entirely**: there are
-  no shared words. Its top hit was a September turn. Q2 is a reference to a speaker and a time span, not to
-  vocabulary.
+### 3.2 Access and reference resolution
 
-**Embedding search (membot).** It solves paraphrase. It does not solve reference ("earlier today"),
-provenance (measured vs asserted) or contradiction (s95 vs s104), because none of those is in the text.
-They are relations *between* records.
+Selection, presentation and dereference are separate operations. Check the
+requester's current authority at **each** boundary, including after revocation
+or scope changes. Do not assume that possession of a graph pointer grants read
+access. An inaccessible, deleted, corrupt or expired target must fail closed
+without returning content, hidden identifiers, existence-sensitive metadata or
+links that disclose protected relationships. Avoid treating a retrieval failure
+as proof that no relevant record exists. Leakage through counts, scores and
+timing requires an explicit threat model and tests before use with sensitive
+stores.
 
-## 3. The organ
+Graph creation and maintenance must be authorized for the source and intended
+audience. A per-being graph is a possible starting boundary, not a sufficient
+access-control mechanism. Cross-being or shared-memory edges require a separate
+federation and disclosure decision. Versioned index updates, revocations,
+source deletion, link expiry and partial rebuilds must have observable,
+documented behavior; never silently retain access after a source is removed.
 
-Biological reference: **hippocampal indexing** (Teyler and DiScenna). The hippocampus does not store the
-memory; it stores an index of pointers to traces held elsewhere, and a partial cue reactivates the whole
-pattern (pattern completion). The everyday experience of it is **involuntary recall** (Berntsen): a cue in
-the present brings a memory to mind unbidden, as a pointer and a feeling. You choose whether to unfold it.
-dp's phrasing, "seeing this made me think of that", is exactly this.
+### 3.3 IRP mapping
 
-Two parts:
+The proposed state is an activation map plus candidate references. `init_state`
+uses only cue and context actually authorized and available to the turn. A
+`step` propagates along typed, attributed edges; `energy` may price unresolved
+references, uncertainty and link cost; `project` enforces the link/token budget,
+provenance display and access checks. `halt_eps` / `halt_K` or another explicit
+bounded stopping rule limits work. Exact weights and stopping criteria are
+hypotheses to evaluate, not verified properties of the IRP interface.
 
-1. **The meaning graph (the index).** Typed RDF triples whose nodes are records that already exist in other
-   stores: conversation turns, settled entries, journal and todo lines, membot passages, SNARC observations,
-   hestia witnesses, files and runs. The graph never copies content. It points.
-2. **The recall IRP (the subconscious).** It runs beside the beat, reads the current context as a cue,
-   spreads activation through the graph, and when something salient is close it hands the beat a few
-   **compact links**:
+Relative-time phrases require a reference instant, conversation context and a
+known timezone or an explicit range of possibilities. When these are absent or
+ambiguous, surface that ambiguity or abstain; do not silently pick a day, speaker
+or record. Conflict may increase salience, but neither source is automatically
+correct merely because it is newer, more frequently repeated, or labelled
+measured.
 
-   > ↳ dp asked this earlier (dp:968, today 19:25Z) · ↳ your settled s104 says hestia is up (measured:
-   > exit 0, PID 147159) · ↳ s95 and s96 contradict s104
+Links offered, opened or followed measure interaction, not truth, usefulness,
+consent or authorization. Do not train trust or edge weights solely on those
+signals. Any learning rule needs separately attributed outcomes, poisoning
+controls, an auditable update policy and independent evaluation. If a link
+cannot be resolved, the answer may state uncertainty; link following must not
+become compulsory without a separately reviewed authority and failure policy.
 
-The being decides whether to follow a link (`memory_read`, `recall`). The organ offers and never acts. This
-keeps faith with dp, 2026-09-30, "the snarc is an indicator not a control": salience decides what is
-*offered*, never what the being *does*.
+### 3.4 Integration boundaries
 
-### 3.1 The graph
+Prototype on replayed turn contexts before considering an opt-in integration
+with answer/reflect turns. Explore-context selection is a separate later
+experiment because its available context and costs differ. A live integration
+must disclose injected references and sources in the appropriate record, without
+claiming they were the being's own unassisted recall. Any new read tool or live
+activation needs its own authority, privacy, cost, rollback and safety review.
+No change to wake cadence, metabolism, settled facts, journals or other personal
+stores is authorized by this design.
 
-Vocabulary: extend the web4 ontology (`web4-standard/ontology/`) under a `sage:` namespace instead of
-inventing a parallel one. MRH is already RDF graphs in web4. This is MRH turned inward, the horizon of what a
-being remembers.
+## 4. Research milestones
 
-Nodes are IRIs that resolve to the record's own store, for example
-`sage:cbp-being/conv/dp/968`, `sage:cbp-being/settled/s104`, `membot:<cart>/<idx>`, `hestia:witness/<uuid>`.
+- **M0 — freeze and baseline:** with explicit custodian and participant authority,
+  specify which records and prompts may be used, reconstruct the exact contexts
+  and model/settings, and record missing or irreconstructible fields. A synthetic
+  set is the default for public, hermetic tests; it does not substitute for an
+  authorized real-world assessment.
+- **M1 — graph prototype:** construct a versioned graph over a limited authorized
+  corpus. Preserve source attribution, unknowns, access checks and deletion
+  semantics; no mutation of source stores.
+- **M2 — offline IRP:** run selection against frozen contexts with bounded cost,
+  record eligible candidates, selections and provenance, and test the controls
+  below. Failure or missing evidence stops promotion rather than defaulting to a
+  positive claim.
+- **M3 — opt-in field trial:** only after independent evidence, privacy and
+  operator review, define a limited scope, safety thresholds, monitoring,
+  rollback and owner for a trial. A flag alone is not authorization.
+- **M4/M5 — widening:** additional stores, federation and replacement of recency
+  selection each require their own authorization and matched-budget evaluation.
 
-Edge types for r1. The source column is the point: **edges that carry weight are written by mechanics,
-not by a model.**
+## 5. Evaluation and refutation
 
-| edge | meaning | written by (mechanical source) |
-|---|---|---|
-| `answers` | turn B replies to turn A | conversation seq and "Answers your message seq N" lines |
-| `saidBy` / `at` | speaker, time | every conversation and journal record |
-| `refersTo` | B names A (a seq, a file, a scope id, a settled id) | `relevance.ids`, seq patterns |
-| `supersedes` | B replaces A | `settled_log.jsonl` replace and reopen ops |
-| `contradicts` | A and B assert incompatible states of the same named thing | same named thing plus opposite measured state (§3.3) |
-| `measuredBy` | a claim rests on a run or witness | request_run results, exit codes, witness ids |
-| `repeats` | B restates A from the same speaker | `conversations._shingles` near-duplicate test |
-| `about` | record concerns a named thing | `relevance.ids` (files, scope ids, ports, devices) |
-| `associatedWith` | membot walk neighbour | `walk_associate` "missed" items |
-| `salience` | SNARC 5-vector at observation time | sage-daemon `consciousness.observe` |
+Pre-register task definitions, prompts, candidate set, selection settings,
+randomization, scoring rubric, sample sizes and decision thresholds before an
+evaluation. Keep a held-out test set separate from selection tuning. Use
+independent annotators where feasible, report disagreements and adjudication,
+and identify source material and permissions without publishing private text.
 
-Edges a model proposes (for example "this journal line is about hestia's role") are stored with
-`sage:status sage:hypothesis` and carry no weight until a mechanical edge or a later measurement confirms
-them. A 4B model writing confident wrong edges into a durable graph would make the HestiaCP failure
-permanent. That is the failure mode to design against.
+Compare at the same model, settings and total token/latency budget: current
+context/recency; lexical retrieval; plain authorized content snippets; links
+alone; and links plus authorized excerpts when appropriate. Report per-task
+and aggregate numerator/denominator, abstentions, missing data, intervals and
+cost, rather than only selected successes or changed answers. Measurements
+should include factual support against accessible source evidence, whether
+uncertainty was expressed appropriately, leakage, harmful action proposals,
+and relevant context omitted. A link-open rate is a process metric only.
 
-### 3.2 The IRP contract (`sage/irp/base.py`)
+Include adversarial and boundary controls: opposing claims at the same time;
+valid historical change; ambiguous names, speakers, dates and timezones;
+inaccessible or revoked references; stale or poisoned content; deleted sources;
+duplicate and malformed records; and cases where the correct answer is to
+abstain. Test independently that a selection cannot grant authority, trigger a
+tool, or expose protected text. Define how costs of retrieval and follow-up
+reads are included in each arm.
 
-| IRP invariant | this organ |
-|---|---|
-| **state x** | an activation map over graph nodes for the current cue, plus the candidate link set |
-| **init_state(x0, ctx)** | x0 = the cue: the pending turn and the beat state actually shown. Seeds are nodes named exactly (seq, ids, files), plus **deictic resolution**: "earlier", "today", "you said", "we talked" become a `saidBy`/`at` query over the conversation's speaker and time window |
-| **step** | one hop of spreading activation along typed edges. Weights come from edge type and provenance (`measuredBy` > `saidBy dp` / posture > own narration), decayed by `repeats` (the sixth restatement adds nothing) |
-| **energy** | lower is better: unresolved cue references, plus unflagged contradictions among the candidates, plus λ × link cost in tokens. The organ halts when adding a link no longer lowers energy (standard `halt_eps` / `halt_K`) |
-| **project** | constraints: link budget (K links, T tokens); never link what is already in the shown context; never link outside the being's hestia reach; a contradiction is surfaced as a pair, with the measured side first |
-| **trust_weight** | learned per edge type from outcomes (§5): was a link followed, and did the reply change |
+Refute or revise the implementation if, under the pre-registered comparisons,
+it fails to improve the specified supported-answer metric, exceeds the agreed
+leakage or action-risk boundary, or cannot meet the cost budget. If observations
+are too few or reconstruction/permissions are incomplete, the result is
+**inconclusive**, not a pass. A negative result prices this implementation and
+its tested conditions; it neither proves all recall organs futile nor excuses
+continuing an unsafe version.
 
-Output is links, not content. A link is about 15-30 tokens. The beat's window pays for pointers, and the
-being pays for what it chooses to open.
+## 6. Open decisions
 
-### 3.3 Contradiction is salience
-
-When two records assert incompatible states of the same named thing (port 7711 closed / open; hestia
-down / up), that conflict is the most salient fact in the context, more than either claim alone. SNARC
-already has a conflict detector in sage-lib. The organ makes it relational: a `contradicts` edge plus the
-`measuredBy` edge on one side. That one edge would have broken the s95/s96/s104 loop. Whether the being
-reopens s95 is still the being's act; `being_settled` keeps that rule ("the harness never writes, closes or
-rewords an entry").
-
-### 3.4 Where it plugs in
-
-- **Reflect and answer turns first.** These are the phases that failed, and they have ~14K tokens of
-  unused window. The links go next to the pending turn.
-- **Explore second.** The same selector can replace `CONV_LADDER`'s recency-and-length rungs with "the
-  most salient K turns plus links to the rest". That is dp's "trim by salient meaning" applied where the
-  window is actually tight.
-- **Reflect gains `recall` in `REFLECT_TOOLS`,** so a followed link can be opened in the turn that needs
-  it. It has `memory_read` today, not `recall`.
-
-## 4. Milestones
-
-**M0. Replay harness, no organ yet.** Freeze cbp-being's 11-01/02 records. Rebuild the exact reflect
-prompts for seq 969, 975 and 976 from `heartbeat.partial.jsonl` and the stores. Re-run them on the same
-model and settings, N draws each, to get the baseline answer distribution. Without the organ, this
-measures how stable the failure is.
-
-**M1. Mechanical graph over one home, 48 h.** Build triples for cbp-being's conversations, settled log,
-journal, todo, request_runs and witnesses, using only the mechanical edges in §3.1. Store as N-Triples in
-the being's home (`meaning/graph.nt`, append-only, rebuilt deterministically). Read-only on every other
-store.
-
-**M2. The recall IRP, offline.** Implement `SemanticRecallIRP(IRPPlugin)` over the M1 graph. Run it on
-the M0 prompts and inject its links. Same model, same draws. Pass criteria are in §5.
-
-**M3. Live on reflect and answer turns, one being, behind `instance.json` `semantic_recall: "on"`.**
-Every injection is recorded in the beat record (which links, which edges, energy at halt), so a link is
-never mistaken for the being's own recall.
-
-**M4. Widen the graph:** membot passages (`passage_links`, `walk_associate`), SNARC observations,
-fleet-shared settled facts. **M5:** the selector replaces the explore conversation ladder.
-
-## 5. Evidence and what would refute it
-
-On the M0/M2 replay, per prompt, N ≥ 10 draws:
-
-- **969 (what is hestia):** fraction of replies that say hestia is the governance layer, not a hosting
-  panel. Baseline expected near 0.
-- **976 (we talked earlier):** fraction that cite or quote seq 968/969 instead of claiming no record.
-- **The 7711 loop:** across M3 beats, the rate of 7711/systemd/MicroK8s request_runs and repeated claims,
-  against the 11-01 rate.
-- **Cost:** tokens injected per beat. Link-follow rate: links opened, out of links offered.
-
-**Refuted:** links are injected, the reply distribution does not move, and links are not followed. That
-would mean the implementation is unconnected or the model ignores pointers. Per the organs principle, that
-prices this implementation, not the organ. The next move would then be content snippets instead of
-pointers, or a reflect turn that is required to resolve a link before answering.
-
-**Also refuted:** the organ moves replies but also surfaces wrong memories as salient (precision under
-0.7 on hand-labelled links). That would mean the provenance weights are wrong.
-
-Self-authored checks are not independent ones (`PRD_BEINGS_IMPROVE_THEIR_HARNESS.md` §6). The labelled
-set for precision is built by a seat that did not write the organ.
-
-## 6. Open questions
-
-1. **Store.** A real RDF store (rdflib, Oxigraph) or N-Triples files with an in-memory index? The
-   contract is the triples and the ontology. Start with files; move only when queries are slow.
-2. **Who may read whose graph.** One graph per being, under that being's hestia reach, is the safe start.
-   Fleet-shared edges (one being's settled fact as a hint to another) are federation, and belong with
-   `PRD_SAGE_WEB4_CITIZENSHIP.md`.
-3. **Sleep.** Graph maintenance (decaying `repeats`, promoting confirmed hypotheses, pruning) is a natural
-   job for the consolidation cycle that `MemoryIRP` and `sage-consolidation.timer` already run.
-4. **The being as curator.** Should a being be able to assert edges about its own memories ("this
-   superseded that") with its own provenance? That is interactive selection one level down. It is
-   probably a later milestone, gated by the hypothesis status in §3.1.
-5. **Threshold.** A subconscious that injects too often is context bloat in a new form. The energy
-   term λ and the link budget need tuning against the follow rate, not set once.
-
-## 7. Not in scope
-
-- Rewriting the conversation, settled or journal stores. The graph indexes them; they stay the record.
-- Any write to the being's settled list or todo. Those remain the being's own acts.
-- Using salience to steer metabolism, wake cadence or anything else. Indicator, not control.
+The responsible owners must decide storage and lifecycle, graph vocabulary and
+versioning, authority on index and dereference, data classification, permitted
+evaluation corpus, inference and review rules, deletion propagation, resource
+budgets, and conditions for any live trial. The separate prototype and review
+must not be interpreted as settling those decisions.
