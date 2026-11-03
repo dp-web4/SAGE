@@ -30,22 +30,40 @@ from sage.gateway.being_gate_client import BeingGateClient, BeingIntent, ResultE
 # generate(messages) -> {"content": str, "intents": list[BeingIntent]}
 GenerateFn = Callable[[List[Dict[str, Any]]], Dict[str, Any]]
 
+# A provisional per-file ceiling, not a retention or rotation policy. An
+# operator needs an explicit way to archive/remove captures after the limit.
+_TURN_CAPTURE_MAX_BYTES = 16 * 1024 * 1024
+
 
 def _append_private_turn_capture(path: Path, text: str) -> None:
     """Append only to a private, single-link regular file without following its final symlink.
 
-    This is a local file-mode guard, not isolation from other processes with the
-    same user identity or a guarantee about ancestor-directory replacement.
+    The size check is serialized only against writers that use this same lock.
+    This is not isolation from processes with the same user identity, a guarantee
+    about ancestor-directory replacement, or a crash-atomic record protocol.
     """
     if os.name != "posix" or not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "geteuid"):
         raise OSError("private turn capture requires POSIX no-follow support")
+    # Reject before opening if the record cannot possibly fit, then measure the
+    # encoded bytes, not characters. The first check limits transient allocation.
+    if len(text) > _TURN_CAPTURE_MAX_BYTES:
+        raise OSError("turn capture byte limit exceeded")
+    encoded_size = len(text.encode("utf-8"))
+    if encoded_size > _TURN_CAPTURE_MAX_BYTES:
+        raise OSError("turn capture byte limit exceeded")
+    import fcntl
     flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK
     fd = os.open(path, flags, 0o600)
     try:
+        # Do not stall an agent turn behind a busy or crashed capture writer.
+        # Failure is reported by the caller; capture is best-effort, not proof.
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         info = os.fstat(fd)
         if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or
                 info.st_uid != os.geteuid() or info.st_mode & 0o077):
             raise OSError("turn capture is not a private, single-link regular file owned by this user")
+        if info.st_size + encoded_size > _TURN_CAPTURE_MAX_BYTES:
+            raise OSError("turn capture byte limit exceeded")
         with os.fdopen(fd, "a", encoding="utf-8") as stream:
             fd = -1
             stream.write(text)
@@ -73,6 +91,7 @@ class ToolTurnResult:
     placeholders: List[dict] = field(default_factory=list)   # a leaked-template reply retaken as a JSON act: original, basis, policy, retry-derived result
     window_full: Optional[dict] = None                     # the harness ended the tool phase: the next prompt would not fit the window
     seed_measured: Optional[tuple] = None                  # (prompt_eval_count, chars) of the first prompt the server counted whole: the next phase's anchor
+    capture_stats: Optional[Dict[str, int]] = None        # counts, not proof of crash durability or downstream collection
 
     @property
     def acted(self) -> bool:
@@ -1283,6 +1302,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             capture = Path(_root) / "turn_capture.jsonl"
     except Exception:
         capture = None
+    capture_stats = {"attempted": 0, "written": 0, "failed": 0} if capture is not None else None
     tools = tools if tools is not None else ollama_tools()
     # THE SCHEMAS THIS TURN ACTUALLY SENDS (#490). Step 1's preflight used _UNCOUNTED_CHARS, a constant
     # set when the schemas were ~11,700 chars; by 2026-10-19 the 35 verbs measured 26,649 (full) and
@@ -1312,6 +1332,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         response, attempt = generate_with_evidence(llm, messages, phase=phase, **kwargs)
         attempts.append(attempt)
         if capture is not None:
+            capture_stats["attempted"] += 1
             try:
                 r = response or {}
                 row = {"ts": time.time(), "model": getattr(llm, "model_name", None) or getattr(llm, "model", None),
@@ -1320,7 +1341,9 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                                  "thinking": ((r.get("raw") or {}).get("message") or {}).get("thinking")},
                        "attempt": attempt}
                 _append_private_turn_capture(capture, json.dumps(row, default=str) + "\n")
+                capture_stats["written"] += 1
             except Exception as _e:
+                capture_stats["failed"] += 1
                 import sys as _sys
                 print(f"[tool-loop] turn_capture failed: {type(_e).__name__}: {_e}", file=_sys.stderr)
         return response
@@ -1717,5 +1740,6 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     result.json_arg_failures = list(json_arg_failures)
     result.placeholders = list(placeholders)
     result.seed_measured = first_measured
+    result.capture_stats = capture_stats
 
     return result

@@ -1410,13 +1410,15 @@ def test_turn_capture_keeps_each_call_whole_only_when_the_seat_asks(tmp_path):
 
     c = _client(OK_DISPATCH)
     c.memory_root = str(tmp_path)
-    run_ollama_tool_turn(c, FakeLLM(), [{"role": "user", "content": "hi"}])
+    off_result = run_ollama_tool_turn(c, FakeLLM(), [{"role": "user", "content": "hi"}])
     assert not (tmp_path / "turn_capture.jsonl").exists(), "off by default"
+    assert off_result.capture_stats is None
 
     (tmp_path / "instance.json").write_text(_json.dumps({"params": {"turn_capture": "on"}}))
-    run_ollama_tool_turn(c, FakeLLM(), [{"role": "user", "content": "hi"}])
+    on_result = run_ollama_tool_turn(c, FakeLLM(), [{"role": "user", "content": "hi"}])
     rows = [_json.loads(l) for l in (tmp_path / "turn_capture.jsonl").read_text().splitlines()]
     assert len(rows) == 2
+    assert on_result.capture_stats == {"attempted": 2, "written": 2, "failed": 0}
     assert rows[0]["model"] == "fake:1b" and rows[0]["phase"] == "tools"
     assert rows[0]["messages"][-1]["content"] == "hi" and rows[0]["tools"]
     assert rows[0]["reply"]["tool_calls"][0]["function"]["name"] == "witness"
@@ -1515,6 +1517,17 @@ def test_turn_capture_refuses_oversized_single_record(tmp_path, monkeypatch):
     with pytest.raises(OSError, match="limit"):
         loop._append_private_turn_capture(capture, "12345")
     assert not capture.exists() or capture.read_bytes() == b""
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture locking contract")
+def test_turn_capture_limit_failure_is_visible_but_does_not_stop_turn(tmp_path, monkeypatch, capsys):
+    from sage.gateway import being_tool_loop as loop
+    monkeypatch.setattr(loop, "_TURN_CAPTURE_MAX_BYTES", 1, raising=False)
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert result.capture_stats == {"attempted": 1, "written": 0, "failed": 1}
+    assert "turn_capture failed: OSError: turn capture byte limit exceeded" in capsys.readouterr().err
+    assert not (tmp_path / "turn_capture.jsonl").exists()
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX capture locking contract")
