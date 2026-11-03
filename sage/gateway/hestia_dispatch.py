@@ -59,7 +59,7 @@ _PENDING_SCAN = 80
 SEAT_QUIET_S = 3 * 3600
 
 
-def _seat_quiet(turns, member: str, truncated: bool, now=None):
+def _seat_quiet(turns, member: str, seat_conv: str, truncated: bool, now=None):
     """A fact for the receipt when the seat has been silent SEAT_QUIET_S or more through the being's own
     requests; None otherwise. sprout-being, 2026-11-01..03: its seat said nothing for 48 h (the account
     behind it was at its usage limit). Every receipt said "the seat has been asked and woken", nothing
@@ -72,9 +72,11 @@ def _seat_quiet(turns, member: str, truncated: bool, now=None):
         if t.get("from") == member:
             asks_since += str(t.get("text", "")).startswith("[request_run] ")
             continue
-        last, asks_since = t, 0
-    away = ("A quiet seat is away, not stuck: there is nothing for you to restart, and no script can reach "
-            "it. Your requests stay here, and it answers them when it is back.")
+        if t.get("from") == seat_conv:
+            last, asks_since = t, 0
+        # Other speakers (including the operator) do not prove the seat replied.
+    away = ("A quiet seat may be away, not stuck: there is nothing for you to restart from "
+            "this request. Your requests stay here, and it can answer them when it is back.")
     if last is None:
         if not truncated or not asks_since:
             return None     # a new conversation, or one the being has not asked in: nothing to say
@@ -4484,7 +4486,7 @@ class HestiaF1aDispatcher:
         window = conv.recent(self.memory_root, seat_conv, limit=_PENDING_SCAN + 1)
         scan_truncated = len(window) > _PENDING_SCAN
         try:
-            seat_quiet = _seat_quiet(window[-_PENDING_SCAN:], self.member, scan_truncated)
+            seat_quiet = _seat_quiet(window[-_PENDING_SCAN:], self.member, seat_conv, scan_truncated)
         except Exception:
             seat_quiet = None
         for t in window[-_PENDING_SCAN:]:
@@ -4679,6 +4681,11 @@ class HestiaF1aDispatcher:
         note = ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
                 "a result. The seat may run it or decline, and either way it answers in "
                 f"'{seat_conv}'. Nothing is owed by you in the meantime.")
+        if seat_quiet:
+            note = ("The seat was asked and a wake was sent; no seat answer is visible in "
+                    "this conversation. NOTHING HAS RUN YET and this is not a result. "
+                    f"The seat can answer in '{seat_conv}' if it returns. "
+                    "Nothing is owed by you in the meantime.")
         if unchanged and not (said.result or {}).get("woke") and self._skips_answered_run_wake():
             # THE RECEIPT SAYS WHAT HAPPENED. Under answered_run_wake "skip" (per-instance,
             # recut of #154) an already-answered request is sent but wakes nobody; "asked and
