@@ -1562,6 +1562,27 @@ def test_turn_capture_refuses_to_append_to_an_incomplete_tail(tmp_path):
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX capture file contract")
+def test_incomplete_capture_tail_is_reported_in_turn_projection(tmp_path, capsys):
+    from sage.gateway.heartbeat import _turn_for_record
+    capture = tmp_path / "turn_capture.jsonl"
+    capture.write_bytes(b"{incomplete")
+    capture.chmod(0o600)
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert _turn_for_record(result)["capture_stats"] == {
+        "attempted": 1, "written": 0, "failed": 1, "durability": "not_established"}
+    assert "incomplete trailing record" in capsys.readouterr().err
+    assert capture.read_bytes() == b"{incomplete"
+
+
+def test_turn_capture_without_pread_refuses_to_create_file(tmp_path, monkeypatch):
+    monkeypatch.delattr(os, "pread", raising=False)
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert not (tmp_path / "turn_capture.jsonl").exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture file contract")
 def test_turn_capture_refuses_a_record_without_a_single_line_boundary(tmp_path):
     from sage.gateway import being_tool_loop as loop
     capture = tmp_path / "capture.jsonl"

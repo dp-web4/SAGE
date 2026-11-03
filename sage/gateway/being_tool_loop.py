@@ -42,8 +42,9 @@ def _append_private_turn_capture(path: Path, text: str) -> None:
     This is not isolation from processes with the same user identity, a guarantee
     about ancestor-directory replacement, or a crash-atomic record protocol.
     """
-    if os.name != "posix" or not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "geteuid"):
-        raise OSError("private turn capture requires POSIX no-follow support")
+    if (os.name != "posix" or not hasattr(os, "O_NOFOLLOW") or
+            not hasattr(os, "geteuid") or not hasattr(os, "pread")):
+        raise OSError("private turn capture requires POSIX no-follow and pread support")
     # Reject before opening if the record cannot possibly fit, then measure the
     # encoded bytes, not characters. The first check limits transient allocation.
     if len(text) > _TURN_CAPTURE_MAX_BYTES:
@@ -51,8 +52,12 @@ def _append_private_turn_capture(path: Path, text: str) -> None:
     encoded_size = len(text.encode("utf-8"))
     if encoded_size > _TURN_CAPTURE_MAX_BYTES:
         raise OSError("turn capture byte limit exceeded")
+    # The producer sends one JSON object per line; reject incomplete or
+    # multi-line fragments rather than manufacturing apparently valid rows.
+    if not text.endswith("\n") or "\n" in text[:-1]:
+        raise OSError("turn capture requires a single line boundary")
     import fcntl
-    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK
+    flags = os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK
     fd = os.open(path, flags, 0o600)
     try:
         # Do not stall an agent turn behind a busy or crashed capture writer.
@@ -64,6 +69,11 @@ def _append_private_turn_capture(path: Path, text: str) -> None:
             raise OSError("turn capture is not a private, single-link regular file owned by this user")
         if info.st_size + encoded_size > _TURN_CAPTURE_MAX_BYTES:
             raise OSError("turn capture byte limit exceeded")
+        # A failed/crashed append may have left an incomplete JSONL record. Do
+        # not erase it or join a later row to it. A trailing newline is only a
+        # framing check; it is not proof that earlier records are valid.
+        if info.st_size and os.pread(fd, 1, info.st_size - 1) != b"\n":
+            raise OSError("turn capture has an incomplete trailing record")
         with os.fdopen(fd, "a", encoding="utf-8") as stream:
             fd = -1
             stream.write(text)
