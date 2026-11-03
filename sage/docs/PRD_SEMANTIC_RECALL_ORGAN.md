@@ -111,6 +111,17 @@ provenance display and access checks. `halt_eps` / `halt_K` or another explicit
 bounded stopping rule limits work. Exact weights and stopping criteria are
 hypotheses to evaluate, not verified properties of the IRP interface.
 
+**Runner boundary:** the current `IRPPlugin.refine` initializes and evaluates a
+state before calling `project`; it can halt and return that state without ever
+projecting, and the first `step` receives it before projection. Passing
+`max_steps=0` falls back to the configured default rather than disabling work.
+Therefore `project` alone cannot enforce access at initialization, in history or
+on early return. An implementation must check authorization before populating or
+using the initial state, enforce it at every subsequent exposure and dereference,
+and test early halt, zero/invalid budget, revocation and failure. The base runner
+is not an access-control boundary. Synthetic controls exercise its present order;
+they do not implement or validate the proposed recall organ.
+
 Relative-time phrases require a reference instant, conversation context and a
 known timezone or an explicit range of possibilities. When these are absent or
 ambiguous, surface that ambiguity or abstain; do not silently pick a day, speaker
