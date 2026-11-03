@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import ast
 import json
+import math
 import os
 import re
+import stat
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,6 +30,150 @@ from sage.gateway.being_gate_client import BeingGateClient, BeingIntent, ResultE
 
 # generate(messages) -> {"content": str, "intents": list[BeingIntent]}
 GenerateFn = Callable[[List[Dict[str, Any]]], Dict[str, Any]]
+
+# A provisional per-file ceiling, not a retention or rotation policy. An
+# operator needs an explicit way to archive/remove captures after the limit.
+_TURN_CAPTURE_MAX_BYTES = 16 * 1024 * 1024
+_TURN_CAPTURE_MAX_NODES = 100_000
+_TURN_CAPTURE_MAX_DEPTH = 64
+
+
+def _serialize_bounded_turn_capture(value: Any) -> str:
+    """Build one complete ASCII JSON line under explicit byte and structure limits.
+
+    Strings are escaped in small chunks; unsupported objects are refused instead
+    of calling arbitrary ``str`` methods. This is a capture failure, not a
+    truncated or silently coerced replay record. Limits remain policy proposals.
+    """
+    output = bytearray()
+    active: set[int] = set()
+    nodes = 0
+
+    def put(piece: str) -> None:
+        encoded = piece.encode("ascii")
+        if len(output) + len(encoded) + 1 > _TURN_CAPTURE_MAX_BYTES:  # reserve newline
+            raise OSError("turn capture byte limit exceeded")
+        output.extend(encoded)
+
+    def emit_string(text: str) -> None:
+        put('"')
+        if len(text) > _TURN_CAPTURE_MAX_BYTES - len(output) - 1:
+            raise OSError("turn capture byte limit exceeded")
+        for start in range(0, len(text), 1024):
+            put(json.dumps(text[start:start + 1024], ensure_ascii=True)[1:-1])
+        put('"')
+
+    def scalar_text(item: Any) -> str:
+        if item is None:
+            return "null"
+        if type(item) is bool:
+            return "true" if item else "false"
+        if type(item) is int:
+            # A lower bound on decimal length: 301029/1e6 < log10(2).
+            # Refuse obviously oversized integers before decimal conversion,
+            # without rejecting a valid exact-limit integer by rounding up.
+            bits = item.bit_length()
+            digits_lower = max(0, bits - 1) * 301029 // 1_000_000 + 1
+            available = _TURN_CAPTURE_MAX_BYTES - len(output) - 1
+            if digits_lower + (1 if item < 0 else 0) > available:
+                raise OSError("turn capture byte limit exceeded")
+            return str(item)
+        if type(item) is float:
+            if not math.isfinite(item):
+                raise ValueError("non-finite turn capture value")
+            return repr(item)
+        raise TypeError("unsupported turn capture value")
+
+    def emit(item: Any, depth: int) -> None:
+        nonlocal nodes
+        nodes += 1
+        if nodes > _TURN_CAPTURE_MAX_NODES or depth > _TURN_CAPTURE_MAX_DEPTH:
+            raise OSError("turn capture structure limit exceeded")
+        if type(item) is str:
+            emit_string(item)
+            return
+        if type(item) not in (dict, list, tuple):
+            put(scalar_text(item))
+            return
+        identity = id(item)
+        if identity in active:
+            raise ValueError("cyclic turn capture value")
+        active.add(identity)
+        try:
+            if type(item) is dict:
+                put("{")
+                seen_keys: set[str] = set()
+                for index, (key, child) in enumerate(item.items()):
+                    if index:
+                        put(",")
+                    key_text = key if type(key) is str else scalar_text(key)
+                    if key_text in seen_keys:
+                        raise ValueError("ambiguous turn capture keys")
+                    seen_keys.add(key_text)
+                    emit_string(key_text)
+                    put(":")
+                    emit(child, depth + 1)
+                put("}")
+            else:
+                put("[")
+                for index, child in enumerate(item):
+                    if index:
+                        put(",")
+                    emit(child, depth + 1)
+                put("]")
+        finally:
+            active.remove(identity)
+
+    emit(value, 0)
+    output.extend(b"\n")
+    return output.decode("ascii")
+
+
+def _append_private_turn_capture(path: Path, text: str) -> None:
+    """Append only to a private, single-link regular file without following its final symlink.
+
+    The size check is serialized only against writers that use this same lock.
+    This is not isolation from processes with the same user identity, a guarantee
+    about ancestor-directory replacement, or a crash-atomic record protocol.
+    """
+    if (os.name != "posix" or not hasattr(os, "O_NOFOLLOW") or
+            not hasattr(os, "geteuid") or not hasattr(os, "pread")):
+        raise OSError("private turn capture requires POSIX no-follow and pread support")
+    # Reject before opening if the record cannot possibly fit, then measure the
+    # encoded bytes, not characters. The first check limits transient allocation.
+    if len(text) > _TURN_CAPTURE_MAX_BYTES:
+        raise OSError("turn capture byte limit exceeded")
+    encoded_size = len(text.encode("utf-8"))
+    if encoded_size > _TURN_CAPTURE_MAX_BYTES:
+        raise OSError("turn capture byte limit exceeded")
+    # The producer sends one JSON object per line; reject incomplete or
+    # multi-line fragments rather than manufacturing apparently valid rows.
+    if not text.endswith("\n") or "\n" in text[:-1]:
+        raise OSError("turn capture requires a single line boundary")
+    import fcntl
+    flags = os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK
+    fd = os.open(path, flags, 0o600)
+    try:
+        # Do not stall an agent turn behind a busy or crashed capture writer.
+        # Failure is reported by the caller; capture is best-effort, not proof.
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or
+                info.st_uid != os.geteuid() or info.st_mode & 0o077):
+            raise OSError("turn capture is not a private, single-link regular file owned by this user")
+        if info.st_size + encoded_size > _TURN_CAPTURE_MAX_BYTES:
+            raise OSError("turn capture byte limit exceeded")
+        # A failed/crashed append may have left an incomplete JSONL record. Do
+        # not erase it or join a later row to it. A trailing newline is only a
+        # framing check; it is not proof that earlier records are valid.
+        if info.st_size and os.pread(fd, 1, info.st_size - 1) != b"\n":
+            raise OSError("turn capture has an incomplete trailing record")
+        with os.fdopen(fd, "a", encoding="utf-8") as stream:
+            fd = -1
+            stream.write(text)
+    finally:
+        if fd >= 0:
+            os.close(fd)
 
 
 @dataclass
@@ -49,6 +195,7 @@ class ToolTurnResult:
     placeholders: List[dict] = field(default_factory=list)   # a leaked-template reply retaken as a JSON act: original, basis, policy, retry-derived result
     window_full: Optional[dict] = None                     # the harness ended the tool phase: the next prompt would not fit the window
     seed_measured: Optional[tuple] = None                  # (prompt_eval_count, chars) of the first prompt the server counted whole: the next phase's anchor
+    capture_stats: Optional[Dict[str, int]] = None        # counts, not proof of crash durability or downstream collection
 
     @property
     def acted(self) -> bool:
@@ -1364,6 +1511,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             capture = Path(_root) / "turn_capture.jsonl"
     except Exception:
         capture = None
+    capture_stats = {"attempted": 0, "written": 0, "failed": 0} if capture is not None else None
     tools = tools if tools is not None else ollama_tools()
     # THE SCHEMAS THIS TURN ACTUALLY SENDS (#490). Step 1's preflight used _UNCOUNTED_CHARS, a constant
     # set when the schemas were ~11,700 chars; by 2026-10-19 the 35 verbs measured 26,649 (full) and
@@ -1393,6 +1541,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         response, attempt = generate_with_evidence(llm, messages, phase=phase, **kwargs)
         attempts.append(attempt)
         if capture is not None:
+            capture_stats["attempted"] += 1
             try:
                 r = response or {}
                 row = {"ts": time.time(), "model": getattr(llm, "model_name", None) or getattr(llm, "model", None),
@@ -1400,11 +1549,18 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                        "reply": {"content": r.get("content"), "tool_calls": r.get("tool_calls"),
                                  "thinking": ((r.get("raw") or {}).get("message") or {}).get("thinking")},
                        "attempt": attempt}
-                with open(capture, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(row, default=str) + "\n")
-            except Exception as _e:
+                _append_private_turn_capture(capture, _serialize_bounded_turn_capture(row))
+                capture_stats["written"] += 1
+            except Exception:
+                capture_stats["failed"] += 1
                 import sys as _sys
-                print(f"[tool-loop] turn_capture failed: {type(_e).__name__}: {_e}", file=_sys.stderr)
+                # Exception messages can contain capture paths or provider data, and
+                # rendering an arbitrary exception can itself fail. Do not log them.
+                try:
+                    print("[tool-loop] turn_capture failed; details withheld", file=_sys.stderr)
+                except Exception:
+                    # Logging is best effort; the counter is the structured signal.
+                    pass
         return response
 
     def _json_act(msgs: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1817,5 +1973,6 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     result.json_arg_failures = list(json_arg_failures)
     result.placeholders = list(placeholders)
     result.seed_measured = first_measured
+    result.capture_stats = capture_stats
 
     return result

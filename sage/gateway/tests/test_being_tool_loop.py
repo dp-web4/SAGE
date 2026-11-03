@@ -1443,13 +1443,15 @@ def test_turn_capture_keeps_each_call_whole_only_when_the_seat_asks(tmp_path):
 
     c = _client(OK_DISPATCH)
     c.memory_root = str(tmp_path)
-    run_ollama_tool_turn(c, FakeLLM(), [{"role": "user", "content": "hi"}])
+    off_result = run_ollama_tool_turn(c, FakeLLM(), [{"role": "user", "content": "hi"}])
     assert not (tmp_path / "turn_capture.jsonl").exists(), "off by default"
+    assert off_result.capture_stats is None
 
     (tmp_path / "instance.json").write_text(_json.dumps({"params": {"turn_capture": "on"}}))
-    run_ollama_tool_turn(c, FakeLLM(), [{"role": "user", "content": "hi"}])
+    on_result = run_ollama_tool_turn(c, FakeLLM(), [{"role": "user", "content": "hi"}])
     rows = [_json.loads(l) for l in (tmp_path / "turn_capture.jsonl").read_text().splitlines()]
     assert len(rows) == 2
+    assert on_result.capture_stats == {"attempted": 2, "written": 2, "failed": 0}
     assert rows[0]["model"] == "fake:1b" and rows[0]["phase"] == "tools"
     assert rows[0]["messages"][-1]["content"] == "hi" and rows[0]["tools"]
     assert rows[0]["reply"]["tool_calls"][0]["function"]["name"] == "witness"
@@ -1531,3 +1533,236 @@ def test_a_reply_cut_by_its_output_budget_with_room_left_still_stands():
     r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
     assert len(seen) == 1, "an output-budget cut with content is not retried by this change"
     assert r.reply == "a long answer that ran out of budget"
+
+
+def _capture_test_turn(root):
+    import json
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    class FakeLLM:
+        def get_chat_response(self, messages, **kwargs):
+            return {"content": "done", "tool_calls": []}
+
+    (root / "instance.json").write_text(json.dumps({"params": {"turn_capture": "on"}}))
+    client = _client(OK_DISPATCH)
+    client.memory_root = str(root)
+    return run_ollama_tool_turn(client, FakeLLM(), [{"role": "user", "content": "synthetic"}])
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file-mode contract")
+def test_turn_capture_creates_private_file_under_permissive_umask(tmp_path):
+    old_umask = os.umask(0o022)
+    try:
+        result = _capture_test_turn(tmp_path)
+    finally:
+        os.umask(old_umask)
+    assert result.reply == "done"
+    assert (tmp_path / "turn_capture.jsonl").stat().st_mode & 0o077 == 0
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX symlink and file-mode contract")
+def test_turn_capture_refuses_symlink_without_touching_target(tmp_path):
+    target = tmp_path / "other.txt"
+    target.write_text("unchanged")
+    (tmp_path / "turn_capture.jsonl").symlink_to(target)
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done", "capture failure must not prevent the turn"
+    assert target.read_text() == "unchanged"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file-mode contract")
+def test_turn_capture_refuses_existing_world_readable_capture(tmp_path):
+    capture = tmp_path / "turn_capture.jsonl"
+    capture.write_text("unchanged\n")
+    capture.chmod(0o644)
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert capture.read_text() == "unchanged\n"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX hard-link contract")
+def test_turn_capture_refuses_hard_link_without_touching_target(tmp_path):
+    target = tmp_path / "other.txt"
+    target.write_text("unchanged")
+    target.chmod(0o600)
+    os.link(target, tmp_path / "turn_capture.jsonl")
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert target.read_text() == "unchanged"
+
+
+def test_turn_capture_without_nofollow_refuses_to_create_file(tmp_path, monkeypatch):
+    monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert not (tmp_path / "turn_capture.jsonl").exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture locking contract")
+def test_turn_capture_stops_before_byte_limit_without_truncating(tmp_path, monkeypatch):
+    from sage.gateway import being_tool_loop as loop
+    monkeypatch.setattr(loop, "_TURN_CAPTURE_MAX_BYTES", 5, raising=False)
+    capture = tmp_path / "capture.jsonl"
+    loop._append_private_turn_capture(capture, "é\n")  # three UTF-8 bytes
+    with pytest.raises(OSError, match="limit"):
+        loop._append_private_turn_capture(capture, "é\n")
+    assert capture.read_bytes() == "é\n".encode()
+    loop._append_private_turn_capture(capture, "x\n")  # exactly five bytes
+    assert capture.read_bytes() == "é\nx\n".encode()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture locking contract")
+def test_turn_capture_refuses_oversized_single_record(tmp_path, monkeypatch):
+    from sage.gateway import being_tool_loop as loop
+    monkeypatch.setattr(loop, "_TURN_CAPTURE_MAX_BYTES", 4, raising=False)
+    capture = tmp_path / "capture.jsonl"
+    with pytest.raises(OSError, match="limit"):
+        loop._append_private_turn_capture(capture, "12345")
+    assert not capture.exists() or capture.read_bytes() == b""
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture locking contract")
+def test_turn_capture_limit_failure_is_visible_but_does_not_stop_turn(tmp_path, monkeypatch, capsys):
+    from sage.gateway import being_tool_loop as loop
+    from sage.gateway.heartbeat import _turn_for_record
+    monkeypatch.setattr(loop, "_TURN_CAPTURE_MAX_BYTES", 1, raising=False)
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert result.capture_stats == {"attempted": 1, "written": 0, "failed": 1}
+    assert _turn_for_record(result)["capture_stats"] == {
+        "attempted": 1, "written": 0, "failed": 1, "durability": "not_established"}
+    assert "turn_capture failed; details withheld" in capsys.readouterr().err
+    assert not (tmp_path / "turn_capture.jsonl").exists()
+
+
+@pytest.mark.parametrize("unprintable", [False, True])
+def test_turn_capture_failure_does_not_disclose_exception_or_break_response(tmp_path, monkeypatch, capsys, unprintable):
+    from sage.gateway import being_tool_loop as loop
+
+    class UnsafeError(Exception):
+        def __str__(self):
+            raise RuntimeError("exception rendering must not run")
+
+    def fail_capture(path, text):
+        if unprintable:
+            raise UnsafeError()
+        raise OSError("synthetic private path and content")
+
+    monkeypatch.setattr(loop, "_append_private_turn_capture", fail_capture)
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert result.capture_stats == {"attempted": 1, "written": 0, "failed": 1}
+    stderr = capsys.readouterr().err
+    assert "turn_capture failed" in stderr
+    assert "synthetic private path and content" not in stderr
+    assert str(tmp_path) not in stderr
+
+
+def test_turn_capture_failure_with_broken_stderr_still_returns_response(tmp_path, monkeypatch):
+    import sys
+    from sage.gateway import being_tool_loop as loop
+
+    def fail_capture(path, text):
+        raise OSError("synthetic error")
+
+    class BrokenStderr:
+        def write(self, value):
+            raise OSError("synthetic stderr failure")
+
+    monkeypatch.setattr(loop, "_append_private_turn_capture", fail_capture)
+    with monkeypatch.context() as patch:
+        patch.setattr(sys, "stderr", BrokenStderr())
+        result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert result.capture_stats == {"attempted": 1, "written": 0, "failed": 1}
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture locking contract")
+def test_turn_capture_refuses_busy_writer_without_changing_file(tmp_path):
+    import fcntl
+    from sage.gateway import being_tool_loop as loop
+    capture = tmp_path / "capture.jsonl"
+    capture.write_bytes(b"existing\n")
+    capture.chmod(0o600)
+    with capture.open("ab") as writer:
+        fcntl.flock(writer.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(OSError):
+            loop._append_private_turn_capture(capture, "later\n")
+        assert capture.read_bytes() == b"existing\n"
+    loop._append_private_turn_capture(capture, "later\n")
+    assert capture.read_bytes() == b"existing\nlater\n"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture file contract")
+def test_turn_capture_refuses_to_append_to_an_incomplete_tail(tmp_path):
+    from sage.gateway import being_tool_loop as loop
+    capture = tmp_path / "capture.jsonl"
+    old = b'{"ok":1}\n{"incomplete":'
+    capture.write_bytes(old)
+    capture.chmod(0o600)
+    with pytest.raises(OSError, match="incomplete"):
+        loop._append_private_turn_capture(capture, '{"new":2}\n')
+    assert capture.read_bytes() == old
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture file contract")
+def test_incomplete_capture_tail_is_reported_in_turn_projection(tmp_path, capsys):
+    from sage.gateway.heartbeat import _turn_for_record
+    capture = tmp_path / "turn_capture.jsonl"
+    capture.write_bytes(b"{incomplete")
+    capture.chmod(0o600)
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert _turn_for_record(result)["capture_stats"] == {
+        "attempted": 1, "written": 0, "failed": 1, "durability": "not_established"}
+    assert "turn_capture failed; details withheld" in capsys.readouterr().err
+    assert capture.read_bytes() == b"{incomplete"
+
+
+def test_turn_capture_without_pread_refuses_to_create_file(tmp_path, monkeypatch):
+    monkeypatch.delattr(os, "pread", raising=False)
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert not (tmp_path / "turn_capture.jsonl").exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture file contract")
+def test_turn_capture_refuses_a_record_without_a_single_line_boundary(tmp_path):
+    from sage.gateway import being_tool_loop as loop
+    capture = tmp_path / "capture.jsonl"
+    for text in ("unfinished", "two\nlines\n"):
+        with pytest.raises(OSError, match="boundary"):
+            loop._append_private_turn_capture(capture, text)
+    assert not capture.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture file contract")
+def test_turn_capture_does_not_append_after_a_partial_write_failure(tmp_path, monkeypatch):
+    from sage.gateway import being_tool_loop as loop
+    capture = tmp_path / "capture.jsonl"
+    loop._append_private_turn_capture(capture, '{"old":1}\n')
+    real_fdopen = os.fdopen
+
+    class PartialWriter:
+        def __init__(self, fd):
+            self.fd = fd
+
+        def __enter__(self):
+            return self
+
+        def write(self, text):
+            os.write(self.fd, text.encode()[:4])
+            raise OSError("injected partial write")
+
+        def __exit__(self, *unused):
+            os.close(self.fd)
+
+    monkeypatch.setattr(os, "fdopen", lambda fd, *args, **kwargs: PartialWriter(fd))
+    with pytest.raises(OSError, match="injected partial"):
+        loop._append_private_turn_capture(capture, '{"broken":2}\n')
+    monkeypatch.setattr(os, "fdopen", real_fdopen)
+    damaged = capture.read_bytes()
+    assert damaged == b'{"old":1}\n{"br'
+    with pytest.raises(OSError, match="incomplete"):
+        loop._append_private_turn_capture(capture, '{"new":3}\n')
+    assert capture.read_bytes() == damaged
