@@ -85,3 +85,34 @@ def test_a_different_file_or_an_edit_is_a_new_request():
     (home / "notes" / "probe.py").write_text("print('b')\n")
     r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "edited"}), _ALLOW)
     assert "already_asked" not in r.result
+
+
+def test_a_seat_quiet_through_the_beings_asks_is_named_on_the_receipt(monkeypatch):
+    """sprout-being, 2026-11-01..03: 48 h of seat silence (usage limit) read as a stuck service, and about 40
+    restart/kill scripts followed. The receipt now says how long the seat has been quiet, and what that means."""
+    from sage.gateway import hestia_dispatch as hd
+    d, home = _seat_home()
+    conv.append(home, "seat", speaker="seat", via="seat", text="hello from the seat")
+    d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
+    assert "seat_quiet" not in r.result, "minutes of quiet is not news"
+    monkeypatch.setattr(hd, "SEAT_QUIET_S", 0)
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "and again"}), _ALLOW)
+    q = r.result["seat_quiet"]
+    assert "has said nothing in this conversation since" in q and "through 2 of your requests" in q
+    assert "away, not stuck" in q and "nothing for you to restart" in q
+
+
+def test_the_quiet_fact_counts_only_since_the_seats_last_word():
+    from datetime import datetime, timezone
+    from sage.gateway.hestia_dispatch import _seat_quiet
+    now = datetime(2026, 11, 3, 6, 0, tzinfo=timezone.utc)
+    seat = {"from": "seat", "ts": "2026-11-01T06:00:00Z", "text": "ran it"}
+    ask = {"from": "b", "ts": "2026-11-02T00:00:00Z", "text": "[request_run] notes/x.py\nwhy: y"}
+    assert "(48 hours), through 2 of your requests" in _seat_quiet([seat, ask, ask], "b", False, now)
+    assert _seat_quiet([seat], "b", False, now) is None                       # quiet, but nobody asked
+    assert _seat_quiet([ask, seat], "b", False, now) is None                  # it answered after the ask
+    fresh = dict(seat, ts="2026-11-03T05:00:00Z")
+    assert _seat_quiet([fresh, ask], "b", False, now) is None                  # an hour is not quiet
+    assert _seat_quiet([ask, ask], "b", False, now) is None                    # a conversation with no seat turn yet
+    assert "last 3 turns" in _seat_quiet([ask, ask, ask], "b", True, now)     # silent through the whole window

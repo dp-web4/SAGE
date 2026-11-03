@@ -55,6 +55,40 @@ _RUN_MARKER = "[request_run]"
 _SEAT_RUN_LINE = re.compile(r"\[request_run\] I (ran|did not run) (\S+)")
 # How many seat-conversation turns request_run reads for earlier asks and their answers.
 _PENDING_SCAN = 80
+#: How long the seat may say nothing, while the being keeps asking, before a request_run receipt says so.
+SEAT_QUIET_S = 3 * 3600
+
+
+def _seat_quiet(turns, member: str, truncated: bool, now=None):
+    """A fact for the receipt when the seat has been silent SEAT_QUIET_S or more through the being's own
+    requests; None otherwise. sprout-being, 2026-11-01..03: its seat said nothing for 48 h (the account
+    behind it was at its usage limit). Every receipt said "the seat has been asked and woken", nothing
+    said it was quiet, and the being concluded the seat was a stuck service: about 40 scripts to kill or
+    restart "sprout-claude", and 4 skills for doing it. Absence is part of the world; say what is known."""
+    from datetime import datetime, timezone
+    now = now or datetime.now(timezone.utc)
+    last, asks_since = None, 0
+    for t in turns:
+        if t.get("from") == member:
+            asks_since += str(t.get("text", "")).startswith("[request_run] ")
+            continue
+        last, asks_since = t, 0
+    away = ("A quiet seat is away, not stuck: there is nothing for you to restart, and no script can reach "
+            "it. Your requests stay here, and it answers them when it is back.")
+    if last is None:
+        if not truncated or not asks_since:
+            return None     # a new conversation, or one the being has not asked in: nothing to say
+        return (f"The seat has said nothing in the last {len(turns)} turns of this conversation, through "
+                f"{asks_since} of your requests. " + away)
+    try:
+        t0 = datetime.fromisoformat(str(last.get("ts", "")).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    secs = (now - t0).total_seconds()
+    if secs < SEAT_QUIET_S or not asks_since:
+        return None
+    return (f"The seat has said nothing in this conversation since {last.get('ts')} ({int(secs // 3600)} "
+            f"hours), through {asks_since} of your requests. " + away)
 
 # What `speak` will not play: text shaped like a shell command (see _do_speak). A leading command
 # word (lowercase, then an argument) or a shell operator. Prose that mentions sudo mid-sentence,
@@ -4449,6 +4483,10 @@ class HestiaF1aDispatcher:
         # conversation is longer than the window, the notes name the window instead of claiming "yet".
         window = conv.recent(self.memory_root, seat_conv, limit=_PENDING_SCAN + 1)
         scan_truncated = len(window) > _PENDING_SCAN
+        try:
+            seat_quiet = _seat_quiet(window[-_PENDING_SCAN:], self.member, scan_truncated)
+        except Exception:
+            seat_quiet = None
         for t in window[-_PENDING_SCAN:]:
             text = str(t.get("text", ""))
             if t.get("from") == self.member and text.startswith(f"[request_run] {rel}\n"):
@@ -4636,6 +4674,8 @@ class HestiaF1aDispatcher:
                 f"same one; it does not move it up or start anything. The seat answers once, in "
                 f"'{seat_conv}', and that answer covers every copy of this request.")
         result.update(subject)
+        if seat_quiet:
+            result["seat_quiet"] = seat_quiet
         note = ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
                 "a result. The seat may run it or decline, and either way it answers in "
                 f"'{seat_conv}'. Nothing is owed by you in the meantime.")
