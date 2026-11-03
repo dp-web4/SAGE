@@ -6,11 +6,14 @@ stateless model call (no hidden conversation/cache/file memory). Never execute
 model output. See README.md for protocol, limitations, and evidence rules.
 """
 import argparse
+import contextlib
 import hashlib
 import json
+import os
 from pathlib import Path
 import random
 import re
+import stat
 import subprocess
 import time
 
@@ -32,6 +35,25 @@ class AdapterFailure(ValueError):
     def __init__(self, message, evidence):
         super().__init__(message)
         self.evidence = evidence
+
+
+@contextlib.contextmanager
+def _private_trace_file(path):
+    """Create one private trace exclusively; not same-user or ancestor isolation."""
+    if os.name != 'posix' or not hasattr(os, 'O_NOFOLLOW') or not hasattr(os, 'geteuid'):
+        raise OSError('private trace creation requires POSIX no-follow support')
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or
+                info.st_uid != os.geteuid() or info.st_mode & 0o077):
+            raise OSError('trace is not a private, single-link regular file owned by this user')
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            fd = -1
+            yield stream
+    finally:
+        if fd >= 0:
+            os.close(fd)
 
 
 def bounded(value, limit=4000):
@@ -216,7 +238,7 @@ def run(config, command, out, metadata, adapter=call_adapter):
         raise ValueError('adapter must attest stateless calls')
     backend_pins = validate_backend_pins(metadata, config['arms'])
     # Exclusive creation prevents accidentally replacing a prior run.
-    with Path(out).open('x', encoding='utf-8') as stream:
+    with _private_trace_file(out) as stream:
         def emit(row):
             stream.write(json.dumps(row, sort_keys=True) + '\n')
             stream.flush()

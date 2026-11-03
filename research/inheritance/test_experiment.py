@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+import experiment
 import ollama_adapter
 from ollama_adapter import payload
 from experiment import (call_adapter, digest, gate, request_for, require_backend_observation,
@@ -83,6 +84,44 @@ class ExperimentTests(unittest.TestCase):
                 os.umask(previous)
             self.assertEqual(stat.S_IMODE(path.stat().st_mode) & 0o077, 0)
             self.assertEqual(json.loads(path.read_text().splitlines()[-1])['kind'], 'error')
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX private file-mode contract')
+    def test_trace_is_private_before_any_stream_write(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'synthetic.jsonl'
+            real_fdopen = os.fdopen
+            modes = []
+            def inspect(fd, *args, **kwargs):
+                modes.append(stat.S_IMODE(os.fstat(fd).st_mode))
+                return real_fdopen(fd, *args, **kwargs)
+            previous = os.umask(0o022)
+            try:
+                with mock.patch.object(experiment.os, 'fdopen', side_effect=inspect):
+                    self.make_run(path)
+            finally:
+                os.umask(previous)
+            self.assertEqual(len(modes), 1)
+            self.assertEqual(modes[0] & 0o077, 0)
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX no-follow contract')
+    def test_trace_does_not_replace_or_follow_existing_symlink(self):
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / 'other.txt'
+            target.write_text('unchanged')
+            path = Path(d) / 'synthetic.jsonl'
+            path.symlink_to(target)
+            with self.assertRaises(OSError):
+                self.make_run(path)
+            self.assertEqual(target.read_text(), 'unchanged')
+            self.assertTrue(path.is_symlink())
+
+    def test_unsupported_platform_does_not_create_trace(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'synthetic.jsonl'
+            with mock.patch.object(experiment.os, 'name', 'nt'):
+                with self.assertRaises(OSError):
+                    self.make_run(path)
+            self.assertFalse(path.exists())
 
     def test_missing_or_changed_backend_observation_cannot_be_scored(self):
         cfg = copy.deepcopy(CONFIG)
