@@ -279,6 +279,12 @@ def _json_calls(text: str, names) -> List[dict]:
         except _DuplicateJsonKey:
             raise _UnsafeToolPayload("duplicate JSON key")
         except ValueError:
+            # A malformed structured value at the start of this fragment, or
+            # immediately after a recovered value, is not a license to scan
+            # inside it for smaller executable calls. Prose-prefixed fragments
+            # remain ambiguous; this is not a general intent boundary.
+            if not text[:j].strip() or (out and not text[i:j].strip()):
+                raise _UnsafeToolPayload("malformed structured value")
             i = j + 1
             continue
         for o in (obj if isinstance(obj, list) else [obj]):
@@ -537,6 +543,10 @@ def _salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
             try:
                 json.loads(text)
             except (TypeError, ValueError):
+                if text.lstrip().startswith(("{", "[")):
+                    # A damaged container must cancel earlier calls too, not
+                    # disappear when this unlabelled fence is tried as Python.
+                    _json_calls(text, params)
                 found.extend(_python_calls(text, params))
             else:
                 found.extend(_json_calls(text, params))
