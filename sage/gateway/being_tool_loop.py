@@ -1397,7 +1397,7 @@ def _violation(value, schema: dict, where: str) -> Optional[str]:
         for k in schema.get("required") or []:
             if k not in value or (isinstance(value[k], str) and not value[k].strip()):
                 return f"'{k}' is required and was empty"
-        if props and schema.get("additionalProperties", False) is False:
+        if ("properties" in schema or "additionalProperties" in schema) and schema.get("additionalProperties", False) is False:
             extra = [k for k in value if k not in props]
             if extra:
                 return f"'{extra[0]}' is not an argument of this tool"
@@ -1411,10 +1411,26 @@ def _violation(value, schema: dict, where: str) -> Optional[str]:
     return None
 
 
+def _strict_json(content: str):
+    """Parse an unambiguous JSON value, including inside nested objects."""
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate JSON key")
+            result[key] = value
+        return result
+
+    def invalid_constant(value):
+        raise ValueError("non-finite JSON number")
+
+    return json.loads(content, object_pairs_hook=unique_object, parse_constant=invalid_constant)
+
+
 def _check_args(content: str, schema: dict) -> tuple:
     """(args, None) when the arguments satisfy the tool's own schema, else (None, what is wrong)."""
     try:
-        args = json.loads(content)
+        args = _strict_json(content)
     except Exception:
         return None, "they are not valid JSON"
     if not isinstance(args, dict):
@@ -1517,10 +1533,13 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             "properties": {"act": {"type": "string", "enum": ["done"] + names}, "why": {"type": "string"}}})
         c1 = r1.get("content", "") or ""
         try:
-            j = json.loads(c1)
+            j = _strict_json(c1)
         except Exception:
             return {"content": c1, "tool_calls": [], "raw": r1.get("raw")}
-        act, why = j.get("act"), str(j.get("why") or "")
+        if (not isinstance(j, dict) or set(j) != {"act", "why"}
+                or not isinstance(j.get("act"), str) or not isinstance(j.get("why"), str)):
+            return {"content": c1, "tool_calls": [], "raw": r1.get("raw")}
+        act, why = j["act"], j["why"]
         if act not in spec:
             return {"content": why or c1, "tool_calls": [], "raw": r1.get("raw")}
         # THE ARGUMENTS ARE THE ACT, NOT A NOTE ABOUT IT (2026-10-01): asked only "Now the arguments", a
@@ -1652,6 +1671,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         retried = 0
         retry_cause = None
         sent = _sent_budget(llm)          # the num_predict of the reply that stands
+        response_from_json_act = act_form == "json"
         resp = _once(msgs)
         content = resp.get("content", "") or ""
         calls = resp.get("tool_calls", []) or []
@@ -1838,6 +1858,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 ["thinking_named_a_tool"] if any(re.search(rf"\b{re.escape(n)}\b", _orig_thinking) for n in _offered)
                 else [])
             resp = _json_act(msgs)
+            response_from_json_act = True
             content = resp.get("content", "") or ""
             calls = resp.get("tool_calls", []) or []
             _act = calls[0]["function"] if calls else None
@@ -1885,7 +1906,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                     "window_full": {"step": len(thoughts) - 1, "cause": "server_cut",
                                     "estimated_prompt": _server_cut["expected"],
                                     "num_ctx": getattr(llm, "num_ctx", None)}}
-        if not calls and content:
+        if not calls and content and not response_from_json_act:
             # the call in the wrong channel: lift it, gate it as normal, record that it was lifted
             calls = salvage_tool_calls(content, tools)
             salvaged.extend({"step": len(thoughts) - 1, "effector": c["function"]["name"],

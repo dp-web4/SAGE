@@ -2700,6 +2700,17 @@ class HestiaF1aDispatcher:
         return ResultEnvelope(ok=True, result=text,
                               witness_id=(self._local._witness(f"settle: {text[:160]}") if changed else None))
 
+    def _do_retire_thread(self, intent: BeingIntent) -> ResultEnvelope:
+        """Close a line of work: its open todo items and settled entries, into one retired file (being_threads)."""
+        from sage.gateway import being_threads
+        ok, text, changed = being_threads.retire_thread(Path(self.memory_root), intent.args or {})
+        if not ok:   # a possibly-partial failure changed files, so it is witnessed (NOVA, item 3)
+            return ResultEnvelope(ok=False, error=text,
+                                  witness_id=(self._local._witness(f"retire_thread partial: {text[:150]}")
+                                              if changed else None))
+        return ResultEnvelope(ok=True, result=text,
+                              witness_id=(self._local._witness(f"retire_thread: {text[:160]}") if changed else None))
+
     def _do_skill(self, intent: BeingIntent) -> ResultEnvelope:
         """Skills (being_skills): list, read or search them, or write one of the being's own."""
         from sage.gateway import being_skills
