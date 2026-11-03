@@ -283,6 +283,8 @@ def _json_calls(text: str, names) -> List[dict]:
             continue
         for o in (obj if isinstance(obj, list) else [obj]):
             if not isinstance(o, dict):
+                if isinstance(obj, list):
+                    raise _UnsafeToolPayload("unsupported member of JSON call array")
                 continue
             # More than one selector is ambiguous; neither is safe to discard.
             selectors = [(k, o[k]) for k in _NAME_KEYS
@@ -310,6 +312,8 @@ def _json_calls(text: str, names) -> List[dict]:
                 # A complete object can hold one or more tool-name keys in order.
                 inner = [(k, v) for k, v in o.items() if k in known and isinstance(v, dict)]
                 if not inner:
+                    if isinstance(obj, list):
+                        raise _UnsafeToolPayload("unrecognized member of JSON call array")
                     continue
                 if set(o) != {k for k, _ in inner} or any(set(v) - set(known[k]) for k, v in inner):
                     raise _UnsafeToolPayload("unsupported tool-map fields")
