@@ -1522,10 +1522,13 @@ def test_turn_capture_refuses_oversized_single_record(tmp_path, monkeypatch):
 @pytest.mark.skipif(os.name != "posix", reason="POSIX capture locking contract")
 def test_turn_capture_limit_failure_is_visible_but_does_not_stop_turn(tmp_path, monkeypatch, capsys):
     from sage.gateway import being_tool_loop as loop
+    from sage.gateway.heartbeat import _turn_for_record
     monkeypatch.setattr(loop, "_TURN_CAPTURE_MAX_BYTES", 1, raising=False)
     result = _capture_test_turn(tmp_path)
     assert result.reply == "done"
     assert result.capture_stats == {"attempted": 1, "written": 0, "failed": 1}
+    assert _turn_for_record(result)["capture_stats"] == {
+        "attempted": 1, "written": 0, "failed": 1, "durability": "not_established"}
     assert "turn_capture failed: OSError: turn capture byte limit exceeded" in capsys.readouterr().err
     assert not (tmp_path / "turn_capture.jsonl").exists()
 

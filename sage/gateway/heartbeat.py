@@ -4014,6 +4014,36 @@ def _phase(state: str, phase: str, beat_id: str) -> None:
     _activity.report(state, f"heartbeat:{phase}", beat_id=beat_id, ttl_secs=_activity.BEAT_TTL_S)
 
 
+def _capture_evidence_for_record(result) -> dict:
+    """Project capture counts only; successful writes are not durability proof."""
+    stats = getattr(result, "capture_stats", None)
+    if stats is None:
+        return {}
+    keys = ("attempted", "written", "failed")
+    if (not isinstance(stats, dict)
+            or any(type(stats.get(k)) is not int or stats[k] < 0 for k in keys)
+            or stats["attempted"] != stats["written"] + stats["failed"]):
+        return {"capture_stats": {"status": "invalid"}}
+    return {"capture_stats": {**{k: stats[k] for k in keys}, "durability": "not_established"}}
+
+
+def _turn_for_record(res):
+    if res is None:
+        return None
+    trace = [{"effector": i.effector, "args": dict(i.args or {}), "ok": e.ok, "refused": e.refused,
+              "pending": e.pending, "error": e.error, "note": getattr(e, "note", "") or None,
+              "witness_id": e.witness_id,
+              "rule": getattr(e.verdict, "rule", None) if e.verdict else None,
+              "result": (e.result if isinstance(e.result, (str, int, float, dict, list, type(None))) else str(e.result))}
+             for i, e in res.trace]
+    return {"reply": res.reply, "steps": res.steps, "capped": res.capped,
+            "trace": trace, "thinking": [t[:4000] for t in res.thinking],
+            "salvaged": list(res.salvaged), "generates": list(res.generates),
+            **_capture_evidence_for_record(res),
+            "rested": getattr(res, "rested", None), "looped": getattr(res, "looped", None),
+            "window_full": getattr(res, "window_full", None)}
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="one heartbeat for a SAGE being")
     ap.add_argument("--member", required=True)
@@ -4825,20 +4855,6 @@ def main(argv=None) -> int:
             except Exception as _e:
                 seat_rearm = {"error": f"{type(_e).__name__}: {_e}"}
 
-    def _trace(res):
-        return [{"effector": i.effector, "args": dict(i.args or {}), "ok": e.ok, "refused": e.refused,
-                 "pending": e.pending, "error": e.error, "note": getattr(e, "note", "") or None,
-                 "witness_id": e.witness_id,
-                 "rule": getattr(e.verdict, "rule", None) if e.verdict else None,
-                 "result": (e.result if isinstance(e.result, (str, int, float, dict, list, type(None))) else str(e.result))}
-                for i, e in res.trace]
-    def _turn(res):
-        return None if res is None else {"reply": res.reply, "steps": res.steps, "capped": res.capped,
-                                         "trace": _trace(res), "thinking": [t[:4000] for t in res.thinking],
-                                         "salvaged": list(res.salvaged), "generates": list(res.generates),
-                                         "rested": getattr(res, "rested", None),
-                                         "looped": getattr(res, "looped", None),
-                                         "window_full": getattr(res, "window_full", None)}
     record = {
         # schema: what fields a reader may expect (Legion's amendment 4, 2026-09-05: the
         # consolidation organ counts how many records carry join/account/wake/interventions;
@@ -4900,16 +4916,16 @@ def main(argv=None) -> int:
         # a live trial labels the beat, so its outputs can be told from the being's ordinary ones
         "trial": _trial_name(instance),
         "account": account,
-        "explore": _turn(explore),
+        "explore": _turn_for_record(explore),
         # act-first only: the posture+digest turn, after the short one; None otherwise
-        "posture": _turn(after),
+        "posture": _turn_for_record(after),
         "harness": _harness,
-        "reflect": _turn(reflect),
+        "reflect": _turn_for_record(reflect),
         # present only when the beat was killed: a record that says which phases it has
         **({"killed": killed} if killed else {}),
-        "answer": _turn(answer) if answer is not None else None,
-        "act_after_answer": _turn(act_after) if act_after is not None else None,
-        "ask_turn": _turn(ask_turn) if ask_turn is not None else None,
+        "answer": _turn_for_record(answer),
+        "act_after_answer": _turn_for_record(act_after),
+        "ask_turn": _turn_for_record(ask_turn),
         "escalations": escalations, "egress": egress, "seat_rearm": seat_rearm,
         "forum_replies": ({**{k: v for k, v in forum_replies.items() if k != "block"},
                            "delivered": _fr_delivered(explore, killed)}
