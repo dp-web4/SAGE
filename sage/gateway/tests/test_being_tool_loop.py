@@ -1492,3 +1492,42 @@ def test_turn_capture_without_nofollow_refuses_to_create_file(tmp_path, monkeypa
     result = _capture_test_turn(tmp_path)
     assert result.reply == "done"
     assert not (tmp_path / "turn_capture.jsonl").exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture locking contract")
+def test_turn_capture_stops_before_byte_limit_without_truncating(tmp_path, monkeypatch):
+    from sage.gateway import being_tool_loop as loop
+    monkeypatch.setattr(loop, "_TURN_CAPTURE_MAX_BYTES", 4, raising=False)
+    capture = tmp_path / "capture.jsonl"
+    loop._append_private_turn_capture(capture, "é\n")  # three UTF-8 bytes
+    with pytest.raises(OSError, match="limit"):
+        loop._append_private_turn_capture(capture, "é\n")
+    assert capture.read_bytes() == "é\n".encode()
+    loop._append_private_turn_capture(capture, "x")  # exactly four bytes
+    assert capture.read_bytes() == "é\nx".encode()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture locking contract")
+def test_turn_capture_refuses_oversized_single_record(tmp_path, monkeypatch):
+    from sage.gateway import being_tool_loop as loop
+    monkeypatch.setattr(loop, "_TURN_CAPTURE_MAX_BYTES", 4, raising=False)
+    capture = tmp_path / "capture.jsonl"
+    with pytest.raises(OSError, match="limit"):
+        loop._append_private_turn_capture(capture, "12345")
+    assert not capture.exists() or capture.read_bytes() == b""
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture locking contract")
+def test_turn_capture_refuses_busy_writer_without_changing_file(tmp_path):
+    import fcntl
+    from sage.gateway import being_tool_loop as loop
+    capture = tmp_path / "capture.jsonl"
+    capture.write_bytes(b"existing\n")
+    capture.chmod(0o600)
+    with capture.open("ab") as writer:
+        fcntl.flock(writer.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(OSError):
+            loop._append_private_turn_capture(capture, "later\n")
+        assert capture.read_bytes() == b"existing\n"
+    loop._append_private_turn_capture(capture, "later\n")
+    assert capture.read_bytes() == b"existing\nlater\n"
