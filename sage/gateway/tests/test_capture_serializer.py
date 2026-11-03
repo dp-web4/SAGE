@@ -174,4 +174,4 @@ def test_nonfinite_capture_is_reported_without_stopping_the_turn(tmp_path, capsy
     assert result.reply == "done"
     assert result.capture_stats == {"attempted": 1, "written": 0, "failed": 1}
     assert not (tmp_path / "turn_capture.jsonl").exists()
-    assert "non-finite turn capture value" in capsys.readouterr().err
+    assert "turn_capture failed; details withheld" in capsys.readouterr().err

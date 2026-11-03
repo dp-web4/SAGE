@@ -1446,10 +1446,16 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                        "attempt": attempt}
                 _append_private_turn_capture(capture, _serialize_bounded_turn_capture(row))
                 capture_stats["written"] += 1
-            except Exception as _e:
+            except Exception:
                 capture_stats["failed"] += 1
                 import sys as _sys
-                print(f"[tool-loop] turn_capture failed: {type(_e).__name__}: {_e}", file=_sys.stderr)
+                # Exception messages can contain capture paths or provider data, and
+                # rendering an arbitrary exception can itself fail. Do not log them.
+                try:
+                    print("[tool-loop] turn_capture failed; details withheld", file=_sys.stderr)
+                except Exception:
+                    # Logging is best effort; the counter is the structured signal.
+                    pass
         return response
 
     def _json_act(msgs: List[Dict[str, Any]]) -> Dict[str, Any]:

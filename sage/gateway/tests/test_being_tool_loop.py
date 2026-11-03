@@ -1529,8 +1529,50 @@ def test_turn_capture_limit_failure_is_visible_but_does_not_stop_turn(tmp_path, 
     assert result.capture_stats == {"attempted": 1, "written": 0, "failed": 1}
     assert _turn_for_record(result)["capture_stats"] == {
         "attempted": 1, "written": 0, "failed": 1, "durability": "not_established"}
-    assert "turn_capture failed: OSError: turn capture byte limit exceeded" in capsys.readouterr().err
+    assert "turn_capture failed; details withheld" in capsys.readouterr().err
     assert not (tmp_path / "turn_capture.jsonl").exists()
+
+
+@pytest.mark.parametrize("unprintable", [False, True])
+def test_turn_capture_failure_does_not_disclose_exception_or_break_response(tmp_path, monkeypatch, capsys, unprintable):
+    from sage.gateway import being_tool_loop as loop
+
+    class UnsafeError(Exception):
+        def __str__(self):
+            raise RuntimeError("exception rendering must not run")
+
+    def fail_capture(path, text):
+        if unprintable:
+            raise UnsafeError()
+        raise OSError("synthetic private path and content")
+
+    monkeypatch.setattr(loop, "_append_private_turn_capture", fail_capture)
+    result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert result.capture_stats == {"attempted": 1, "written": 0, "failed": 1}
+    stderr = capsys.readouterr().err
+    assert "turn_capture failed" in stderr
+    assert "synthetic private path and content" not in stderr
+    assert str(tmp_path) not in stderr
+
+
+def test_turn_capture_failure_with_broken_stderr_still_returns_response(tmp_path, monkeypatch):
+    import sys
+    from sage.gateway import being_tool_loop as loop
+
+    def fail_capture(path, text):
+        raise OSError("synthetic error")
+
+    class BrokenStderr:
+        def write(self, value):
+            raise OSError("synthetic stderr failure")
+
+    monkeypatch.setattr(loop, "_append_private_turn_capture", fail_capture)
+    with monkeypatch.context() as patch:
+        patch.setattr(sys, "stderr", BrokenStderr())
+        result = _capture_test_turn(tmp_path)
+    assert result.reply == "done"
+    assert result.capture_stats == {"attempted": 1, "written": 0, "failed": 1}
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX capture locking contract")
@@ -1571,7 +1613,7 @@ def test_incomplete_capture_tail_is_reported_in_turn_projection(tmp_path, capsys
     assert result.reply == "done"
     assert _turn_for_record(result)["capture_stats"] == {
         "attempted": 1, "written": 0, "failed": 1, "durability": "not_established"}
-    assert "incomplete trailing record" in capsys.readouterr().err
+    assert "turn_capture failed; details withheld" in capsys.readouterr().err
     assert capture.read_bytes() == b"{incomplete"
 
 
