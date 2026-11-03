@@ -161,7 +161,7 @@ def test_the_rate_limit_holds_a_second_ask_in_the_same_window():
     with tempfile.TemporaryDirectory() as tmp:
         inst = _home(tmp, [(BEING, "First question?")])
         r = _responder(inst)
-        r.session_cmd = "true"          # runs, posts nothing
+        r.session_cmd = f"{sys.executable} -c " + repr("print('No reply was owed.')")
         assert r.run() == 0
         conv.append(inst, SEAT, speaker=BEING, text="And a second question?")
         assert r.run() == 0

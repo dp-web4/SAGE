@@ -20,6 +20,70 @@ def test_failed_empty_session_does_not_mark_question_handled(tmp_path):
     assert (result != 0, state.exists(), conv.last_seen(inst, SEAT, SEAT)) == (True, False, 0)
 
 
+def test_nonzero_session_with_output_is_unknown_not_considered(tmp_path):
+    inst = _home(tmp_path, [(BEING, "Can you answer my question?")])
+    responder = _responder(inst)
+    responder.session_cmd = f"{sys.executable} -c " + repr(
+        "print('started but did not complete'); raise SystemExit(42)"
+    )
+
+    assert responder.run() != 0
+    state = Path(inst) / "_state"
+    assert not (state / "considered_upto").exists()
+    assert conv.last_seen(inst, SEAT, SEAT) == 0
+    assert (state / "cannot_run_strikes").read_text().strip() == "1"
+    assert "unknown" in (state / "responder.log").read_text().lower()
+
+
+def test_nonzero_after_post_is_unknown_not_a_proven_non_delivery(tmp_path):
+    inst = _home(tmp_path, [(BEING, "Can you answer my question?")])
+    responder = _responder(inst)
+    responder.session_cmd = f"{sys.executable} -c " + repr(
+        "from pathlib import Path; from sage.gateway import conversations as c; "
+        f"c.append(Path({str(inst)!r}), {SEAT!r}, speaker={SEAT!r}, text='Synthetic reply'); "
+        "raise SystemExit(42)"
+    )
+
+    assert responder.run() != 0
+    assert any(t.get("text") == "Synthetic reply" for t in conv.recent(inst, SEAT))
+    assert not (Path(inst) / "_state" / "considered_upto").exists()
+    assert conv.last_seen(inst, SEAT, SEAT) == 0
+
+
+def test_nonzero_auth_failure_keeps_actionable_diagnostic(tmp_path):
+    inst = _home(tmp_path, [(BEING, "Can you answer my question?")])
+    responder = _responder(inst)
+    responder.session_cmd = f"{sys.executable} -c " + repr(
+        "print('Failed to authenticate'); raise SystemExit(42)"
+    )
+
+    assert responder.run() != 0
+    state = Path(inst) / "_state"
+    assert "restore the seat's login" in (state / "responder.log").read_text()
+    assert not (state / "considered_upto").exists()
+
+
+def test_zero_exit_without_output_or_reply_is_unknown(tmp_path):
+    inst = _home(tmp_path, [(BEING, "Can you answer my question?")])
+    responder = _responder(inst)
+    responder.session_cmd = f"{sys.executable} -c " + repr("pass")
+
+    assert responder.run() != 0
+    state = Path(inst) / "_state"
+    assert not (state / "considered_upto").exists()
+    assert conv.last_seen(inst, SEAT, SEAT) == 0
+    assert "unknown" in (state / "responder.log").read_text().lower()
+
+
+def test_unrelated_output_does_not_prove_a_consideration(tmp_path):
+    inst = _home(tmp_path, [(BEING, "Can you answer my question?")])
+    responder = _responder(inst)
+    responder.session_cmd = f"{sys.executable} -c " + repr("print('starting session')")
+
+    assert responder.run() != 0
+    assert not (Path(inst) / "_state" / "considered_upto").exists()
+
+
 def test_question_arriving_during_session_is_not_marked_handled(tmp_path):
     inst = _home(tmp_path, [(BEING, "Can you answer my first question?")])
     responder = _responder(inst)

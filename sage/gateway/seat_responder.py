@@ -230,9 +230,9 @@ class Responder:
         run_log = self.state / f"session-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.log"
         with run_log.open("w") as out:
             try:
-                subprocess.run(shlex.split(self.session_cmd), input=text, text=True, stdout=out,
-                               stderr=subprocess.STDOUT, timeout=self.timeout,
-                               cwd=str(Path(__file__).resolve().parents[2]))
+                completed = subprocess.run(shlex.split(self.session_cmd), input=text, text=True, stdout=out,
+                                           stderr=subprocess.STDOUT, timeout=self.timeout,
+                                           cwd=str(Path(__file__).resolve().parents[2]))
             except subprocess.TimeoutExpired:
                 (self.state / "cannot_run_strikes").write_text(str(strikes + 1))
                 self.log(f"ALERT: session timed out after {self.timeout}s; turns stay pending "
@@ -242,7 +242,7 @@ class Responder:
                 (self.state / "cannot_run_strikes").write_text(str(strikes + 1))
                 self.log(f"ALERT: cannot start a session ({e}); turns stay pending")
                 return 1
-        return self.settle(run_log, ask, before, strikes)
+        return self.settle(run_log, ask, before, strikes, completed.returncode)
 
     def _settled(self, turns: list[dict]) -> None:
         """Record that every turn up to here has been decided about, and read as a seat.
@@ -256,7 +256,7 @@ class Responder:
             (self.state / "considered_upto").write_text(str(top))
             conv.mark_seen(self.instance, self.seat, self.conversation, top)
 
-    def settle(self, run_log: Path, ask: list[dict], before: int, strikes: int) -> int:
+    def settle(self, run_log: Path, ask: list[dict], before: int, strikes: int, returncode: int) -> int:
         """Which of the three outcomes happened, decided from evidence rather than exit code."""
         body = run_log.read_text(errors="replace")
         # A launch that failed says so on its FIRST line and writes nothing else. Scanning
@@ -275,10 +275,21 @@ class Responder:
             else:
                 self.log(f"blocked ({blocked!r}), strike {strikes + 1}; next attempt in <= {nxt} min")
             return 1
-        (self.state / "cannot_run_strikes").write_text("0")
-
+        if returncode != 0:
+            # A failed process does not establish what it considered or whether
+            # an attempted reply reached the conversation. Do not mark it seen.
+            (self.state / "cannot_run_strikes").write_text(str(strikes + 1))
+            self.log(f"ALERT: session exited {returncode}; outcome unknown, "
+                     f"not marked considered ({run_log.name})")
+            return 1
         after = conv.recent(self.instance, self.conversation, limit=20)
         replied = [t for t in after if int(t.get("seq", 0)) > before and t.get("from") == self.seat]
+        if not body.strip() and not replied:
+            (self.state / "cannot_run_strikes").write_text(str(strikes + 1))
+            self.log(f"ALERT: session produced no output or reply; outcome unknown, "
+                     f"not marked considered ({run_log.name})")
+            return 1
+        (self.state / "cannot_run_strikes").write_text("0")
         self._settled(after)
         if not replied:
             self.log(f"considered: session judged no reply owed to {len(ask)} turn(s) "
