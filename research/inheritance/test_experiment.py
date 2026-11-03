@@ -2,6 +2,8 @@
 import copy
 import io
 import json
+import os
+import stat
 from pathlib import Path
 import subprocess
 import sys
@@ -53,6 +55,34 @@ class ExperimentTests(unittest.TestCase):
             self.assertGreater(summary['arms']['actor']['denied_attempts'], 0)
             with self.assertRaises(FileExistsError):
                 self.make_run(path)
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX private file-mode contract')
+    def test_trace_is_private_under_a_permissive_umask(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'synthetic.jsonl'
+            previous = os.umask(0o022)
+            try:
+                self.make_run(path)
+            finally:
+                os.umask(previous)
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode) & 0o077, 0)
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX private file-mode contract')
+    def test_failed_run_leaves_private_error_evidence(self):
+        config = copy.deepcopy(CONFIG)
+        config['repeats'] = 1
+        def fail_adapter(*args):
+            raise OSError('synthetic failure')
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'synthetic.jsonl'
+            previous = os.umask(0o022)
+            try:
+                with self.assertRaises(OSError):
+                    run(config, ['stub'], path, META, fail_adapter)
+            finally:
+                os.umask(previous)
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode) & 0o077, 0)
+            self.assertEqual(json.loads(path.read_text().splitlines()[-1])['kind'], 'error')
 
     def test_missing_or_changed_backend_observation_cannot_be_scored(self):
         cfg = copy.deepcopy(CONFIG)
