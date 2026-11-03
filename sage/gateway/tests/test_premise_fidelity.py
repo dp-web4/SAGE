@@ -57,10 +57,9 @@ class PremiseFidelityTest(unittest.TestCase):
     def test_partial_quote_and_whole_file_absence_are_incomplete(self):
         source = self.artifact("partial", "alpha", completeness="partial")
         self.assertEqual(self.check(source, self.claim("partial", "quote", kind="quote", needle="missing")).support, "incomplete")
-        receipt = dict(source)
-        receipt["data"] = "not used"
-        data_source = self.artifact("read", "unused", completeness="partial")
-        data_source["pointer"] = {"kind": "jsonl", "path": "read.jsonl", "jsonl_line": 1}
+        self.assertEqual(self.check(source, self.claim("partial", "text_contains", contains=["missing"])).support, "incomplete")
+        ambiguous = self.artifact("ambiguous", "alpha", completeness="ambiguous")
+        self.assertEqual(self.check(ambiguous, self.claim("ambiguous", "text_contains", contains=["missing"])).support, "unknown")
         record = {"result": "[lines 2-3 of 9]\nalpha"}
         raw = json.dumps(record) + "\n"
         data_source = self.artifact("read.jsonl", raw, source_id="read", completeness="partial", pointer={"kind": "jsonl", "path": "read.jsonl", "jsonl_line": 1})

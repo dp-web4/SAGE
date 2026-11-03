@@ -141,8 +141,15 @@ def _outcome(claim: SourceClaim, support: str, reason: str) -> CheckResult:
 
 
 def _text_contains(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult:
-    missing = [text for text in claim.assertion["contains"] if text not in sources[0].content]
-    return _outcome(claim, "contradicted" if missing else "supported", f"missing_fragments:{missing}" if missing else "all_fragments_present")
+    source = sources[0]
+    missing = [text for text in claim.assertion["contains"] if text not in source.content]
+    if not missing:
+        return _outcome(claim, "supported", "all_fragments_present")
+    if source.artifact.completeness == "partial":
+        return _outcome(claim, "incomplete", f"fragments_absent_from_partial_source:{missing}")
+    if source.artifact.completeness == "ambiguous":
+        return _outcome(claim, "unknown", f"fragments_absent_from_ambiguous_source:{missing}")
+    return _outcome(claim, "contradicted", f"missing_fragments:{missing}")
 
 
 def _quote(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult:
