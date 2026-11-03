@@ -1,4 +1,10 @@
-"""Deterministic source envelopes and source/claim relation checks (PF-0 M0-M2)."""
+"""Deterministic source envelopes and source/claim relation checks (PF-0 M0-M2).
+
+``stat`` pointers cover readable regular-file content snapshots only. Directory
+and other filesystem snapshots have no hash format here and remain unavailable.
+A current snapshot does not establish a historical filesystem state. Peer prose
+does not establish a correction relation without an explicit binding schema.
+"""
 from __future__ import annotations
 
 import argparse
@@ -6,6 +12,7 @@ import gzip
 import hashlib
 import json
 import re
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -52,6 +59,8 @@ class SourceArtifact:
             root = root.resolve()
             path = (root / self.pointer["path"]).resolve()
             path.relative_to(root)
+            if self.pointer["kind"] == "stat" and not path.is_file():
+                return ResolvedSource(self, available=False, reason="stat_requires_readable_regular_file")
             raw = path.read_bytes()
         except (OSError, KeyError, ValueError) as exc:
             return ResolvedSource(self, available=False, reason=f"source_unavailable:{type(exc).__name__}")
@@ -59,8 +68,7 @@ class SourceArtifact:
             return ResolvedSource(self, available=False, reason="hash_mismatch")
         kind = self.pointer["kind"]
         if kind == "stat":
-            file_type = "directory" if path.is_dir() else "regular_file" if path.is_file() else "other"
-            return ResolvedSource(self, available=True, metadata={"file_type": file_type})
+            return ResolvedSource(self, available=True, metadata={"file_type": "regular_file"})
         try:
             if kind == "text":
                 text = raw.decode("utf-8")
@@ -75,7 +83,15 @@ class SourceArtifact:
             data = gzip.decompress(raw) if kind == "gzip_jsonl" else raw
             lines = data.decode("utf-8").splitlines()
             if "seq" in self.pointer:
-                matches = [line for line in lines if line.strip() and json.loads(line).get("seq") == self.pointer["seq"]]
+                matches = []
+                for line in lines:
+                    if not line.strip():
+                        continue
+                    candidate = json.loads(line)
+                    if not isinstance(candidate, dict):
+                        return ResolvedSource(self, available=False, reason="record_unavailable:non_object_seq_record")
+                    if candidate.get("seq") == self.pointer["seq"]:
+                        matches.append(line)
                 if len(matches) != 1:
                     return ResolvedSource(self, available=False, reason=f"seq_matches:{len(matches)}")
                 line = matches[0]
@@ -86,7 +102,7 @@ class SourceArtifact:
                 record = record[key]
             content = json.dumps(record, ensure_ascii=False, sort_keys=True) if self.pointer.get("json_path") else line
             return ResolvedSource(self, available=True, content=content, data=record)
-        except (OSError, UnicodeError, ValueError, KeyError, IndexError, TypeError) as exc:
+        except (OSError, EOFError, zlib.error, UnicodeError, ValueError, KeyError, IndexError, TypeError) as exc:
             return ResolvedSource(self, available=False, reason=f"record_unavailable:{type(exc).__name__}")
 
 
@@ -253,10 +269,7 @@ def _peer_assertion(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckR
         return _outcome(claim, "unknown", "peer_assertion_not_found")
     if len(sources) == 1:
         return _outcome(claim, "unknown", "peer_assertion_is_not_an_observation_receipt")
-    correction = sources[1].content
-    if "void" in correction and "no evidence" in correction:
-        return _outcome(claim, "contradicted", "authoring_seat_voided_unobserved_assertion")
-    return _outcome(claim, "unknown", "no_mechanical_contradiction_receipt")
+    return _outcome(claim, "unknown", "peer_correction_relation_unbound")
 
 
 def _frontmatter_speakers(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult:
