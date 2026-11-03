@@ -26,6 +26,7 @@ The criterion is the most important field. An exploration without a falsifier is
 
 | Exploration | Status | Tracks |
 |-------------|--------|--------|
+| [2026-11-02-weight-space-programming-model-repair.md](2026-11-02-weight-space-programming-model-repair.md) | Drafted, external evidence review and proposed experiment | Weight edits, generation loops, configuration controls, and local task transfer |
 | [2026-10-06-embodied-cognitive-rtos-latent-translation-fabric.md](2026-10-06-embodied-cognitive-rtos-latent-translation-fabric.md) | Drafted, parent architecture | Latent translation fabric + embodied cognitive RTOS |
 | [2026-10-08-nonverbal-intent-modality-selection-action-truth.md](2026-10-08-nonverbal-intent-modality-selection-action-truth.md) | Drafted, architecture exploration | Nonverbal intent + modality selection + action truth |
 | [2026-10-06-compiled-transducers-sensors-effectors.md(2026-10-06-compiled-transducers-sensors-effectors.md) | Drafted, ready to run | Hardware-shaped execution across learned sensors/effectors |
@@ -37,3 +38,4 @@ The criterion is the most important field. An exploration without a falsifier is
 External review (Kimi 2.6, 2026-05-15) observed: *"LLMs are excellent at generating coherent frameworks and less excellent at recognizing where coherence becomes speculation."* SAGE's documentation is substantially AI-assisted, which means this failure mode is structurally present in our written record. The explorations/ directory is the operational counterweight — every interpretive claim in the main repo should eventually point to (or generate) an exploration that could falsify it.
 
 A claim with no associated exploration is, by default, an observation or framing — not a finding. (See SAGE README → "Findings vs Framings.")
+
