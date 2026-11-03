@@ -736,6 +736,28 @@ def test_salvage_keeps_an_array_of_only_recognized_calls():
     assert [call["function"]["arguments"]["query"] for call in result] == ["one", "two"]
 
 
+def test_mixed_json_array_never_reaches_fake_dispatch():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    delivered = []
+
+    def dispatch(intent, verdict):
+        delivered.append(intent)
+        return ResultEnvelope(ok=True, result="synthetic")
+
+    class FakeLLM:
+        def get_chat_response(self, messages, tools=None):
+            return {"content": '[{"name":"witness","arguments":{"event":"x"}},'
+                               '{"note":"example only"}]', "tool_calls": []}
+
+    result = run_ollama_tool_turn(_client(dispatch), FakeLLM(),
+                                  [{"role": "user", "content": "synthetic"}],
+                                  tools=ollama_tools(["witness"]))
+    assert delivered == []
+    assert result.trace == []
+    assert result.salvaged == []
+
+
 @pytest.mark.parametrize("first", [
     '```json\n{"name":"memory_write","arguments":{"path":"notes/x","content":"first"}}\n```',
     '```python\nmemory_write(path="notes/x", content="first")\n```',
