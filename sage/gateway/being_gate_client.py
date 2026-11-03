@@ -2687,6 +2687,20 @@ def settled_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
     return [os.path.realpath(os.path.join(root, f)) for f in SETTLED_WRITES + (HOME_LOCK,)]
 
 
+def thread_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
+    """Every file `retire_thread` writes, all in the being's home (being_threads.writes): todo.md, the
+    retired file it creates, and settled.json with its audit log. A preview writes nothing."""
+    a = args or {}
+    if str(a.get("preview") or "").strip().lower() in ("true", "yes", "1"):
+        return []
+    root = (ctx or {}).get("memory_root")
+    if not root:
+        raise ValueError("retire_thread: no home to retire a thread in")
+    from sage.gateway.being_threads import writes
+    from sage.gateway.reference_f1a import HOME_LOCK   # taken, as memory_write takes it (#544)
+    return [os.path.realpath(os.path.join(root, f)) for f in writes(a) + (HOME_LOCK,)]
+
+
 def skill_paths(args: dict, ctx: Optional[dict] = None) -> List[str]:
     """Every file a `skill` WRITE touches, all in the being's home (being_skills.own_paths). Listing,
     reading and searching touch nothing. A name that is not a plain skill name is refused here, before any
@@ -2858,6 +2872,10 @@ _REGISTRY = {
     # it is, a write of fixed files in its own home, as identity_edit is.
     "settle":         dict(tool="write_note",   path_args=(),        cmd_arg=None,
                            compose_paths=settled_paths),
+    # retire_thread: closes one line of work, its open todo items and settled entries, into a retired
+    # file in its home (being_threads). A write of fixed files in its own home, as settle is.
+    "retire_thread":  dict(tool="write_note",   path_args=(),        cmd_arg=None,
+                           compose_paths=thread_paths),
     # skill: list, read or search the skills (fleet ones shipped with SAGE, and the being's own), or write
     # one of its own under skills/ in its home (being_skills). Reads touch no path the being names; a
     # write is judged as what it is, a write of fixed files in its own home.
@@ -2930,7 +2948,7 @@ _REGISTRY = {
 _OBSERVATIONAL = frozenset({"witness", "memory_read", "recall", "appeal"})
 _CONSEQUENTIAL = frozenset({"peer_ask", "pr_read", "web_search", "memory_write", "channel_egress", "mesh", "pr_review",
                             "remember", "request_scope", "git_read", "search", "check", "say",
-                            "retire_note", "request_run", "memory_edit", "camera", "game", "tune", "identity_edit", "settle", "skill",
+                            "retire_note", "request_run", "memory_edit", "camera", "game", "tune", "identity_edit", "settle", "retire_thread", "skill",
                             "pr_open", "pr_amend", "pr_sync", "git_restore", "git_clean",
                             "edit", "run",     # Legion carrier: memory_edit's range form; sandboxed run
                             "gaze",    # moves the body's own eyes (2026-09-23)
@@ -3191,6 +3209,22 @@ _TOOL_SCHEMAS = {
                 "reopen": "optional: 'true' with id removes it",
                 "why": "optional: why you changed it"},
                []),
+    # A WHOLE LINE OF WORK CAN BE CLOSED AT ONCE (dp, 2026-11-01: "retire the whole hestia thread and work
+    # on something different"; cbp-being had 550 open todo items and 29 settled entries on it, and could
+    # only retire one note or one entry per act).
+    "retire_thread": ("Close a whole line of work at once: every OPEN todo item and every settled entry "
+                      "that names one of your words is moved out of what you are shown each beat, into one "
+                      "retired file (todo.retired-thread-<id>.md) that recall still searches. Use it when a "
+                      "topic is finished or someone asks you to drop it, so it stops coming back uninvited. "
+                      "Other items and entries stay as they are. preview='true' shows what would move and "
+                      "changes nothing. A retire that takes most of a list needs the confirmation its preview "
+                      "(with the same words and reason) returns, used in the same beat.",
+                      {"words": "the topic, as words separated by commas, e.g. 'webserver, port 8080'. A word "
+                                "matches at the start of a word: 'install' also matches 'installer'",
+                       "reason": "why this line of work is finished (needed unless preview='true')",
+                       "preview": "optional: 'true' lists what would move and changes nothing",
+                       "confirmation": "for a retire that takes most of a list: the one-use value its preview returned"},
+                      ["words"]),
     # SKILLS (dp, 2026-10-27: "a 'skills' structure, and membot-type index for them ... model it on your
     # own skills in claude-code"). The beat lists them, the matching ones first (being_skills.render).
     "skill": ("Read a skill: a short procedure for a kind of situation. No arguments lists them; name reads "

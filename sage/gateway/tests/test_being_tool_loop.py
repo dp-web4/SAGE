@@ -125,7 +125,7 @@ def test_run_ollama_tool_turn_with_fake_llm():
     from sage.gateway.being_gate_client import _TOOL_SCHEMAS
     # Pinned against the schema table, not a literal: the count went 13 -> 16 -> 24 as verbs
     # landed on two branches, and a number here only ever recorded which branch wrote it.
-    assert len(ollama_tools()) == len(_TOOL_SCHEMAS) >= 39
+    assert len(ollama_tools()) == len(_TOOL_SCHEMAS) >= 40   # + retire_thread (#619)
 
     calls = {"n": 0}
 
@@ -242,6 +242,171 @@ def test_attempt_evidence_keeps_tokens_spent_before_a_successful_retry():
     assert result.generates[0]["eval_count"] == 40
     assert landed[0]["attempts"] == attempts
     assert "PRIVATE DRAFT" not in repr(attempts)
+
+
+@pytest.mark.parametrize("mode", ["json", "retake"])
+def test_json_done_explanation_never_becomes_a_salvaged_action(mode):
+    """A no-act decision is not an invitation to execute an example in its reason."""
+    import json
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    reason = 'Do not execute this example: {"name":"witness","arguments":{"event":"example"}}'
+    selection = json.dumps({"act": "done", "why": reason})
+
+    class FakeLLM:
+        max_response_tokens = 1000
+        def __init__(self):
+            self.calls = 0
+
+        def get_chat_response(self, messages, **kwargs):
+            self.calls += 1
+            if mode == "retake" and self.calls == 1:
+                return {"content": "[Your complete, well-structured response]"}
+            return {"content": selection}
+
+    dispatched = []
+    def dispatch(intent, verdict):
+        dispatched.append(intent)
+        return ResultEnvelope(ok=True, result="fake")
+
+    result = run_ollama_tool_turn(_client(dispatch), FakeLLM(), [], max_steps=1,
+                                  tools=ollama_tools(["witness"]),
+                                  act_form="json" if mode == "json" else "tools",
+                                  retake_bare_placeholder=(mode == "retake"))
+    assert dispatched == []
+    assert result.trace == [] and result.salvaged == []
+    assert result.reply == reason
+
+
+def test_json_done_cannot_salvage_an_excluded_action():
+    import json
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import JSON_ACT_EXCLUDE, run_ollama_tool_turn
+
+    assert "request_scope" in JSON_ACT_EXCLUDE
+    class FakeLLM:
+        max_response_tokens = 1000
+        def get_chat_response(self, messages, **kwargs):
+            return {"content": json.dumps({"act": "done", "why":
+                'Do not ask: {"name":"request_scope","arguments":{"path":"/example","reason":"example"}}'})}
+
+    dispatched = []
+    def dispatch(intent, verdict):
+        dispatched.append(intent)
+        return ResultEnvelope(ok=True, result="fake")
+    result = run_ollama_tool_turn(_client(dispatch), FakeLLM(), [], max_steps=1,
+                                  tools=ollama_tools(["request_scope"]), act_form="json")
+    assert dispatched == [] and result.trace == [] and result.salvaged == []
+
+
+@pytest.mark.parametrize("selection", [
+    '[]',
+    '{"act":[],"why":"not a string"}',
+    '{"act":"done","act":"witness","why":"ambiguous"}',
+    'Invalid selection: {"name":"witness","arguments":{"event":"example"}}',
+    '{"act":"done","why":"ok","extra":{"name":"witness","arguments":{"event":"example"}}}',
+])
+def test_invalid_json_selection_does_not_act_or_crash(selection):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    class FakeLLM:
+        max_response_tokens = 1000
+        def __init__(self):
+            self.calls = 0
+        def get_chat_response(self, messages, **kwargs):
+            self.calls += 1
+            return {"content": selection if self.calls == 1 else '{"event":"example"}'}
+
+    dispatched = []
+    def dispatch(intent, verdict):
+        dispatched.append(intent)
+        return ResultEnvelope(ok=True, result="fake")
+    result = run_ollama_tool_turn(_client(dispatch), FakeLLM(), [], max_steps=1,
+                                  tools=ollama_tools(["witness"]), act_form="json")
+    assert dispatched == [] and result.trace == [] and result.salvaged == []
+
+
+def test_duplicate_json_arguments_never_dispatch():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    class FakeLLM:
+        max_response_tokens = 1000
+        def __init__(self):
+            self.calls = 0
+        def get_chat_response(self, messages, **kwargs):
+            self.calls += 1
+            return {"content": ('{"act":"witness","why":"observe"}' if self.calls == 1
+                                else '{"event":"first","event":"second"}')}
+
+    dispatched = []
+    def dispatch(intent, verdict):
+        dispatched.append(intent)
+        return ResultEnvelope(ok=True, result="fake")
+    result = run_ollama_tool_turn(_client(dispatch), FakeLLM(), [], max_steps=1,
+                                  tools=ollama_tools(["witness"]), act_form="json")
+    assert dispatched == [] and result.trace == []
+    assert result.json_arg_failures
+
+
+def test_duplicate_json_arguments_can_retry_with_an_unambiguous_value():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    class FakeLLM:
+        max_response_tokens = 1000
+        responses = iter([
+            {"content": '{"act":"witness","why":"observe"}'},
+            {"content": '{"event":"first","event":"second"}'},
+            {"content": '{"event":"revised"}'},
+            {"content": '{"act":"done","why":"finished"}'},
+        ])
+        def get_chat_response(self, messages, **kwargs):
+            return next(self.responses)
+
+    dispatched = []
+    def dispatch(intent, verdict):
+        dispatched.append(intent)
+        return ResultEnvelope(ok=True, result="fake")
+    result = run_ollama_tool_turn(_client(dispatch), FakeLLM(), [], max_steps=1,
+                                  tools=ollama_tools(["witness"]), act_form="json")
+    assert len(dispatched) == 1 and dispatched[0].args == {"event": "revised"}
+    assert len(result.trace) == 1 and result.salvaged == []
+
+
+def test_json_act_rejects_unknown_arguments_for_empty_schema():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+
+    class FakeLLM:
+        max_response_tokens = 1000
+        def __init__(self):
+            self.calls = 0
+        def get_chat_response(self, messages, **kwargs):
+            self.calls += 1
+            return {"content": ('{"act":"pair_audio","why":"connect"}' if self.calls == 1
+                                else '{"dry_run":true}')}
+
+    dispatched = []
+    def dispatch(intent, verdict):
+        dispatched.append(intent)
+        return ResultEnvelope(ok=True, result="fake")
+    result = run_ollama_tool_turn(_client(dispatch), FakeLLM(), [], max_steps=1,
+                                  tools=ollama_tools(["pair_audio"]), act_form="json")
+    assert dispatched == [] and result.trace == []
+    assert result.json_arg_failures
+
+
+def test_empty_object_schema_rejects_extra_unless_explicitly_open():
+    from sage.gateway.being_tool_loop import _check_args
+    closed = {"type": "object", "properties": {}}
+    assert _check_args('{"dry_run":true}', closed)[1] is not None
+    assert _check_args('{}', closed) == ({}, None)
+    assert _check_args('{"value":1}', dict(closed, additionalProperties=True)) == ({"value": 1}, None)
+    assert _check_args('{"value":1}', {"type": "object"}) == ({"value": 1}, None)
+    assert _check_args('{"value":1}', {"type": "object", "additionalProperties": False})[1] is not None
 
 
 def test_length_retry_gets_the_room_the_window_has_left_via_the_override():

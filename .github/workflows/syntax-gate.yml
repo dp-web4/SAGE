@@ -20,3 +20,29 @@ jobs:
           python-version: '3.11'
       - name: Byte-compile all tracked Python under sage/
         run: python -m compileall -q sage
+
+  json-act-boundary:
+    # Deliberately select only fake-model/fake-dispatcher regression controls;
+    # the full gateway suite includes optional hardware/model integration tests.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install the isolated test runner
+        run: python -m pip install 'pytest==9.0.3' 'pytest-asyncio==1.3.0'
+      - name: Check structured no-act and argument boundaries
+        env:
+          SAGE_TEST_LIVE_HESTIA: '0'
+          SAGE_ACTIVITY_REPORT: '0'
+          SAGE_NO_SYSTEMD: '1'
+        run: >-
+          python -m pytest -q
+          sage/gateway/tests/test_being_tool_loop.py::test_json_done_explanation_never_becomes_a_salvaged_action
+          sage/gateway/tests/test_being_tool_loop.py::test_json_done_cannot_salvage_an_excluded_action
+          sage/gateway/tests/test_being_tool_loop.py::test_invalid_json_selection_does_not_act_or_crash
+          sage/gateway/tests/test_being_tool_loop.py::test_duplicate_json_arguments_never_dispatch
+          sage/gateway/tests/test_being_tool_loop.py::test_duplicate_json_arguments_can_retry_with_an_unambiguous_value
+          sage/gateway/tests/test_being_tool_loop.py::test_json_act_rejects_unknown_arguments_for_empty_schema
+          sage/gateway/tests/test_being_tool_loop.py::test_empty_object_schema_rejects_extra_unless_explicitly_open
