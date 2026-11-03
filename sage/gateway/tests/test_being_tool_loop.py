@@ -1499,14 +1499,14 @@ def test_turn_capture_without_nofollow_refuses_to_create_file(tmp_path, monkeypa
 @pytest.mark.skipif(os.name != "posix", reason="POSIX capture locking contract")
 def test_turn_capture_stops_before_byte_limit_without_truncating(tmp_path, monkeypatch):
     from sage.gateway import being_tool_loop as loop
-    monkeypatch.setattr(loop, "_TURN_CAPTURE_MAX_BYTES", 4, raising=False)
+    monkeypatch.setattr(loop, "_TURN_CAPTURE_MAX_BYTES", 5, raising=False)
     capture = tmp_path / "capture.jsonl"
     loop._append_private_turn_capture(capture, "é\n")  # three UTF-8 bytes
     with pytest.raises(OSError, match="limit"):
         loop._append_private_turn_capture(capture, "é\n")
     assert capture.read_bytes() == "é\n".encode()
-    loop._append_private_turn_capture(capture, "x")  # exactly four bytes
-    assert capture.read_bytes() == "é\nx".encode()
+    loop._append_private_turn_capture(capture, "x\n")  # exactly five bytes
+    assert capture.read_bytes() == "é\nx\n".encode()
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX capture locking contract")
@@ -1547,3 +1547,57 @@ def test_turn_capture_refuses_busy_writer_without_changing_file(tmp_path):
         assert capture.read_bytes() == b"existing\n"
     loop._append_private_turn_capture(capture, "later\n")
     assert capture.read_bytes() == b"existing\nlater\n"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture file contract")
+def test_turn_capture_refuses_to_append_to_an_incomplete_tail(tmp_path):
+    from sage.gateway import being_tool_loop as loop
+    capture = tmp_path / "capture.jsonl"
+    old = b'{"ok":1}\n{"incomplete":'
+    capture.write_bytes(old)
+    capture.chmod(0o600)
+    with pytest.raises(OSError, match="incomplete"):
+        loop._append_private_turn_capture(capture, '{"new":2}\n')
+    assert capture.read_bytes() == old
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture file contract")
+def test_turn_capture_refuses_a_record_without_a_single_line_boundary(tmp_path):
+    from sage.gateway import being_tool_loop as loop
+    capture = tmp_path / "capture.jsonl"
+    for text in ("unfinished", "two\nlines\n"):
+        with pytest.raises(OSError, match="boundary"):
+            loop._append_private_turn_capture(capture, text)
+    assert not capture.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX capture file contract")
+def test_turn_capture_does_not_append_after_a_partial_write_failure(tmp_path, monkeypatch):
+    from sage.gateway import being_tool_loop as loop
+    capture = tmp_path / "capture.jsonl"
+    loop._append_private_turn_capture(capture, '{"old":1}\n')
+    real_fdopen = os.fdopen
+
+    class PartialWriter:
+        def __init__(self, fd):
+            self.fd = fd
+
+        def __enter__(self):
+            return self
+
+        def write(self, text):
+            os.write(self.fd, text.encode()[:4])
+            raise OSError("injected partial write")
+
+        def __exit__(self, *unused):
+            os.close(self.fd)
+
+    monkeypatch.setattr(os, "fdopen", lambda fd, *args, **kwargs: PartialWriter(fd))
+    with pytest.raises(OSError, match="injected partial"):
+        loop._append_private_turn_capture(capture, '{"broken":2}\n')
+    monkeypatch.setattr(os, "fdopen", real_fdopen)
+    damaged = capture.read_bytes()
+    assert damaged == b'{"old":1}\n{"br'
+    with pytest.raises(OSError, match="incomplete"):
+        loop._append_private_turn_capture(capture, '{"new":3}\n')
+    assert capture.read_bytes() == damaged
