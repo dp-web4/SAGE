@@ -123,6 +123,21 @@ class ExperimentTests(unittest.TestCase):
                     self.make_run(path)
             self.assertFalse(path.exists())
 
+    def test_trace_does_not_store_raw_adapter_arguments(self):
+        config = copy.deepcopy(CONFIG)
+        config['cases'] = config['cases'][:1]
+        config['arms'] = ['none']
+        config['repeats'] = 1
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / 'synthetic.jsonl'
+            run(config, ['synthetic-adapter', '--private-option', 'synthetic-private-argument'],
+                path, META, self.fixture_adapter)
+            trace = path.read_text()
+            manifest = json.loads(trace.splitlines()[0])
+            self.assertNotIn('synthetic-private-argument', trace)
+            self.assertNotIn('adapter_command', manifest)
+            self.assertIs(manifest.get('adapter_command_recorded'), False)
+
     def test_missing_or_changed_backend_observation_cannot_be_scored(self):
         cfg = copy.deepcopy(CONFIG)
         cfg['cases'] = cfg['cases'][:1]
