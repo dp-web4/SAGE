@@ -18,3 +18,14 @@ os.environ.setdefault("SAGE_CONV_NOTIFY_DIR", tempfile.mkdtemp(prefix="conv-noti
 import sys  # noqa: E402
 sys.path.insert(0, os.path.dirname(__file__))
 import _isolate_hestia  # noqa: E402,F401  -- isolates on import
+
+# Narrow per-test overrides also isolate child subprocesses and avoid cross-test
+# high-water contamination while retaining the existing daemon isolation above.
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def isolate_responder_witnesses(request, monkeypatch, tmp_path):
+    if request.path.name in {"test_seat_responder.py", "test_seat_responder_review.py"}:
+        monkeypatch.setenv("SAGE_CONV_WITNESS_DIR", str(tmp_path / "witness"))
+        monkeypatch.setenv("SAGE_CONV_NOTIFY_DIR", str(tmp_path / "notify"))
