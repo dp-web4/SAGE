@@ -20,6 +20,8 @@ jobs:
           python-version: '3.11'
       - name: Byte-compile all tracked Python under sage/
         run: python -m compileall -q sage
+      - name: Exercise the synthetic lexical probe
+        run: python -m unittest sage.gateway.experiments.test_salience_probe_lexical -v
 
   json-act-boundary:
     # Deliberately select only fake-model/fake-dispatcher regression controls;
