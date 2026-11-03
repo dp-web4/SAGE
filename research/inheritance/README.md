@@ -111,6 +111,12 @@ A new process alone does not prove stateless inference: the adapter must not use
 
 JSONL contains full delivered requests, parsed responses, chosen successor notes, timing/character costs, parent hashes, external expected-choice labels and simulated policy decisions. Writes flush per event; exclusive file creation prevents replacing earlier runs. Hash chains detect accidental edits against recorded hashes, not malicious rewriting by a process that can rewrite the entire file. Stronger custody belongs in the deployment boundary.
 
+The runner does not record raw adapter argv, which may contain credentials or local paths. The
+operator-supplied adapter revision remains a claim, not proof of the invoked executable or its
+arguments, so exact invocation provenance requires a separately reviewed safe mechanism. Requests,
+responses, error evidence and operator metadata are still recorded and may themselves be sensitive;
+private file mode is not a substitute for retention, sharing and redaction policy.
+
 The summarizer rejects incomplete, missing, duplicate, out-of-order, hash-mismatched,
 inconsistent-scoring, wrong-arm-input and wrong-handoff traces. These consistency checks do not
 authenticate what a backend actually received or prevent a coordinated rewrite of a whole run.

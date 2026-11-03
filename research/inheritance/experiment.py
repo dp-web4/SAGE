@@ -243,7 +243,9 @@ def run(config, command, out, metadata, adapter=call_adapter):
             stream.write(json.dumps(row, sort_keys=True) + '\n')
             stream.flush()
         emit({'kind': 'manifest', 'config': config, 'config_hash': digest(config),
-              'metadata': metadata, 'adapter_command': command,
+              # Raw argv may include credentials or local paths. Its omission
+              # weakens replay provenance and is not executable attestation.
+              'metadata': metadata, 'adapter_command_recorded': False,
               'harness_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()})
         order = [(c, a, r) for c in config['cases'] for a in config['arms'] for r in range(config['repeats'])]
         random.Random(config['seed']).shuffle(order)
