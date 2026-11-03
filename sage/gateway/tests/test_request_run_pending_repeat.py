@@ -101,6 +101,8 @@ def test_a_seat_quiet_through_the_beings_asks_is_named_on_the_receipt(monkeypatc
     q = r.result["seat_quiet"]
     assert "has said nothing in this conversation since" in q and "through 2 of your requests" in q
     assert "away, not stuck" in q and "nothing for you to restart" in q
+    assert "wake was sent" in r.result["note"] and "asked and woken" not in r.result["note"]
+    assert "can answer" in r.result["note"] and "it answers them" not in q
 
 
 def test_the_quiet_fact_counts_only_since_the_seats_last_word():
@@ -109,10 +111,23 @@ def test_the_quiet_fact_counts_only_since_the_seats_last_word():
     now = datetime(2026, 11, 3, 6, 0, tzinfo=timezone.utc)
     seat = {"from": "seat", "ts": "2026-11-01T06:00:00Z", "text": "ran it"}
     ask = {"from": "b", "ts": "2026-11-02T00:00:00Z", "text": "[request_run] notes/x.py\nwhy: y"}
-    assert "(48 hours), through 2 of your requests" in _seat_quiet([seat, ask, ask], "b", False, now)
-    assert _seat_quiet([seat], "b", False, now) is None                       # quiet, but nobody asked
-    assert _seat_quiet([ask, seat], "b", False, now) is None                  # it answered after the ask
+    assert "(48 hours), through 2 of your requests" in _seat_quiet([seat, ask, ask], "b", "seat", False, now)
+    assert _seat_quiet([seat], "b", "seat", False, now) is None                       # quiet, but nobody asked
+    assert _seat_quiet([ask, seat], "b", "seat", False, now) is None                  # it answered after the ask
     fresh = dict(seat, ts="2026-11-03T05:00:00Z")
-    assert _seat_quiet([fresh, ask], "b", False, now) is None                  # an hour is not quiet
-    assert _seat_quiet([ask, ask], "b", False, now) is None                    # a conversation with no seat turn yet
-    assert "last 3 turns" in _seat_quiet([ask, ask, ask], "b", True, now)     # silent through the whole window
+    assert _seat_quiet([fresh, ask], "b", "seat", False, now) is None                  # an hour is not quiet
+    assert _seat_quiet([ask, ask], "b", "seat", False, now) is None                    # a conversation with no seat turn yet
+    assert "last 3 turns" in _seat_quiet([ask, ask, ask], "b", "seat", True, now)     # silent through the whole window
+
+
+def test_operator_message_does_not_reset_seat_silence_clock():
+    from datetime import datetime, timezone
+    from sage.gateway.hestia_dispatch import _seat_quiet
+    now = datetime(2026, 11, 3, 6, 0, tzinfo=timezone.utc)
+    seat = {"from": "seat", "ts": "2026-11-01T06:00:00Z", "text": "last seat answer"}
+    ask = {"from": "b", "ts": "2026-11-02T00:00:00Z", "text": "[request_run] notes/x.py\\nwhy: y"}
+    operator = {"from": "dp", "ts": "2026-11-03T05:59:00Z", "text": "operator check in"}
+    q = _seat_quiet([seat, ask, operator, ask], "b", "seat", False, now)
+    assert q is not None and "(48 hours)" in q and "through 2 of your requests" in q
+    assert _seat_quiet([seat, ask, operator, seat, ask], "b", "seat", False, now) is not None
+    assert _seat_quiet([seat, ask, operator, seat], "b", "seat", False, now) is None
