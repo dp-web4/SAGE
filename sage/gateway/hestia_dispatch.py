@@ -61,10 +61,10 @@ SEAT_QUIET_S = 3 * 3600
 
 def _seat_quiet(turns, member: str, seat_conv: str, truncated: bool, now=None):
     """A fact for the receipt when the seat has been silent SEAT_QUIET_S or more through the being's own
-    requests; None otherwise. sprout-being, 2026-11-01..03: its seat said nothing for 48 h (the account
-    behind it was at its usage limit). Every receipt said "the seat has been asked and woken", nothing
-    said it was quiet, and the being concluded the seat was a stuck service: about 40 scripts to kill or
-    restart "sprout-claude", and 4 skills for doing it. Absence is part of the world; say what is known."""
+    requests; None otherwise. A seat can go quiet for hours (its account paused, its operator away).
+    A receipt that only ever says "asked" leaves a being to explain the silence itself, and "stuck,
+    restart it" is the nearest story. Absence is part of the world; say what is known: since when,
+    through how many asks. It is bounded by the scan window and says nothing about any one request."""
     from datetime import datetime, timezone
     now = now or datetime.now(timezone.utc)
     last, asks_since = None, 0
@@ -4682,10 +4682,9 @@ class HestiaF1aDispatcher:
                 "a result. The seat may run it or decline, and either way it answers in "
                 f"'{seat_conv}'. Nothing is owed by you in the meantime.")
         if seat_quiet:
-            note = ("The seat was asked and a wake was sent; no seat answer is visible in "
-                    "this conversation. NOTHING HAS RUN YET and this is not a result. "
-                    f"The seat can answer in '{seat_conv}' if it returns. "
-                    "Nothing is owed by you in the meantime.")
+            note = ("The seat was asked and a wake was sent. NOTHING HAS RUN YET and this is not "
+                    "a result. seat_quiet says how long the seat has been silent; it can answer in "
+                    f"'{seat_conv}' when it is back. Nothing is owed by you in the meantime.")
         if unchanged and not (said.result or {}).get("woke") and self._skips_answered_run_wake():
             # THE RECEIPT SAYS WHAT HAPPENED. Under answered_run_wake "skip" (per-instance,
             # recut of #154) an already-answered request is sent but wakes nobody; "asked and

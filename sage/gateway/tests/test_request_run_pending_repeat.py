@@ -88,8 +88,8 @@ def test_a_different_file_or_an_edit_is_a_new_request():
 
 
 def test_a_seat_quiet_through_the_beings_asks_is_named_on_the_receipt(monkeypatch):
-    """sprout-being, 2026-11-01..03: 48 h of seat silence (usage limit) read as a stuck service, and about 40
-    restart/kill scripts followed. The receipt now says how long the seat has been quiet, and what that means."""
+    """Hours of seat silence with only "asked" on every receipt reads as a stuck seat. The receipt says how
+    long the seat has been quiet, and what that does and does not mean."""
     from sage.gateway import hestia_dispatch as hd
     d, home = _seat_home()
     conv.append(home, "seat", speaker="seat", via="seat", text="hello from the seat")
@@ -103,6 +103,7 @@ def test_a_seat_quiet_through_the_beings_asks_is_named_on_the_receipt(monkeypatc
     assert "away, not stuck" in q and "nothing for you to restart" in q
     assert "wake was sent" in r.result["note"] and "asked and woken" not in r.result["note"]
     assert "can answer" in r.result["note"] and "it answers them" not in q
+    assert "no seat answer" not in r.result["note"], "an earlier seat turn is in view; the note may not deny it"
 
 
 def test_the_quiet_fact_counts_only_since_the_seats_last_word():
@@ -131,3 +132,21 @@ def test_operator_message_does_not_reset_seat_silence_clock():
     assert q is not None and "(48 hours)" in q and "through 2 of your requests" in q
     assert _seat_quiet([seat, ask, operator, seat, ask], "b", "seat", False, now) is not None
     assert _seat_quiet([seat, ask, operator, seat], "b", "seat", False, now) is None
+
+
+def test_quiet_after_an_answer_keeps_that_answer_and_does_not_deny_it(monkeypatch):
+    # Codex on #628: the seat answered this file earlier, then went quiet through later, unrelated asks.
+    # The receipt carries the earlier answer (unchanged) and the quiet period; the note denies neither.
+    from sage.gateway import hestia_dispatch as hd
+    d, home = _seat_home()
+    d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+    asked = conv.recent(home, "seat", limit=1)[-1]["seq"]
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] Ran notes/probe.py: prints a.\n\nAnswers your request seq {asked}.")
+    (home / "notes" / "other.py").write_text("print('o')\n")
+    d(BeingIntent("request_run", {"path": "notes/other.py", "why": "unrelated"}), _ALLOW)
+    monkeypatch.setattr(hd, "SEAT_QUIET_S", 0)
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
+    assert "unchanged" in r.result and f"seq {asked}" in r.result["unchanged"]
+    assert "through 1 of your requests" in r.result["seat_quiet"]
+    assert "no seat answer" not in r.result["note"] and "not answered" not in r.result["note"]
