@@ -44,6 +44,12 @@ def test_placed_reads_title_and_text_and_skips_the_note_empty_files_and_what_is_
     assert mc.placed(Path(tempfile.mkdtemp()), museum) == []        # no folder, nothing placed
 
 
+def test_an_upper_case_suffix_hangs_and_a_title_only_file_drops_its_hash():
+    inst = _instance({"SHOUT.MD": "# Loud\nall caps name", "only-title.md": "# Just This\n"})
+    got = {p["name"]: (p["title"], p["text"]) for p in mc.placed(inst, _museum())}
+    assert got == {"SHOUT.MD": ("Loud", "all caps name"), "only-title.md": ("Just This", "Just This")}
+
+
 def test_hang_placed_hangs_each_as_written_with_its_origin_and_no_judgment(monkeypatch):
     museum = _museum()
     inst = _instance({"a.md": "# A Door That Remembers\nIt opens only onto rooms you have left.",

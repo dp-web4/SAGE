@@ -205,7 +205,7 @@ def placed(instance: Path, museum: Path, held: Optional[List[str]] = None) -> Li
     since = _wall_since(d)
     out = []
     for f in sorted(d.iterdir()):
-        if not f.is_file() or f.suffix not in (".md", ".txt") or f.name == "README.md":
+        if not f.is_file() or f.suffix.lower() not in (".md", ".txt") or f.name == "README.md":
             continue
         try:
             raw = f.read_text(encoding="utf-8", errors="replace").strip()
@@ -216,7 +216,7 @@ def placed(instance: Path, museum: Path, held: Optional[List[str]] = None) -> Li
             continue
         first, _, rest = raw.partition("\n")
         title = first.lstrip("#").strip() or f.stem.replace("-", " ")
-        text = rest.strip() or raw
+        text = rest.strip() or first.lstrip("#").strip() or raw
         if already_present(museum, title, text):
             held.append(f'not hung: museum/{f.name} ("{title}") is already on the wall')
         elif since is None or mtime <= since:
