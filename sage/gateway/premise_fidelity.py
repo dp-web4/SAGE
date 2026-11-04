@@ -8,12 +8,13 @@ does not establish a correction relation without an explicit binding schema.
 from __future__ import annotations
 
 import argparse
+import copy
 import gzip
 import hashlib
 import json
 import re
 import zlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -59,50 +60,71 @@ class SourceArtifact:
             root = root.resolve()
             path = (root / self.pointer["path"]).resolve()
             path.relative_to(root)
-            if self.pointer["kind"] == "stat" and not path.is_file():
+            kind = self.pointer["kind"]
+            if kind == "stat" and not path.is_file():
                 return ResolvedSource(self, available=False, reason="stat_requires_readable_regular_file")
             raw = path.read_bytes()
         except (OSError, KeyError, ValueError) as exc:
             return ResolvedSource(self, available=False, reason=f"source_unavailable:{type(exc).__name__}")
         if _sha_bytes(raw) != self.content_hash:
             return ResolvedSource(self, available=False, reason="hash_mismatch")
-        kind = self.pointer["kind"]
         if kind == "stat":
             return ResolvedSource(self, available=True, metadata={"file_type": "regular_file"})
         try:
             if kind == "text":
                 text = raw.decode("utf-8")
+                lines = text.splitlines(keepends=True)
                 start = self.pointer.get("line_start")
                 end = self.pointer.get("line_end")
+                coverage = "whole_file"
                 if start is not None or end is not None:
-                    lines = text.splitlines(keepends=True)
-                    text = "".join(lines[(start or 1) - 1:end])
-                return ResolvedSource(self, available=True, content=text)
+                    start = 1 if start is None else start
+                    end = len(lines) if end is None else end
+                    valid = all(isinstance(value, int) and not isinstance(value, bool) for value in (start, end))
+                    if not valid or start < 1 or end < start or end > len(lines):
+                        return ResolvedSource(self, available=False, reason="invalid_line_range")
+                    coverage = "whole_file" if start == 1 and end == len(lines) else "selected_lines"
+                    text = "".join(lines[start - 1:end])
+                return ResolvedSource(self, available=True, content=text, metadata={"content_coverage": coverage})
             if kind not in ("jsonl", "gzip_jsonl"):
                 return ResolvedSource(self, available=False, reason=f"unknown_pointer_kind:{kind}")
+            json_path = self.pointer.get("json_path", [])
+            if not isinstance(json_path, list) or any(
+                isinstance(key, bool) or not isinstance(key, (str, int)) or isinstance(key, int) and key < 0
+                for key in json_path
+            ):
+                return ResolvedSource(self, available=False, reason="invalid_json_path")
             data = gzip.decompress(raw) if kind == "gzip_jsonl" else raw
             lines = data.decode("utf-8").splitlines()
             if "seq" in self.pointer:
+                seq = self.pointer["seq"]
+                if not isinstance(seq, int) or isinstance(seq, bool) or seq < 0:
+                    return ResolvedSource(self, available=False, reason="invalid_seq")
                 matches = []
-                for line in lines:
-                    if not line.strip():
+                for candidate in lines:
+                    if not candidate.strip():
                         continue
-                    candidate = json.loads(line)
-                    if not isinstance(candidate, dict):
+                    parsed = json.loads(candidate)
+                    if not isinstance(parsed, dict):
                         return ResolvedSource(self, available=False, reason="record_unavailable:non_object_seq_record")
-                    if candidate.get("seq") == self.pointer["seq"]:
-                        matches.append(line)
+                    if type(parsed.get("seq")) is int and parsed["seq"] == seq:
+                        matches.append(candidate)
                 if len(matches) != 1:
                     return ResolvedSource(self, available=False, reason=f"seq_matches:{len(matches)}")
                 line = matches[0]
             else:
-                line = lines[self.pointer["jsonl_line"] - 1]
+                line_number = self.pointer["jsonl_line"]
+                if not isinstance(line_number, int) or isinstance(line_number, bool) or line_number < 1:
+                    return ResolvedSource(self, available=False, reason="invalid_jsonl_line")
+                line = lines[line_number - 1]
             record: Any = json.loads(line)
-            for key in self.pointer.get("json_path", []):
+            for key in json_path:
+                if isinstance(key, int) and (not isinstance(record, list) or key >= len(record)):
+                    return ResolvedSource(self, available=False, reason="invalid_json_path_index")
                 record = record[key]
-            content = json.dumps(record, ensure_ascii=False, sort_keys=True) if self.pointer.get("json_path") else line
+            content = json.dumps(record, ensure_ascii=False, sort_keys=True) if json_path else line
             return ResolvedSource(self, available=True, content=content, data=record)
-        except (OSError, EOFError, zlib.error, UnicodeError, ValueError, KeyError, IndexError, TypeError) as exc:
+        except (OSError, EOFError, zlib.error, UnicodeError, ValueError, KeyError, IndexError, TypeError, AttributeError) as exc:
             return ResolvedSource(self, available=False, reason=f"record_unavailable:{type(exc).__name__}")
 
 
@@ -156,9 +178,22 @@ def _outcome(claim: SourceClaim, support: str, reason: str) -> CheckResult:
     return CheckResult(support, reason, claim.source_refs)
 
 
+def _nonempty_strings(value: Any) -> bool:
+    return isinstance(value, list) and bool(value) and all(isinstance(item, str) and bool(item) for item in value)
+
+
+def _effective_completeness(source: ResolvedSource) -> str:
+    if source.metadata.get("content_coverage") == "selected_lines" and source.artifact.completeness == "complete":
+        return "partial"
+    return source.artifact.completeness
+
+
 def _text_contains(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult:
     source = sources[0]
-    missing = [text for text in claim.assertion["contains"] if text not in source.content]
+    fragments = claim.assertion["contains"]
+    if not _nonempty_strings(fragments):
+        return _outcome(claim, "unknown", "invalid_contains")
+    missing = [text for text in fragments if text not in source.content]
     if not missing:
         return _outcome(claim, "supported", "all_fragments_present")
     if source.artifact.completeness == "partial":
@@ -171,6 +206,8 @@ def _text_contains(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckRe
 def _quote(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult:
     source = sources[0]
     needle = claim.assertion["needle"]
+    if not isinstance(needle, str) or not needle:
+        return _outcome(claim, "unknown", "invalid_quote")
     if needle in source.content:
         return _outcome(claim, "supported", "exact_quote_present")
     if source.artifact.completeness == "partial":
@@ -185,6 +222,8 @@ def _manifest_unexecuted(claim: SourceClaim, sources: list[ResolvedSource]) -> C
     if source.artifact.source_type != "case_manifest":
         return _outcome(claim, "unknown", "execution_absence_requires_a_case_manifest")
     fragments = claim.assertion["required_fragments"]
+    if not _nonempty_strings(fragments):
+        return _outcome(claim, "unknown", "invalid_required_fragments")
     if all(fragment in source.content for fragment in fragments):
         return _outcome(claim, "contradicted", "manifest_records_no_such_execution")
     return _outcome(claim, "unknown", "manifest_does_not_establish_execution_status")
@@ -195,15 +234,32 @@ def _receipt_fields(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckR
     if not isinstance(data, dict) or "effector" not in data:
         return _outcome(claim, "unknown", "not_a_tool_receipt")
     assertion = claim.assertion
+    if not isinstance(assertion["effector"], str) or not assertion["effector"]:
+        return _outcome(claim, "unknown", "invalid_effector")
+    for assertion_field, data_field in (("ok", "ok"), ("error_contains", "error")):
+        if assertion_field in assertion and data_field not in data:
+            return _outcome(claim, "unknown", f"receipt_field_absent:{data_field}")
+    if "ok" in assertion and not isinstance(assertion["ok"], bool):
+        return _outcome(claim, "unknown", "invalid_ok")
+    for field_name in ("error_contains", "arg_path_contains"):
+        if field_name in assertion and (not isinstance(assertion[field_name], str) or not assertion[field_name]):
+            return _outcome(claim, "unknown", f"invalid_{field_name}")
     mismatches = []
     if data.get("effector") != assertion["effector"]:
         mismatches.append(f"effector:{data.get('effector')}!={assertion['effector']}")
-    if "ok" in assertion and data.get("ok") is not assertion["ok"]:
+    if "ok" in assertion and data["ok"] is not assertion["ok"]:
         mismatches.append(f"ok:{data.get('ok')}!={assertion['ok']}")
-    if "error_contains" in assertion and assertion["error_contains"] not in str(data.get("error") or ""):
+    if "error_contains" in assertion and assertion["error_contains"] not in str(data["error"] or ""):
         mismatches.append("error")
-    if "arg_path_contains" in assertion and assertion["arg_path_contains"] not in json.dumps(data.get("args", {})):
-        mismatches.append("argument_path")
+    if "arg_path_contains" in assertion:
+        args = data.get("args")
+        if not isinstance(args, dict):
+            return _outcome(claim, "unknown", "receipt_args_unavailable")
+        paths = [args[key] for key in ("path", "file_path", "filename") if key in args]
+        if len(paths) != 1 or not isinstance(paths[0], str):
+            return _outcome(claim, "unknown", "receipt_path_ambiguous")
+        if assertion["arg_path_contains"] not in paths[0]:
+            mismatches.append("argument_path")
     return _outcome(claim, "contradicted" if mismatches else "supported", ",".join(mismatches) if mismatches else "receipt_fields_match")
 
 
@@ -256,15 +312,19 @@ def _absence(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult:
     except KeyError:
         return _outcome(claim, "unknown", "read_result_unavailable")
     needle = claim.assertion["needle"]
+    if not isinstance(needle, str) or not needle:
+        return _outcome(claim, "unknown", "invalid_absence_needle")
     if needle in text:
         return _outcome(claim, "contradicted", "needle_present")
-    if claim.assertion["scope"] == "whole_file" and source.artifact.completeness != "complete":
+    if claim.assertion["scope"] == "whole_file" and _effective_completeness(source) != "complete":
         return _outcome(claim, "incomplete", "partial_read_cannot_establish_whole_file_absence")
     return _outcome(claim, "supported", "needle_absent_from_complete_source")
 
 
 def _peer_assertion(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult:
     fragment = claim.assertion["claim_fragment"]
+    if not isinstance(fragment, str) or not fragment:
+        return _outcome(claim, "unknown", "invalid_claim_fragment")
     if fragment not in sources[0].content:
         return _outcome(claim, "unknown", "peer_assertion_not_found")
     if len(sources) == 1:
@@ -273,6 +333,9 @@ def _peer_assertion(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckR
 
 
 def _frontmatter_speakers(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult:
+    expected = claim.assertion["expected"]
+    if not _nonempty_strings(expected) or len(expected) != len(sources):
+        return _outcome(claim, "unknown", "invalid_expected_speakers")
     actual = []
     for source in sources:
         match = re.search(r"\A---\s*\n(.*?)\n---", source.content, re.DOTALL)
@@ -280,7 +343,6 @@ def _frontmatter_speakers(claim: SourceClaim, sources: list[ResolvedSource]) -> 
         if not speaker:
             return _outcome(claim, "unknown", "speaker_frontmatter_absent")
         actual.append(speaker.group(1))
-    expected = claim.assertion["expected"]
     return _outcome(claim, "supported" if actual == expected else "contradicted", f"speakers:{actual}")
 
 
@@ -325,6 +387,15 @@ def check_claim(
         return _outcome(claim, "unknown", f"invalid_assertion:{type(exc).__name__}")
 
 
+def _control_claim(case: dict[str, Any], control: dict[str, Any]) -> SourceClaim:
+    raw = copy.deepcopy(case["claim"])
+    for key in ("claim_kind", "source_refs"):
+        if key in control:
+            raw[key] = copy.deepcopy(control[key])
+    raw["assertion"].update(copy.deepcopy(control.get("claim_assertion", {})))
+    return SourceClaim.from_dict(raw)
+
+
 def validate_corpus(corpus: dict[str, Any]) -> tuple[dict[str, SourceArtifact], list[dict[str, Any]]]:
     if corpus.get("schema") != CORPUS_SCHEMA:
         raise ValueError("unsupported corpus schema")
@@ -338,17 +409,69 @@ def validate_corpus(corpus: dict[str, Any]) -> tuple[dict[str, SourceArtifact], 
         if case["case_id"] in case_ids:
             raise ValueError(f"duplicate case id: {case['case_id']}")
         case_ids.add(case["case_id"])
-        if case.get("evidence_class") not in EVIDENCE_CLASSES:
+        evidence_class = case.get("evidence_class")
+        if evidence_class not in EVIDENCE_CLASSES:
             raise ValueError(f"invalid evidence class: {case['case_id']}")
         if case.get("expected_support") not in SUPPORTS:
             raise ValueError(f"invalid expected support: {case['case_id']}")
         claim = SourceClaim.from_dict(case["claim"])
-        if claim.assertion.get("op") not in _CHECKERS:
-            raise ValueError(f"unsupported assertion op: {claim.assertion.get('op')}")
-        unknown = [ref for ref in claim.source_refs if ref not in artifacts]
-        if unknown:
-            raise ValueError(f"unknown source refs: {unknown}")
+        claims = [claim] + [_control_claim(case, control) for control in case.get("controls", [])]
+        for control in case.get("controls", []):
+            if control.get("expected_support") not in SUPPORTS:
+                raise ValueError(f"invalid control support: {case['case_id']}")
+            unknown_overrides = [ref for ref in control.get("resolved_overrides", {}) if ref not in artifacts]
+            unknown_overrides += [ref for ref in control.get("source_completeness", {}) if ref not in artifacts]
+            if unknown_overrides:
+                raise ValueError(f"unknown control source refs: {unknown_overrides}")
+        for candidate in claims:
+            if candidate.assertion.get("op") not in _CHECKERS:
+                raise ValueError(f"unsupported assertion op: {candidate.assertion.get('op')}")
+            unknown = [ref for ref in candidate.source_refs if ref not in artifacts]
+            if unknown:
+                raise ValueError(f"unknown source refs: {unknown}")
+            for ref in candidate.source_refs:
+                artifact = artifacts[ref]
+                if evidence_class == "committed_manifest" and artifact.source_type != "case_manifest":
+                    raise ValueError(f"manifest source type mismatch: {case['case_id']}:{ref}")
+                if evidence_class == "raw_artifact" and artifact.source_type == "case_manifest":
+                    raise ValueError(f"manifest cannot back a raw case: {case['case_id']}:{ref}")
+                actual_class = artifact.provenance.get("evidence_class")
+                if actual_class != evidence_class:
+                    raise ValueError(f"evidence class mismatch: {case['case_id']}:{ref}:{actual_class}")
     return artifacts, corpus["cases"]
+
+
+def _run_control(
+    case: dict[str, Any],
+    control: dict[str, Any],
+    index: int,
+    artifacts: dict[str, SourceArtifact],
+    resolved: dict[str, ResolvedSource],
+    root: Path,
+) -> dict[str, Any]:
+    claim = _control_claim(case, control)
+    local = resolved.copy()
+    for ref, completeness in control.get("source_completeness", {}).items():
+        base = local[ref]
+        local[ref] = ResolvedSource(replace(base.artifact, completeness=completeness), base.available, base.content, base.data, base.metadata, base.reason)
+    for ref, overlay in control.get("resolved_overrides", {}).items():
+        base = local[ref]
+        local[ref] = ResolvedSource(
+            base.artifact,
+            overlay.get("available", base.available),
+            overlay.get("content", base.content),
+            overlay.get("data", base.data),
+            overlay.get("metadata", base.metadata),
+            overlay.get("reason", base.reason),
+        )
+    result = check_claim(claim, artifacts, root, local)
+    return {
+        "control_id": f"{case['case_id']}-C{index}",
+        "change": control["change"],
+        "expected_support": control["expected_support"],
+        "actual": result.to_dict(),
+        "pass": result.support == control["expected_support"],
+    }
 
 
 def run_corpus(corpus: dict[str, Any], root: Path) -> dict[str, Any]:
@@ -358,20 +481,24 @@ def run_corpus(corpus: dict[str, Any], root: Path) -> dict[str, Any]:
     for case in cases:
         claim = SourceClaim.from_dict(case["claim"])
         result = check_claim(claim, artifacts, root, resolved)
+        controls = [_run_control(case, control, index, artifacts, resolved, root) for index, control in enumerate(case.get("controls", []), 1)]
         rows.append({
             "case_id": case["case_id"],
             "evidence_class": case["evidence_class"],
             "expected_support": case["expected_support"],
             "actual": result.to_dict(),
             "pass": result.support == case["expected_support"],
+            "controls": controls,
         })
     raw = [row for row in rows if row["evidence_class"] == "raw_artifact"]
     manifest = [row for row in rows if row["evidence_class"] == "committed_manifest"]
+    controls = [control for row in rows for control in row["controls"]]
     raw_sources_available = all(
         resolved[ref].available
         for case in cases if case["evidence_class"] == "raw_artifact"
         for ref in case["claim"]["source_refs"]
     )
+    raw_controls = [control for row in raw for control in row["controls"]]
     return {
         "schema": RESULT_SCHEMA,
         "corpus_id": corpus["corpus_id"],
@@ -382,9 +509,11 @@ def run_corpus(corpus: dict[str, Any], root: Path) -> dict[str, Any]:
             "raw_passed": sum(row["pass"] for row in raw),
             "manifest_total": len(manifest),
             "manifest_passed": sum(row["pass"] for row in manifest),
+            "control_total": len(controls),
+            "control_passed": sum(control["pass"] for control in controls),
             "raw_sources_available": raw_sources_available,
-            "raw_predicate": bool(raw) and raw_sources_available and all(row["pass"] for row in raw),
-            "corpus_predicate": all(row["pass"] for row in rows),
+            "raw_predicate": bool(raw) and raw_sources_available and all(row["pass"] for row in raw) and all(control["pass"] for control in raw_controls),
+            "corpus_predicate": all(row["pass"] for row in rows) and all(control["pass"] for control in controls),
         },
         "cases": rows,
     }

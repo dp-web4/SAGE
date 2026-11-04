@@ -22,15 +22,16 @@ class PremiseFidelityTest(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         raw = content if isinstance(content, bytes) else content.encode()
         path.write_bytes(raw)
+        source_type = overrides.pop("source_type", "conversation")
         source = {
             "source_id": overrides.pop("source_id", name),
-            "source_type": overrides.pop("source_type", "conversation"),
+            "source_type": source_type,
             "producer_or_speaker": overrides.pop("producer_or_speaker", "being"),
             "content_hash": hashlib.sha256(raw).hexdigest(),
             "completeness": overrides.pop("completeness", "complete"),
             "pointer": overrides.pop("pointer", {"kind": "text", "path": name}),
             "observed_at": "2026-11-03",
-            "provenance": overrides.pop("provenance", {}),
+            "provenance": overrides.pop("provenance", {"evidence_class": "committed_manifest" if source_type == "case_manifest" else "raw_artifact"}),
         }
         source.update(overrides)
         return source
@@ -236,6 +237,88 @@ class PremiseFidelityTest(unittest.TestCase):
         executed = self.artifact("executed.jsonl", json.dumps({"effector": "run", "ok": False, "error": "ENXIO"}) + "\n", source_id="executed", source_type="tool_receipt", pointer={"kind": "jsonl", "path": "executed.jsonl", "jsonl_line": 1})
         positive = self.claim("executed", "receipt_fields", effector="run", ok=False, error_contains="ENXIO")
         self.assertEqual(self.check(executed, positive).support, "supported")
+
+    def test_invalid_selectors_and_nonobject_records_are_unavailable(self):
+        raw = '{"seq":1,"value":"first"}\n{"seq":2,"value":"last"}\n'
+        source = self.artifact("lines.jsonl", raw, source_id="lines", pointer={"kind": "jsonl", "path": "lines.jsonl", "jsonl_line": 0})
+        self.assertEqual(self.check(source, self.claim("lines", "text_contains", contains=["last"])).support, "unknown")
+        source["pointer"]["jsonl_line"] = True
+        self.assertEqual(self.check(source, self.claim("lines", "text_contains", contains=["last"])).support, "unknown")
+        nonobject = self.artifact("nonobject.jsonl", '[]\n{"seq":1,"value":"a"}\n', source_id="nonobject", pointer={"kind": "jsonl", "path": "nonobject.jsonl", "seq": 1})
+        artifact = pf.SourceArtifact.from_dict(nonobject)
+        self.assertFalse(artifact.resolve(self.root).available)
+        nonobject["pointer"]["seq"] = 2
+        self.assertFalse(pf.SourceArtifact.from_dict(nonobject).resolve(self.root).available)
+
+    def test_invalid_text_line_ranges_are_unavailable(self):
+        source = self.artifact("text", "one\ntwo\n", pointer={"kind": "text", "path": "text", "line_start": 0, "line_end": 1})
+        self.assertEqual(self.check(source, self.claim("text", "text_contains", contains=["one"])).support, "unknown")
+        source["pointer"].update(line_start=2, line_end=1)
+        self.assertEqual(self.check(source, self.claim("text", "text_contains", contains=["two"])).support, "unknown")
+
+    def test_selected_text_cannot_establish_whole_file_absence(self):
+        raw = "first line\nsecret needle\n"
+        selected = self.artifact("text", raw, pointer={"kind": "text", "path": "text", "line_start": 1, "line_end": 1})
+        absence = self.claim("text", "absence", kind="completeness", needle="secret", scope="whole_file")
+        self.assertEqual(self.check(selected, absence).support, "incomplete")
+        whole = self.artifact("text", raw, pointer={"kind": "text", "path": "text", "line_start": 1, "line_end": 2})
+        self.assertEqual(self.check(whole, absence).support, "contradicted")
+
+    def test_jsonl_seq_record_type_is_strict(self):
+        for value in ("true", "1.0"):
+            with self.subTest(value=value):
+                raw = f'{{"seq":{value},"value":"wrong"}}\n'
+                source = self.artifact("lines.jsonl", raw, source_id="lines", pointer={"kind": "jsonl", "path": "lines.jsonl", "seq": 1})
+                resolved = pf.SourceArtifact.from_dict(source).resolve(self.root)
+                self.assertFalse(resolved.available)
+                self.assertEqual(resolved.reason, "seq_matches:0")
+
+    def test_json_path_rejects_boolean_negative_and_invalid_indices(self):
+        raw = '{"records":["first","last"]}\n'
+        for index in (True, -1, 2, 1.0, None):
+            with self.subTest(index=index):
+                source = self.artifact("path.jsonl", raw, source_id="path", pointer={"kind": "jsonl", "path": "path.jsonl", "jsonl_line": 1, "json_path": ["records", index]})
+                self.assertFalse(pf.SourceArtifact.from_dict(source).resolve(self.root).available)
+        source = self.artifact("path.jsonl", raw, source_id="path", pointer={"kind": "jsonl", "path": "path.jsonl", "jsonl_line": 1, "json_path": ["records", 1]})
+        resolved = pf.SourceArtifact.from_dict(source).resolve(self.root)
+        self.assertTrue(resolved.available)
+        self.assertEqual(resolved.data, "last")
+
+    def test_missing_receipt_fields_and_unrelated_path_text_fail_closed(self):
+        missing = self.artifact("missing.jsonl", '{"effector":"read_file"}\n', source_id="missing", source_type="tool_receipt", pointer={"kind": "jsonl", "path": "missing.jsonl", "jsonl_line": 1})
+        self.assertEqual(self.check(missing, self.claim("missing", "receipt_fields", effector="read_file", ok=True)).support, "unknown")
+        record = {"effector": "memory_write", "ok": False, "error": "FileExistsError", "args": {"path": "elsewhere/file", "comment": "inbox/"}}
+        source = self.artifact("receipt.jsonl", json.dumps(record) + "\n", source_id="receipt", source_type="tool_receipt", pointer={"kind": "jsonl", "path": "receipt.jsonl", "jsonl_line": 1})
+        claim = self.claim("receipt", "receipt_fields", effector="memory_write", ok=False, error_contains="FileExistsError", arg_path_contains="inbox/")
+        self.assertEqual(self.check(source, claim).support, "contradicted")
+        del record["args"]
+        no_args = self.artifact("no-args.jsonl", json.dumps(record) + "\n", source_id="no-args", source_type="tool_receipt", pointer={"kind": "jsonl", "path": "no-args.jsonl", "jsonl_line": 1})
+        no_args_claim = self.claim("no-args", "receipt_fields", effector="memory_write", ok=False, arg_path_contains="inbox/")
+        self.assertEqual(self.check(no_args, no_args_claim).support, "unknown")
+
+    def test_empty_assertion_operands_are_unknown(self):
+        source = self.artifact("source", "alpha")
+        self.assertEqual(self.check(source, self.claim("source", "text_contains", contains=[])).support, "unknown")
+        self.assertEqual(self.check(source, self.claim("source", "quote", kind="quote", needle="")).support, "unknown")
+        self.assertEqual(self.check(source, self.claim("source", "absence", kind="completeness", needle="", scope="whole_file")).support, "unknown")
+
+    def test_manifest_cannot_be_relabelled_as_raw_evidence(self):
+        corpus = self.corpus()
+        corpus["cases"][0]["claim"] = self.claim("manifest", "text_contains", contains=["video_devices=[]"])
+        with self.assertRaisesRegex(ValueError, "manifest cannot back a raw case"):
+            pf.run_corpus(corpus, self.root)
+
+    def test_executable_controls_run_without_mutating_the_base_case(self):
+        corpus = self.corpus()
+        corpus["cases"][0]["controls"] = [
+            {"change": "Missing text contradicts the assertion.", "expected_support": "contradicted", "claim_assertion": {"contains": ["missing"]}},
+            {"change": "A copied partial source is incomplete.", "expected_support": "incomplete", "source_completeness": {"raw": "partial"}, "claim_assertion": {"contains": ["missing"]}},
+        ]
+        result = pf.run_corpus(corpus, self.root)
+        self.assertEqual(result["summary"]["control_total"], 2)
+        self.assertEqual(result["summary"]["control_passed"], 2)
+        self.assertEqual(result["cases"][0]["actual"]["support"], "supported")
+        self.assertTrue(result["summary"]["corpus_predicate"])
 
     def corpus(self):
         raw = self.artifact("raw", "alpha")
