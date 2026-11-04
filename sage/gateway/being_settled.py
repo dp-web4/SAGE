@@ -28,6 +28,7 @@ import json
 import os
 import re
 import time
+import unicodedata
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -54,7 +55,12 @@ _UNCHANGED = "unchanged: "
 
 
 def _norm(s: str) -> str:
-    s = re.sub(r"[`*_\"'?.!:;,]", "", (s or "").lower())
+    # NFKC folds compatibility forms, and every hyphen or dash reads as a space. Measured on hub-being 2026-11-04:
+    # "context window", "context-window" and "context\u2011window" (a non-breaking hyphen) were three questions, so
+    # one wrong answer was settled three times (s1, s2, s3) and the duplicate refusal below never fired.
+    s = unicodedata.normalize("NFKC", (s or "")).lower()
+    s = re.sub(r"[-\u2010-\u2015\u2212]", " ", s)
+    s = re.sub(r"[`*_\"'?.!:;,]", "", s)
     return re.sub(r"\s+", " ", s).strip()
 
 
