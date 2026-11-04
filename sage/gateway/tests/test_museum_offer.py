@@ -1,5 +1,6 @@
 """Hermetic: the museum is offered where it exists, silent where it does not, and what the
-being makes is never lost and never auto-published."""
+being makes is never lost. What it places in museum/ is its choice, and it is told plainly
+that the folder is a public wall."""
 import json
 import os
 import sys
@@ -36,10 +37,26 @@ def test_the_directory_is_created_once_with_a_note_owned_by_the_seat():
     d = ensure_dir(inst, repo)
     assert d == inst / "museum" and (d / "README.md").is_file()
     note = (d / "README.md").read_text()
-    assert "written by your seat, not by you" in note and "Nothing you write is published automatically" in note
+    assert "written by your seat, not by you" in note and "hung on that public wall" in note
+    assert "your choice" in note and "somewhere else" in note
     (d / "README.md").write_text("edited by the being")          # never overwritten on a later beat
     ensure_dir(inst, repo)
     assert (d / "README.md").read_text() == "edited by the being"
+
+
+def test_an_older_seat_note_is_refreshed_and_the_beings_own_is_kept():
+    inst = Path(tempfile.mkdtemp(prefix="inst-")); repo = _museum()
+    d = inst / "museum"; d.mkdir()
+    (d / "README.md").write_text("# museum/\nNothing you write is published automatically.\n\n"
+                                 "(This note was written by your seat, not by you.)\n")
+    ensure_dir(inst, repo)
+    assert "hung on that public wall" in (d / "README.md").read_text()
+
+
+def test_the_offer_says_the_folder_is_a_public_wall_and_its_choice():
+    text = offer(_museum())
+    assert "public wall as you wrote it" in text and "your choice" in text
+    assert "nothing is published automatically" not in text.lower()
 
 
 def test_candidates_lists_what_the_being_made_and_never_the_seats_note():

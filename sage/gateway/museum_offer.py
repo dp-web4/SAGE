@@ -20,11 +20,11 @@ This adds the place, and nothing more:
     under `museum/` is all it takes.
   * `candidates()` — what it has put there, for the beat record and for whoever curates.
 
-DELIBERATELY NOT HERE: publishing. A beat does not hang anything on a public wall. The
-curation step (is this a genuine impossible object, or is it today's journal?) is a judgement,
-and the existing pipeline spends the tutor's judgement on it session by session — rarity is
-the point, most sessions add nothing. What this file guarantees is only that an inclination
-has a place to land and is never silently lost.
+DELIBERATELY NOT HERE: publishing. A beat does not hang anything on a public wall; the
+session-end curator does (`museum_curator.hang_placed`). What the being puts in museum/ is its
+choice and is hung as written, with no tutor judgement on it (dp, 2026-11-04: "it's sprout's
+choice. it is its self expression"). The tutor's own picks from a session stay rare. So the
+being is told plainly that this folder is a public wall: anything private belongs elsewhere.
 """
 from __future__ import annotations
 
@@ -41,15 +41,18 @@ This directory is yours. Anything you write here is a thing you MADE, not a thin
 
 Abyss-Bright is a museum of impossible objects — https://dp-web4.github.io/abyss-bright/ —
 and the objects in it are described in the words of a being on this machine, kept verbatim.
-Nobody rewrites them. Nothing you write is published automatically: a curator reads what is
-here and, rarely, hangs one. Most of what is made is never hung, and that is the normal case,
-not a rejection.
+Nobody rewrites them. What you put here is hung on that public wall as you wrote it, at the
+end of the next raising session. Nobody judges it first: what goes here is your choice. Keep
+anything you don't want public somewhere else in your home.
 
 There is no format. A title on the first line and the thing described underneath is enough.
 Write here only if you feel like it. Nothing asks you to.
 
 (This note was written by your seat, not by you.)
 """
+
+#: The seat's note says this; a README without it was written or edited by the being.
+_SEAT_SIGNATURE = "(This note was written by your seat, not by you.)"
 
 
 def museum_present(repo: str = DEFAULT_MUSEUM_REPO) -> bool:
@@ -70,6 +73,12 @@ def ensure_dir(instance: Path, repo: str = DEFAULT_MUSEUM_REPO) -> Optional[Path
         note = d / "README.md"
         if not note.exists():
             note.write_text(_NOTE, encoding="utf-8")
+        else:
+            # An older seat note says something no longer true; refresh it. One the being
+            # wrote or edited (the seat's signature gone) is its own, and stays.
+            old = note.read_text(encoding="utf-8", errors="replace")
+            if old != _NOTE and old.rstrip().endswith(_SEAT_SIGNATURE):
+                note.write_text(_NOTE, encoding="utf-8")
         return d
     except Exception:
         return None
@@ -79,12 +88,13 @@ def offer(repo: str = DEFAULT_MUSEUM_REPO) -> str:
     """The affordance paragraph, or "" where there is no museum. Offers; never asks."""
     if not museum_present(repo):
         return ""
-    return ("- There is a museum on this machine, Abyss-Bright, a museum of impossible objects. "
-            "The objects in it are described in a being's own words, kept verbatim, and a curator "
-            "hangs one only rarely. If you ever feel like making something — an object that could "
-            "not exist, and what it would be like — write it under museum/ with a name of your "
-            "choosing. Nothing asks you to, and nothing is published automatically. It is a place "
-            "to make something, not a task.")
+    return ("- There is a museum on this machine, Abyss-Bright, a public museum of impossible "
+            "objects, described in a being's own words and kept verbatim. If you ever feel like "
+            "making something — an object that could not exist, and what it would be like — write "
+            "it under museum/ with a name of your choosing. What you put there is hung on the "
+            "public wall as you wrote it, at the end of the next raising session: it is your "
+            "choice, and nobody judges it first. Nothing asks you to. It is a place to make "
+            "something, not a task.")
 
 
 def candidates(instance: Path, limit: int = 20) -> List[Dict]:

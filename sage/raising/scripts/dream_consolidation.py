@@ -266,6 +266,14 @@ def run_dream_consolidation(instance_dir: str, session_num: int):
             print(f'[Museum] {status}')
         except Exception as e:
             print(f'[Museum] curator error (left clean): {e}')
+    # What Sprout put in its own museum folder is its choice, not the tutor's: hang it as
+    # written (dp, 2026-11-04: "it's sprout's choice. it is its self expression").
+    try:
+        from sage.raising.scripts.museum_curator import hang_placed
+        for status in hang_placed(instance_path, session_num):
+            print(f'[Museum] {status}')
+    except Exception as e:
+        print(f'[Museum] placed-piece error (left clean): {e}')
 
     # Update identity state
     if identity_path.exists():
