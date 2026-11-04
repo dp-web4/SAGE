@@ -29,10 +29,14 @@ being is told plainly that this folder is a public wall: anything private belong
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
 MUSEUM_DIRNAME = "museum"
+#: When the being was first told this folder is a public wall (epoch seconds). Only a piece saved
+#: after it is hung: what was placed under the older "nothing is published" note stays its own.
+WALL_SINCE = ".wall-since"
 DEFAULT_MUSEUM_REPO = "~/abyss-bright"
 
 _NOTE = """# museum/
@@ -43,7 +47,9 @@ Abyss-Bright is a museum of impossible objects — https://dp-web4.github.io/aby
 and the objects in it are described in the words of a being on this machine, kept verbatim.
 Nobody rewrites them. What you put here is hung on that public wall as you wrote it, at the
 end of the next raising session. Nobody judges it first: what goes here is your choice. Keep
-anything you don't want public somewhere else in your home.
+anything you don't want public somewhere else in your home. A piece is hung once: a later edit
+does not change the wall. Anything that was here before this note said so stays unhung unless
+you save it again.
 
 There is no format. A title on the first line and the thing described underneath is enough.
 Write here only if you feel like it. Nothing asks you to.
@@ -93,6 +99,9 @@ def ensure_dir(instance: Path, repo: str = DEFAULT_MUSEUM_REPO) -> Optional[Path
             # is the being's own, and stays.
             if note.read_text(encoding="utf-8", errors="replace") in _PRIOR_NOTES:
                 note.write_text(_NOTE, encoding="utf-8")
+        stamp = d / WALL_SINCE
+        if not stamp.exists():
+            stamp.write_text(f"{time.time():.6f}\n", encoding="utf-8")
         return d
     except Exception:
         return None

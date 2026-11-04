@@ -183,19 +183,33 @@ PLACED_WHY = ("Sprout put this in its own museum folder. What goes there is its 
               "self-expression (dp, 2026-11-04), so it is hung as written, without the tutor's judgment.")
 
 
-def placed(instance: Path, museum: Path) -> List[Dict]:
+def _wall_since(d: Path) -> Optional[float]:
+    """When the being was told its museum/ folder is a public wall (museum_offer.WALL_SINCE), or None."""
+    try:
+        return float((d / ".wall-since").read_text().strip())
+    except Exception:
+        return None
+
+
+def placed(instance: Path, museum: Path, held: Optional[List[str]] = None) -> List[Dict]:
     """What Sprout has put in `<instance>/museum/` and is not on the wall yet: [{name, title, text}].
     The first line (a leading '#' dropped) is the title and the rest is the text; a file of one
-    line is all title-and-text. The seat's README is never a piece."""
+    line is all title-and-text. The seat's README is never a piece. Only a piece saved after the
+    being was told the folder is a public wall is hung: one placed under the older "nothing is
+    published" note stays its own until it saves it again. Each piece not hung gets a line in
+    `held`, so none is skipped silently."""
     d = Path(instance) / "museum"
     if not d.is_dir():
         return []
+    held = held if held is not None else []
+    since = _wall_since(d)
     out = []
     for f in sorted(d.iterdir()):
         if not f.is_file() or f.suffix not in (".md", ".txt") or f.name == "README.md":
             continue
         try:
             raw = f.read_text(encoding="utf-8", errors="replace").strip()
+            mtime = f.stat().st_mtime
         except Exception:
             continue
         if not raw:
@@ -203,7 +217,12 @@ def placed(instance: Path, museum: Path) -> List[Dict]:
         first, _, rest = raw.partition("\n")
         title = first.lstrip("#").strip() or f.stem.replace("-", " ")
         text = rest.strip() or raw
-        if not already_present(museum, title, text):
+        if already_present(museum, title, text):
+            held.append(f'not hung: museum/{f.name} ("{title}") is already on the wall')
+        elif since is None or mtime <= since:
+            held.append(f"not hung: museum/{f.name} was placed before the folder became a public "
+                        f"wall; it stays the being's own unless it saves it again")
+        else:
             out.append({"name": f.name, "title": title, "text": text})
     return out
 
@@ -214,8 +233,8 @@ def hang_placed(instance: Path, session_num) -> List[str]:
     museum = find_museum()
     if not museum:
         return []
-    out = []
-    for p in placed(instance, museum):
+    out: List[str] = []
+    for p in placed(instance, museum, held=out):
         out.append(publish(title=p["title"], text=p["text"], session_num=session_num,
                            sprout_text=p["text"], why=PLACED_WHY,
                            origin=f"placed by Sprout, museum/{p['name']}"))

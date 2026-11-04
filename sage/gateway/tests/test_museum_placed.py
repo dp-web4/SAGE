@@ -2,6 +2,7 @@
 (dp, 2026-11-04: "it's sprout's choice. it is its self expression"). Hermetic: publish is
 replaced, so nothing touches git or the public wall."""
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -15,10 +16,12 @@ def _museum(objects=()):
     return d
 
 
-def _instance(files):
+def _instance(files, since="0"):
     inst = Path(tempfile.mkdtemp(prefix="inst-"))
     (inst / "museum").mkdir()
     (inst / "museum" / "README.md").write_text("# museum/\nthe seat's note")
+    if since is not None:
+        (inst / "museum" / ".wall-since").write_text(since)
     for name, text in files.items():
         (inst / "museum" / name).write_text(text)
     return inst
@@ -54,6 +57,28 @@ def test_hang_placed_hangs_each_as_written_with_its_origin_and_no_judgment(monke
     assert a["sprout_text"] == a["text"]                                  # its words are the file
     assert a["origin"] == "placed by Sprout, museum/a.md" and "its choice" in a["why"]
     assert mc.verbatim_ratio(a["text"], a["sprout_text"]) == 1.0
+
+
+def test_a_piece_placed_before_the_wall_note_stays_its_own_until_it_saves_it_again(monkeypatch):
+    museum = _museum([{"title": "Already Up", "text": "x"}])
+    inst = _instance({"old.md": "# Doorstep Umbrella\nNo rain falls where it spreads.",
+                      "up.md": "# Already Up\nsomething else"}, since="2000000000")
+    calls = []
+    monkeypatch.setattr(mc, "find_museum", lambda: museum)
+    monkeypatch.setattr(mc, "publish", lambda **kw: calls.append(kw) or f"HUNG {kw['title']}")
+    out = mc.hang_placed(inst, 1)
+    assert calls == []                                                   # placed under "nothing is published"
+    assert any("museum/old.md was placed before" in s for s in out)      # held, not silently skipped
+    assert any("museum/up.md" in s and "already on the wall" in s for s in out)
+    os.utime(inst / "museum" / "old.md", (2000000001, 2000000001))       # the being saves it again
+    assert mc.hang_placed(inst, 2)[-1] == "HUNG Doorstep Umbrella"
+
+
+def test_without_the_wall_stamp_nothing_is_hung(monkeypatch):
+    monkeypatch.setattr(mc, "find_museum", lambda: _museum())
+    monkeypatch.setattr(mc, "publish", lambda **kw: (_ for _ in ()).throw(AssertionError("hung")))
+    out = mc.hang_placed(_instance({"a.md": "# A\nb"}, since=None), 1)
+    assert len(out) == 1 and out[0].startswith("not hung: museum/a.md")
 
 
 def test_no_museum_on_this_machine_is_a_quiet_no_op(monkeypatch):

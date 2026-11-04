@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
-from sage.gateway.museum_offer import _PRIOR_NOTES, candidates, ensure_dir, museum_present, offer  # noqa: E402
+from sage.gateway.museum_offer import _PRIOR_NOTES, WALL_SINCE, candidates, ensure_dir, museum_present, offer  # noqa: E402
 
 
 def _museum() -> str:
@@ -84,3 +84,13 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def test_the_wall_stamp_is_written_once_when_the_being_is_first_told():
+    inst = Path(tempfile.mkdtemp(prefix="inst-")); repo = _museum()
+    d = ensure_dir(inst, repo)
+    first = (d / WALL_SINCE).read_text()
+    assert float(first) > 0
+    ensure_dir(inst, repo)
+    assert (d / WALL_SINCE).read_text() == first                  # a later beat never moves it
+    assert candidates(inst) == []                                 # the stamp is not a piece
