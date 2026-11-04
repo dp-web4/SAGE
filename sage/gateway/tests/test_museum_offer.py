@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
-from sage.gateway.museum_offer import candidates, ensure_dir, museum_present, offer  # noqa: E402
+from sage.gateway.museum_offer import _PRIOR_NOTES, candidates, ensure_dir, museum_present, offer  # noqa: E402
 
 
 def _museum() -> str:
@@ -47,10 +47,18 @@ def test_the_directory_is_created_once_with_a_note_owned_by_the_seat():
 def test_an_older_seat_note_is_refreshed_and_the_beings_own_is_kept():
     inst = Path(tempfile.mkdtemp(prefix="inst-")); repo = _museum()
     d = inst / "museum"; d.mkdir()
-    (d / "README.md").write_text("# museum/\nNothing you write is published automatically.\n\n"
-                                 "(This note was written by your seat, not by you.)\n")
+    (d / "README.md").write_text(next(iter(_PRIOR_NOTES)))
     ensure_dir(inst, repo)
     assert "hung on that public wall" in (d / "README.md").read_text()
+
+
+def test_a_note_the_being_edited_is_kept_even_with_the_seats_last_line():
+    inst = Path(tempfile.mkdtemp(prefix="inst-")); repo = _museum()
+    d = inst / "museum"; d.mkdir()
+    edited = next(iter(_PRIOR_NOTES)).replace("There is no format.", "I keep doors here.")
+    (d / "README.md").write_text(edited)
+    ensure_dir(inst, repo)
+    assert (d / "README.md").read_text() == edited
 
 
 def test_the_offer_says_the_folder_is_a_public_wall_and_its_choice():

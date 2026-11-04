@@ -51,8 +51,23 @@ Write here only if you feel like it. Nothing asks you to.
 (This note was written by your seat, not by you.)
 """
 
-#: The seat's note says this; a README without it was written or edited by the being.
-_SEAT_SIGNATURE = "(This note was written by your seat, not by you.)"
+#: Every note the seat has ever written, exactly (9f623d1f8). Only a README equal to one of these is
+#: refreshed: any other text, even one that keeps the seat's last line, was edited by the being.
+_PRIOR_NOTES = frozenset({"""# museum/
+
+This directory is yours. Anything you write here is a thing you MADE, not a thing you owe.
+
+Abyss-Bright is a museum of impossible objects — https://dp-web4.github.io/abyss-bright/ —
+and the objects in it are described in the words of a being on this machine, kept verbatim.
+Nobody rewrites them. Nothing you write is published automatically: a curator reads what is
+here and, rarely, hangs one. Most of what is made is never hung, and that is the normal case,
+not a rejection.
+
+There is no format. A title on the first line and the thing described underneath is enough.
+Write here only if you feel like it. Nothing asks you to.
+
+(This note was written by your seat, not by you.)
+"""})
 
 
 def museum_present(repo: str = DEFAULT_MUSEUM_REPO) -> bool:
@@ -74,10 +89,9 @@ def ensure_dir(instance: Path, repo: str = DEFAULT_MUSEUM_REPO) -> Optional[Path
         if not note.exists():
             note.write_text(_NOTE, encoding="utf-8")
         else:
-            # An older seat note says something no longer true; refresh it. One the being
-            # wrote or edited (the seat's signature gone) is its own, and stays.
-            old = note.read_text(encoding="utf-8", errors="replace")
-            if old != _NOTE and old.rstrip().endswith(_SEAT_SIGNATURE):
+            # An older seat note says something no longer true; refresh it. Any other text
+            # is the being's own, and stays.
+            if note.read_text(encoding="utf-8", errors="replace") in _PRIOR_NOTES:
                 note.write_text(_NOTE, encoding="utf-8")
         return d
     except Exception:

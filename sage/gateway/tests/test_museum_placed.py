@@ -59,3 +59,9 @@ def test_hang_placed_hangs_each_as_written_with_its_origin_and_no_judgment(monke
 def test_no_museum_on_this_machine_is_a_quiet_no_op(monkeypatch):
     monkeypatch.setattr(mc, "find_museum", lambda: None)
     assert mc.hang_placed(_instance({"a.md": "# A\nb"}), 1) == []
+
+
+def test_a_long_placed_piece_is_checked_without_the_quadratic_dp(monkeypatch):
+    text = "A lantern that lights only what you have forgotten. " * 400   # ~20 KB
+    monkeypatch.setattr(mc, "_lcs_len", lambda a, b: (_ for _ in ()).throw(AssertionError("DP ran")))
+    assert mc.verbatim_ratio(text, text) == 1.0

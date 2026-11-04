@@ -80,6 +80,8 @@ def verbatim_ratio(candidate: str, source: str) -> float:
     c, s = _norm(candidate), _norm(source)
     if not c:
         return 0.0
+    if c in s:  # the whole candidate is one span: no DP (a placed piece is its own source)
+        return 1.0
     return _lcs_len(c, s) / len(c)
 
 
