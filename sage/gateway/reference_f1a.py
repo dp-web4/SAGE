@@ -1745,8 +1745,8 @@ class ReferenceF1aDispatcher:
             rng = (s0, s1)
         if not path or (not old and rng is None):
             got = ", ".join(sorted(a)) or "nothing"
-            # AN EMPTY 'old' IS NAMED (pub-being, 2026-10-31..11-03: 59 of its 94 refusals here sent path, old
-            # and new with old = ""; the refusal answered "You sent: new, old, path", which reads as complete).
+            # NAME AN EMPTY 'old': "You sent: new, old, path" lists every requested argument,
+            # but does not explain that old = "" provides no text to find.
             empty = (" 'old' was empty, so there was no text to find."
                      if any(k in a for k in ("old", "old_text", "old_str", "old_string"))
                      and not old and rng is None else "")

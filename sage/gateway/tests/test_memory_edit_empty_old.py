@@ -1,8 +1,8 @@
-"""memory_edit with an empty 'old' says it was empty (pub-being, 2026-10-31..11-03).
+"""memory_edit with an empty 'old' says it was empty.
 
-59 of its 94 "memory_edit needs ..." refusals sent path, old and new, with old = "". The refusal answered
-"You sent: new, old, path", which lists every argument it asks for, so the being could not see what was
-wrong and sent the same call again."""
+An argument list alone can look complete when path, old and new are present but old = "".
+The refusal needs to name the empty value so the caller can correct it without repeating
+the same call."""
 from pathlib import Path
 
 from sage.gateway.being_gate_client import BeingIntent
