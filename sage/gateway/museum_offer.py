@@ -28,6 +28,8 @@ being is told plainly that this folder is a public wall: anything private belong
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import time
 from pathlib import Path
@@ -37,6 +39,10 @@ MUSEUM_DIRNAME = "museum"
 #: When the being was first told this folder is a public wall (epoch seconds). Only a piece saved
 #: after it is hung: what was placed under the older "nothing is published" note stays its own.
 WALL_SINCE = ".wall-since"
+#: What was already in museum/ when the stamp was written: {name: sha256 of its bytes}. A piece is
+#: "placed before" by its content, not its mtime: a git checkout or restore rewrites an old file
+#: with mtime = now, and that is not the being saving it.
+WALL_BEFORE = ".wall-before.json"
 DEFAULT_MUSEUM_REPO = "~/abyss-bright"
 
 _NOTE = """# museum/
@@ -49,7 +55,7 @@ Nobody rewrites them. What you put here is hung on that public wall as you wrote
 end of the next raising session. Nobody judges it first: what goes here is your choice. Keep
 anything you don't want public somewhere else in your home. A piece is hung once: a later edit
 does not change the wall. Anything that was here before this note said so stays unhung unless
-you save it again.
+you change it.
 
 There is no format. A title on the first line and the thing described underneath is enough.
 Write here only if you feel like it. Nothing asks you to.
@@ -74,6 +80,10 @@ Write here only if you feel like it. Nothing asks you to.
 
 (This note was written by your seat, not by you.)
 """})
+
+
+def file_sha256(f: Path) -> str:
+    return hashlib.sha256(Path(f).read_bytes()).hexdigest()
 
 
 def museum_present(repo: str = DEFAULT_MUSEUM_REPO) -> bool:
@@ -101,6 +111,11 @@ def ensure_dir(instance: Path, repo: str = DEFAULT_MUSEUM_REPO) -> Optional[Path
                 note.write_text(_NOTE, encoding="utf-8")
         stamp = d / WALL_SINCE
         if not stamp.exists():
+            # The baseline first: a stamp is never on disk without the record it refers to.
+            before = {f.name: file_sha256(f) for f in sorted(d.iterdir())
+                      if f.is_file() and not f.name.startswith(".") and f.name != "README.md"}
+            (d / WALL_BEFORE).write_text(json.dumps(before, indent=1, sort_keys=True) + "\n",
+                                         encoding="utf-8")
             stamp.write_text(f"{time.time():.6f}\n", encoding="utf-8")
         return d
     except Exception:

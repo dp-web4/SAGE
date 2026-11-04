@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
-from sage.gateway.museum_offer import _PRIOR_NOTES, WALL_SINCE, candidates, ensure_dir, museum_present, offer  # noqa: E402
+from sage.gateway.museum_offer import _PRIOR_NOTES, WALL_BEFORE, WALL_SINCE, file_sha256, candidates, ensure_dir, museum_present, offer  # noqa: E402
 
 
 def _museum() -> str:
@@ -94,3 +94,15 @@ def test_the_wall_stamp_is_written_once_when_the_being_is_first_told():
     ensure_dir(inst, repo)
     assert (d / WALL_SINCE).read_text() == first                  # a later beat never moves it
     assert candidates(inst) == []                                 # the stamp is not a piece
+
+
+def test_the_stamp_records_what_was_already_there_by_content():
+    inst = Path(tempfile.mkdtemp(prefix="inst-")); repo = _museum()
+    (inst / "museum").mkdir()
+    (inst / "museum" / "old.md").write_text("# Old\nplaced under the older note")
+    d = ensure_dir(inst, repo)
+    before = json.loads((d / WALL_BEFORE).read_text())
+    assert before == {"old.md": file_sha256(d / "old.md")}       # not README, not the stamp
+    (d / "new.md").write_text("# New\nlater")
+    ensure_dir(inst, repo)
+    assert json.loads((d / WALL_BEFORE).read_text()) == before    # written once, with the stamp

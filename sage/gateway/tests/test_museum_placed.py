@@ -96,3 +96,20 @@ def test_a_long_placed_piece_is_checked_without_the_quadratic_dp(monkeypatch):
     text = "A lantern that lights only what you have forgotten. " * 400   # ~20 KB
     monkeypatch.setattr(mc, "_lcs_len", lambda a, b: (_ for _ in ()).throw(AssertionError("DP ran")))
     assert mc.verbatim_ratio(text, text) == 1.0
+
+
+def test_a_checkout_that_bumps_an_old_pieces_mtime_does_not_hang_it(monkeypatch):
+    from sage.gateway.museum_offer import WALL_BEFORE, file_sha256
+    museum = _museum()
+    inst = _instance({"old.md": "# Doorstep Umbrella\nNo rain falls where it spreads."}, since="1000")
+    d = inst / "museum"
+    (d / WALL_BEFORE).write_text(json.dumps({"old.md": file_sha256(d / "old.md")}))
+    calls = []
+    monkeypatch.setattr(mc, "find_museum", lambda: museum)
+    monkeypatch.setattr(mc, "publish", lambda **kw: calls.append(kw) or f"HUNG {kw['title']}")
+    os.utime(d / "old.md", (2000000001, 2000000001))                # a checkout, not the being
+    out = mc.hang_placed(inst, 1)
+    assert calls == [] and "museum/old.md was placed before" in out[0]
+    (d / "old.md").write_text("# Doorstep Umbrella\nNo rain falls where it spreads. Ever.")
+    (d / "new.md").write_text("# New\nmade after")
+    assert mc.hang_placed(inst, 2) == ["HUNG New", "HUNG Doorstep Umbrella"]    # by name; a change hangs

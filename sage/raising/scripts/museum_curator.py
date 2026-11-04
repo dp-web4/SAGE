@@ -25,6 +25,7 @@ just exhorted:
 Charter: <museum>/CURATOR.md  ·  Site: https://dp-web4.github.io/abyss-bright/
 """
 from __future__ import annotations
+import hashlib
 import json
 import os
 import re
@@ -191,18 +192,29 @@ def _wall_since(d: Path) -> Optional[float]:
         return None
 
 
+def _wall_before(d: Path) -> Optional[Dict[str, str]]:
+    """What was in museum/ when the stamp was written (museum_offer.WALL_BEFORE), or None."""
+    try:
+        return json.loads((d / ".wall-before.json").read_text())
+    except Exception:
+        return None
+
+
 def placed(instance: Path, museum: Path, held: Optional[List[str]] = None) -> List[Dict]:
     """What Sprout has put in `<instance>/museum/` and is not on the wall yet: [{name, title, text}].
     The first line (a leading '#' dropped) is the title and the rest is the text; a file of one
     line is all title-and-text. The seat's README is never a piece. Only a piece saved after the
     being was told the folder is a public wall is hung: one placed under the older "nothing is
-    published" note stays its own until it saves it again. Each piece not hung gets a line in
-    `held`, so none is skipped silently."""
+    published" note stays its own until it changes it. That is judged by content against the
+    baseline recorded with the stamp (a checkout can make an old file look new); mtime is used
+    only when the baseline is missing. Each piece not hung gets a line in `held`, so none is
+    skipped silently."""
     d = Path(instance) / "museum"
     if not d.is_dir():
         return []
     held = held if held is not None else []
     since = _wall_since(d)
+    before = _wall_before(d) if since is not None else None
     out = []
     for f in sorted(d.iterdir()):
         if not f.is_file() or f.suffix.lower() not in (".md", ".txt") or f.name == "README.md":
@@ -210,6 +222,7 @@ def placed(instance: Path, museum: Path, held: Optional[List[str]] = None) -> Li
         try:
             raw = f.read_text(encoding="utf-8", errors="replace").strip()
             mtime = f.stat().st_mtime
+            sha = hashlib.sha256(f.read_bytes()).hexdigest() if before is not None else None
         except Exception:
             continue
         if not raw:
@@ -219,9 +232,9 @@ def placed(instance: Path, museum: Path, held: Optional[List[str]] = None) -> Li
         text = rest.strip() or first.lstrip("#").strip() or raw
         if already_present(museum, title, text):
             held.append(f'not hung: museum/{f.name} ("{title}") is already on the wall')
-        elif since is None or mtime <= since:
+        elif since is None or (before.get(f.name) == sha if before is not None else mtime <= since):
             held.append(f"not hung: museum/{f.name} was placed before the folder became a public "
-                        f"wall; it stays the being's own unless it saves it again")
+                        f"wall; it stays the being's own unless it changes it")
         else:
             out.append({"name": f.name, "title": title, "text": text})
     return out
