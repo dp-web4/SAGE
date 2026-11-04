@@ -36,7 +36,7 @@ def test_settling_the_same_question_again_replaces_the_answer_and_keeps_the_old_
 
 
 def test_a_question_spelled_with_another_hyphen_is_the_same_question(tmp_path):
-    # hub-being, 2026-11-04: these three spellings settled as s1, s2 and s3, one wrong answer three times.
+    # These spellings must reuse one settled entry.
     ok, msg, _ = _s(tmp_path, question="What prevents tool calls after context window fills?", answer="first")
     assert ok and "s1" in msg
     for spelled in ("what prevents tool calls after context-window fills", "What prevents tool calls after context‑window fills?"):
