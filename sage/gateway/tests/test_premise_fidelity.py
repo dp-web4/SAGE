@@ -256,6 +256,34 @@ class PremiseFidelityTest(unittest.TestCase):
         source["pointer"].update(line_start=2, line_end=1)
         self.assertEqual(self.check(source, self.claim("text", "text_contains", contains=["two"])).support, "unknown")
 
+    def test_selected_text_cannot_establish_whole_file_absence(self):
+        raw = "first line\nsecret needle\n"
+        selected = self.artifact("text", raw, pointer={"kind": "text", "path": "text", "line_start": 1, "line_end": 1})
+        absence = self.claim("text", "absence", kind="completeness", needle="secret", scope="whole_file")
+        self.assertEqual(self.check(selected, absence).support, "incomplete")
+        whole = self.artifact("text", raw, pointer={"kind": "text", "path": "text", "line_start": 1, "line_end": 2})
+        self.assertEqual(self.check(whole, absence).support, "contradicted")
+
+    def test_jsonl_seq_record_type_is_strict(self):
+        for value in ("true", "1.0"):
+            with self.subTest(value=value):
+                raw = f'{{"seq":{value},"value":"wrong"}}\n'
+                source = self.artifact("lines.jsonl", raw, source_id="lines", pointer={"kind": "jsonl", "path": "lines.jsonl", "seq": 1})
+                resolved = pf.SourceArtifact.from_dict(source).resolve(self.root)
+                self.assertFalse(resolved.available)
+                self.assertEqual(resolved.reason, "seq_matches:0")
+
+    def test_json_path_rejects_boolean_negative_and_invalid_indices(self):
+        raw = '{"records":["first","last"]}\n'
+        for index in (True, -1, 2, 1.0, None):
+            with self.subTest(index=index):
+                source = self.artifact("path.jsonl", raw, source_id="path", pointer={"kind": "jsonl", "path": "path.jsonl", "jsonl_line": 1, "json_path": ["records", index]})
+                self.assertFalse(pf.SourceArtifact.from_dict(source).resolve(self.root).available)
+        source = self.artifact("path.jsonl", raw, source_id="path", pointer={"kind": "jsonl", "path": "path.jsonl", "jsonl_line": 1, "json_path": ["records", 1]})
+        resolved = pf.SourceArtifact.from_dict(source).resolve(self.root)
+        self.assertTrue(resolved.available)
+        self.assertEqual(resolved.data, "last")
+
     def test_missing_receipt_fields_and_unrelated_path_text_fail_closed(self):
         missing = self.artifact("missing.jsonl", '{"effector":"read_file"}\n', source_id="missing", source_type="tool_receipt", pointer={"kind": "jsonl", "path": "missing.jsonl", "jsonl_line": 1})
         self.assertEqual(self.check(missing, self.claim("missing", "receipt_fields", effector="read_file", ok=True)).support, "unknown")

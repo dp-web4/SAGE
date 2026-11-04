@@ -73,20 +73,26 @@ class SourceArtifact:
         try:
             if kind == "text":
                 text = raw.decode("utf-8")
+                lines = text.splitlines(keepends=True)
                 start = self.pointer.get("line_start")
                 end = self.pointer.get("line_end")
+                coverage = "whole_file"
                 if start is not None or end is not None:
                     start = 1 if start is None else start
-                    end = len(text.splitlines()) if end is None else end
+                    end = len(lines) if end is None else end
                     valid = all(isinstance(value, int) and not isinstance(value, bool) for value in (start, end))
-                    lines = text.splitlines(keepends=True)
                     if not valid or start < 1 or end < start or end > len(lines):
                         return ResolvedSource(self, available=False, reason="invalid_line_range")
+                    coverage = "whole_file" if start == 1 and end == len(lines) else "selected_lines"
                     text = "".join(lines[start - 1:end])
-                return ResolvedSource(self, available=True, content=text)
+                return ResolvedSource(self, available=True, content=text, metadata={"content_coverage": coverage})
             if kind not in ("jsonl", "gzip_jsonl"):
                 return ResolvedSource(self, available=False, reason=f"unknown_pointer_kind:{kind}")
-            if "json_path" in self.pointer and not isinstance(self.pointer["json_path"], list):
+            json_path = self.pointer.get("json_path", [])
+            if not isinstance(json_path, list) or any(
+                isinstance(key, bool) or not isinstance(key, (str, int)) or isinstance(key, int) and key < 0
+                for key in json_path
+            ):
                 return ResolvedSource(self, available=False, reason="invalid_json_path")
             data = gzip.decompress(raw) if kind == "gzip_jsonl" else raw
             lines = data.decode("utf-8").splitlines()
@@ -101,7 +107,7 @@ class SourceArtifact:
                     parsed = json.loads(candidate)
                     if not isinstance(parsed, dict):
                         return ResolvedSource(self, available=False, reason="record_unavailable:non_object_seq_record")
-                    if parsed.get("seq") == seq:
+                    if type(parsed.get("seq")) is int and parsed["seq"] == seq:
                         matches.append(candidate)
                 if len(matches) != 1:
                     return ResolvedSource(self, available=False, reason=f"seq_matches:{len(matches)}")
@@ -112,9 +118,11 @@ class SourceArtifact:
                     return ResolvedSource(self, available=False, reason="invalid_jsonl_line")
                 line = lines[line_number - 1]
             record: Any = json.loads(line)
-            for key in self.pointer.get("json_path", []):
+            for key in json_path:
+                if isinstance(key, int) and (not isinstance(record, list) or key >= len(record)):
+                    return ResolvedSource(self, available=False, reason="invalid_json_path_index")
                 record = record[key]
-            content = json.dumps(record, ensure_ascii=False, sort_keys=True) if self.pointer.get("json_path") else line
+            content = json.dumps(record, ensure_ascii=False, sort_keys=True) if json_path else line
             return ResolvedSource(self, available=True, content=content, data=record)
         except (OSError, EOFError, zlib.error, UnicodeError, ValueError, KeyError, IndexError, TypeError, AttributeError) as exc:
             return ResolvedSource(self, available=False, reason=f"record_unavailable:{type(exc).__name__}")
@@ -172,6 +180,12 @@ def _outcome(claim: SourceClaim, support: str, reason: str) -> CheckResult:
 
 def _nonempty_strings(value: Any) -> bool:
     return isinstance(value, list) and bool(value) and all(isinstance(item, str) and bool(item) for item in value)
+
+
+def _effective_completeness(source: ResolvedSource) -> str:
+    if source.metadata.get("content_coverage") == "selected_lines" and source.artifact.completeness == "complete":
+        return "partial"
+    return source.artifact.completeness
 
 
 def _text_contains(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult:
@@ -302,7 +316,7 @@ def _absence(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult:
         return _outcome(claim, "unknown", "invalid_absence_needle")
     if needle in text:
         return _outcome(claim, "contradicted", "needle_present")
-    if claim.assertion["scope"] == "whole_file" and source.artifact.completeness != "complete":
+    if claim.assertion["scope"] == "whole_file" and _effective_completeness(source) != "complete":
         return _outcome(claim, "incomplete", "partial_read_cannot_establish_whole_file_absence")
     return _outcome(claim, "supported", "needle_absent_from_complete_source")
 
