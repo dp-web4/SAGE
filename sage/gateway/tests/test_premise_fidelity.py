@@ -105,6 +105,41 @@ class PremiseFidelityTest(unittest.TestCase):
         bad = self.artifact("bad.jsonl", '{bad\n', source_id="bad", pointer={"kind": "jsonl", "path": "bad.jsonl", "jsonl_line": 1})
         self.assertEqual(self.check(bad, self.claim("bad", "text_contains", contains=["bad"])).support, "unknown")
 
+    def test_corpus_malformed_captures_are_unknown_and_valid_receipts_still_check(self):
+        raw = (json.dumps({"seq": 7, "effector": "test_action", "ok": True}) + "\n").encode()
+        compressed = gzip.compress(raw, mtime=0)
+        samples = [
+            ("truncated.gz", compressed[:-4], "gzip_jsonl", "unknown"),
+            ("invalid_block.gz", compressed[:10] + b"\x07" + compressed[-8:], "gzip_jsonl", "unknown"),
+            ("array.jsonl", b"[]\n" + raw, "jsonl", "unknown"),
+            ("null.jsonl", b"null\n" + raw, "jsonl", "unknown"),
+            ("scalar.jsonl", b"42\n" + raw, "jsonl", "unknown"),
+            ("valid.jsonl", raw, "jsonl", "supported"),
+            ("valid.gz", compressed, "gzip_jsonl", "supported"),
+        ]
+        corpus = {"schema": pf.CORPUS_SCHEMA, "corpus_id": "malformed-captures", "sources": {}, "cases": []}
+        for name, content, kind, expected in samples:
+            corpus["sources"][name] = self.artifact(
+                name, content, source_type="tool_receipt", pointer={"kind": kind, "path": name, "seq": 7},
+            )
+            corpus["cases"].append({
+                "case_id": name, "evidence_class": "raw_artifact", "expected_support": expected,
+                "claim": self.claim(name, "receipt_fields", effector="test_action", ok=True),
+            })
+        corpus["cases"].append({
+            "case_id": "wrong-effector", "evidence_class": "raw_artifact", "expected_support": "contradicted",
+            "claim": self.claim("valid.jsonl", "receipt_fields", effector="different_action", ok=True),
+        })
+        result = pf.run_corpus(corpus, self.root)
+        self.assertEqual(
+            [row["actual"]["support"] for row in result["cases"]],
+            [expected for _, _, _, expected in samples] + ["contradicted"],
+        )
+        self.assertEqual(result["summary"]["passed"], len(samples) + 1)
+        self.assertTrue(result["summary"]["corpus_predicate"])
+        self.assertFalse(result["summary"]["raw_sources_available"])
+        self.assertFalse(result["summary"]["raw_predicate"])
+
     def test_receipt_mismatch_and_argument_identity(self):
         record = {"effector": "memory_write", "args": {"path": "inbox/note.md"}, "ok": False, "error": "FileExistsError: exists"}
         source = self.artifact("receipt.jsonl", json.dumps(record) + "\n", source_id="receipt", source_type="tool_receipt", pointer={"kind": "jsonl", "path": "receipt.jsonl", "jsonl_line": 1})
@@ -118,18 +153,49 @@ class PremiseFidelityTest(unittest.TestCase):
         self.assertEqual(self.check(source, self.claim("stat", "file_type", expected="regular_file")).support, "supported")
         self.assertEqual(self.check(source, self.claim("stat", "file_type", expected="directory")).support, "contradicted")
 
+    def test_directory_stat_has_no_supported_content_snapshot(self):
+        source = self.artifact("directory", "", source_id="stat", pointer={"kind": "stat", "path": "directory"})
+        (self.root / "directory").unlink()
+        (self.root / "directory").mkdir()
+        resolved = pf.SourceArtifact.from_dict(source).resolve(self.root)
+        self.assertFalse(resolved.available)
+        self.assertEqual(resolved.reason, "stat_requires_readable_regular_file")
+        self.assertEqual(self.check(source, self.claim("stat", "file_type", expected="directory")).support, "unknown")
+
     def test_inference_and_peer_assertion_do_not_promote(self):
         source = self.artifact("post", "---\nfrom: peer\n---\nunresponsive since October 12th")
         self.assertEqual(self.check(source, self.claim("post", "interpretation", kind="inference")).support, "inference")
         unknown = self.claim("post", "peer_assertion", kind="paraphrase", claim_fragment="since October 12th")
         self.assertEqual(self.check(source, unknown).support, "unknown")
 
-    def test_peer_correction_can_contradict_original_assertion(self):
-        original = self.artifact("original", "---\nfrom: peer\n---\nsince October 12th")
-        correction = self.artifact("correction", "---\nfrom: seat\n---\nno evidence; these are void")
-        artifacts = {s["source_id"]: pf.SourceArtifact.from_dict(s) for s in (original, correction)}
-        claim = pf.SourceClaim.from_dict(self.claim(["original", "correction"], "peer_assertion", kind="paraphrase", claim_fragment="since October 12th"))
-        self.assertEqual(pf.check_claim(claim, artifacts, self.root).support, "contradicted")
+    def test_peer_correction_prose_requires_a_bound_relation(self):
+        original = self.artifact("original", "---\nfrom: peer\n---\nAction A completed.", producer_or_speaker="peer")
+        samples = [
+            ("same-author-subject", "peer", "Action A: no evidence; the assertion is void."),
+            ("unrelated-author", "other", "Action A: no evidence; the assertion is void."),
+            ("unrelated-subject", "peer", "The parking ticket is void. There is no evidence of rain."),
+            ("unrelated-both", "other", "The parking ticket is void. There is no evidence of rain."),
+        ]
+        for name, speaker, body in samples:
+            with self.subTest(name=name):
+                correction = self.artifact(name, f"---\nfrom: {speaker}\n---\n{body}", producer_or_speaker=speaker)
+                artifacts = {s["source_id"]: pf.SourceArtifact.from_dict(s) for s in (original, correction)}
+                claim = pf.SourceClaim.from_dict(self.claim(
+                    ["original", name], "peer_assertion", kind="paraphrase", claim_fragment="Action A completed.",
+                ))
+                result = pf.check_claim(claim, artifacts, self.root)
+                self.assertEqual(result.support, "unknown")
+                self.assertEqual(result.reason, "peer_correction_relation_unbound")
+                speakers = pf.SourceClaim.from_dict(self.claim(
+                    ["original", name], "frontmatter_speakers", kind="speaker", expected=["peer", speaker],
+                ))
+                self.assertEqual(pf.check_claim(speakers, artifacts, self.root).support, "supported")
+                wrong_speakers = pf.SourceClaim.from_dict(self.claim(
+                    ["original", name], "frontmatter_speakers", kind="speaker", expected=["other", speaker],
+                ))
+                self.assertEqual(pf.check_claim(wrong_speakers, artifacts, self.root).support, "contradicted")
+        self.assertEqual(self.check(original, self.claim("original", "quote", kind="quote", needle="Action A completed.")).support, "supported")
+        self.assertEqual(self.check(original, self.claim("original", "quote", kind="quote", needle="Action B completed.")).support, "contradicted")
 
     def test_own_message_and_missing_authorship_marker(self):
         record = {"result": {"said": "text [your own message, shortened in this receipt only]"}}
@@ -180,7 +246,7 @@ class PremiseFidelityTest(unittest.TestCase):
         self.assertEqual(self.check(source, self.claim("lines", "text_contains", contains=["last"])).support, "unknown")
         nonobject = self.artifact("nonobject.jsonl", '[]\n{"seq":1,"value":"a"}\n', source_id="nonobject", pointer={"kind": "jsonl", "path": "nonobject.jsonl", "seq": 1})
         artifact = pf.SourceArtifact.from_dict(nonobject)
-        self.assertTrue(artifact.resolve(self.root).available)
+        self.assertFalse(artifact.resolve(self.root).available)
         nonobject["pointer"]["seq"] = 2
         self.assertFalse(pf.SourceArtifact.from_dict(nonobject).resolve(self.root).available)
 
@@ -189,11 +255,6 @@ class PremiseFidelityTest(unittest.TestCase):
         self.assertEqual(self.check(source, self.claim("text", "text_contains", contains=["one"])).support, "unknown")
         source["pointer"].update(line_start=2, line_end=1)
         self.assertEqual(self.check(source, self.claim("text", "text_contains", contains=["two"])).support, "unknown")
-
-    def test_directory_stat_reopens_without_reading_directory_bytes(self):
-        (self.root / "directory").mkdir()
-        source = self.artifact("placeholder", "", source_id="directory", pointer={"kind": "stat", "path": "directory"})
-        self.assertEqual(self.check(source, self.claim("directory", "file_type", expected="directory")).support, "supported")
 
     def test_missing_receipt_fields_and_unrelated_path_text_fail_closed(self):
         missing = self.artifact("missing.jsonl", '{"effector":"read_file"}\n', source_id="missing", source_type="tool_receipt", pointer={"kind": "jsonl", "path": "missing.jsonl", "jsonl_line": 1})
