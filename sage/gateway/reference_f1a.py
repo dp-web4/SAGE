@@ -2137,6 +2137,20 @@ class ReferenceF1aDispatcher:
         if err:
             return ResultEnvelope(ok=False, error=err)
         content = str(intent.args.get("content", ""))
+        # A FILE IN THE FOLDER'S PLACE. Measured 2026-11-05 20:10Z (cbp-being): an old note was
+        # saved at 'settled' (no extension) on 10-28. A write to settled/s288.md then raised a bare
+        # "FileExistsError: [Errno 17] File exists: '.../settled'" five times. The being read it
+        # as "the directory exists" and then as "the file already exists". It journaled a retire
+        # that never happened and told the seat "Done". Say which part is a file, and what to do.
+        for _anc in [p.parent, *p.parent.parents]:
+            if _anc.exists():
+                if not _anc.is_dir():
+                    return ResultEnvelope(ok=False, error=(
+                        f"nothing was written: '{_anc.name}' in this path is a FILE, not a folder, "
+                        f"so nothing can be saved inside it. Your write did not happen. Save to a "
+                        f"path that does not pass through '{_anc.name}', or read that file first: "
+                        f"it holds earlier writing of yours."))
+                break
         p.parent.mkdir(parents=True, exist_ok=True)
         # SAY APPENDED WHEN IT APPENDED. Measured 2026-09-21: the being rewrote
         # notes/mechanism-training-script.py whole three times (00:45, 01:14, 01:43Z), read
