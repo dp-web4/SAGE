@@ -214,6 +214,35 @@ class PremiseFidelityTest(unittest.TestCase):
         bad = self.claim("read", "read_range", kind="completeness", start=1, end=1206, total=1206, whole_file=True)
         self.assertEqual(self.check(source, bad).support, "contradicted")
 
+    def test_partial_receipt_marker_overrides_complete_envelope_for_absence(self):
+        record = {"result": "[lines 1-1 of 2]\nfirst line"}
+        source = self.artifact("partial.jsonl", json.dumps(record) + "\n", source_id="partial", source_type="file_read", pointer={"kind": "jsonl", "path": "partial.jsonl", "jsonl_line": 1})
+        absence = self.claim("partial", "absence", kind="completeness", needle="secret", scope="whole_file")
+        self.assertEqual(self.check(source, absence).support, "incomplete")
+        record["result"] = "[lines 1-2 of 2]\nfirst line\nsecond line"
+        whole = self.artifact("whole.jsonl", json.dumps(record) + "\n", source_id="whole", source_type="file_read", pointer={"kind": "jsonl", "path": "whole.jsonl", "jsonl_line": 1})
+        whole_absence = self.claim("whole", "absence", kind="completeness", needle="secret", scope="whole_file")
+        self.assertEqual(self.check(whole, whole_absence).support, "supported")
+
+    def test_absence_requires_explicit_whole_file_scope(self):
+        selected = self.artifact("text", "first line\nsecret needle\n", pointer={"kind": "text", "path": "text", "line_start": 1, "line_end": 1})
+        for scope in (None, "excerpt", ""):
+            with self.subTest(scope=scope):
+                claim = self.claim("text", "absence", kind="completeness", needle="secret", scope=scope)
+                self.assertEqual(self.check(selected, claim).support, "unknown")
+
+    def test_read_range_requires_coherent_receipt_and_assertion_bounds(self):
+        record = {"result": "[lines 3-4 of 2]\npartial"}
+        invalid = self.artifact("invalid.jsonl", json.dumps(record) + "\n", source_id="invalid", source_type="file_read", pointer={"kind": "jsonl", "path": "invalid.jsonl", "jsonl_line": 1})
+        impossible = self.claim("invalid", "read_range", kind="completeness", start=3, end=4, total=2, whole_file=False)
+        self.assertEqual(self.check(invalid, impossible).support, "unknown")
+        absence = self.claim("invalid", "absence", kind="completeness", needle="secret", scope="whole_file")
+        self.assertEqual(self.check(invalid, absence).support, "unknown")
+        record["result"] = "[lines 1-2 of 2]\ncomplete"
+        valid = self.artifact("valid.jsonl", json.dumps(record) + "\n", source_id="valid", source_type="file_read", pointer={"kind": "jsonl", "path": "valid.jsonl", "jsonl_line": 1})
+        bad_assertion = self.claim("valid", "read_range", kind="completeness", start=3, end=4, total=2, whole_file=False)
+        self.assertEqual(self.check(valid, bad_assertion).support, "unknown")
+
     def test_frontmatter_speakers_and_missing_frontmatter(self):
         one = self.artifact("one", "---\nfrom: being\n---\nfirst")
         two = self.artifact("two", "---\nfrom: seat\n---\nsecond")
