@@ -195,6 +195,17 @@ def run_dream_consolidation(instance_dir: str, session_num: int):
         print(f'[Dream] Session file not found: {session_path}')
         return
 
+    # What Sprout put in its own museum folder is its choice, not the tutor's: hang it as
+    # written (dp, 2026-11-04: "it's sprout's choice. it is its self expression").
+    # It needs no tutor output, so it runs before the tutor call: a timeout or bad JSON
+    # below must not quietly break "hung at the end of the next raising session".
+    try:
+        from sage.raising.scripts.museum_curator import hang_placed
+        for status in hang_placed(instance_path, session_num):
+            print(f'[Museum] {status}')
+    except Exception as e:
+        print(f'[Museum] placed-piece error (left clean): {e}')
+
     # Build the prompt
     prompt = build_dream_prompt(session_path, identity_path,
                                  raising_log_path, session_num)

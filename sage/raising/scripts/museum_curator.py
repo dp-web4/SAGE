@@ -15,7 +15,9 @@ just exhorted:
     session (longest-common-substring ratio). The tutor cannot author or
     hallucinate an object into the museum — if the words aren't Sprout's, it
     does not publish.
-  - RARE: at most one object per session; the museum is not a feed.
+  - RARE: at most one object per session; the museum is not a feed. (This limits the
+    tutor's picks. What Sprout places in its own museum/ folder is its choice, not the
+    tutor's, and is hung as written: see `hang_placed`.)
   - NO DUPLICATES: never hang the same object twice.
   - GRACEFUL: if the museum repo isn't present (any machine but the one that keeps
     it), this is a silent no-op.
@@ -23,6 +25,7 @@ just exhorted:
 Charter: <museum>/CURATOR.md  ·  Site: https://dp-web4.github.io/abyss-bright/
 """
 from __future__ import annotations
+import hashlib
 import json
 import os
 import re
@@ -78,6 +81,8 @@ def verbatim_ratio(candidate: str, source: str) -> float:
     c, s = _norm(candidate), _norm(source)
     if not c:
         return 0.0
+    if c in s:  # the whole candidate is one span: no DP (a placed piece is its own source)
+        return 1.0
     return _lcs_len(c, s) / len(c)
 
 
@@ -104,12 +109,15 @@ def already_present(museum: Path, title: str, text: str) -> bool:
     return False
 
 
-def publish(title: str, text: str, session_num, sprout_text: str, why: str = "") -> str:
+def publish(title: str, text: str, session_num, sprout_text: str, why: str = "",
+            origin: str = "") -> str:
     """Hang one object, if and only if it passes every guardrail. Returns a status line.
 
     `why` is the tutor's one-line reason for hanging it (from the museum judgment);
     it's recorded in the curator's log so the diary stays current on autonomous hangs.
+    `origin` names where it came from; the default is the session.
     """
+    origin = origin or f"session {session_num}"
     museum = find_museum()
     if not museum:
         return "no-op: museum repo not present on this machine"
@@ -135,7 +143,7 @@ def publish(title: str, text: str, session_num, sprout_text: str, why: str = "")
             "title": title,
             "text": text,
             "added": datetime.now().strftime("%Y-%m-%d"),
-            "origin": f"session {session_num}",
+            "origin": origin,
         })
         obj_path.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         subprocess.run(["python3", str(museum / "build.py")], check=True, timeout=60)
@@ -147,7 +155,7 @@ def publish(title: str, text: str, session_num, sprout_text: str, why: str = "")
         if log_path.exists():
             reason = (why or "").strip() or "Recognized as a genuine impossible thing per the charter."
             entry = (f"## {datetime.now().strftime('%Y-%m-%d')} — **{title}** hung "
-                     f"(session {session_num}) · *autonomous*\n\n"
+                     f"({origin}) · *autonomous*\n\n"
                      f"{reason}\n\n"
                      f"Verbatim match {ratio:.0%}. Hung by the session-end curator per CURATOR.md "
                      f"(no human in the loop).\n\n---\n\n")
@@ -158,9 +166,9 @@ def publish(title: str, text: str, session_num, sprout_text: str, why: str = "")
             add_files.append("CURATOR_LOG.md")
 
         subprocess.run(["git", "-C", str(museum), "add", *add_files], check=True)
-        msg = (f"Hang \"{title}\" (session {session_num})\n\n"
-               f"An impossible thing Sprout made this session, in its own words "
-               f"({ratio:.0%} verbatim match). Curated autonomously per CURATOR.md; logged.")
+        msg = (f"Hang \"{title}\" ({origin})\n\n"
+               f"{'Placed by Sprout in its own museum folder' if origin.startswith('placed') else 'An impossible thing Sprout made this session'}, "
+               f"in its own words ({ratio:.0%} verbatim match). Hung autonomously per CURATOR.md; logged.")
         subprocess.run(["git", "-C", str(museum), "commit", "-q", "-m", msg], check=True)
         subprocess.run(["git", "-C", str(museum), "pull", "-q", "--rebase", "origin", "main"],
                        check=False, timeout=60)
@@ -169,6 +177,81 @@ def publish(title: str, text: str, session_num, sprout_text: str, why: str = "")
         return f"HUNG \"{title}\" in Abyss-Bright ({ratio:.0%} verbatim). https://dp-web4.github.io/abyss-bright/"
     except Exception as e:
         return f"publish failed (left clean): {e}"
+
+
+#: Why a placed piece is hung, for the curator's log.
+PLACED_WHY = ("Sprout put this in its own museum folder. What goes there is its choice and its "
+              "self-expression (dp, 2026-11-04), so it is hung as written, without the tutor's judgment.")
+
+
+def _wall_since(d: Path) -> Optional[float]:
+    """When the being was told its museum/ folder is a public wall (museum_offer.WALL_SINCE), or None."""
+    try:
+        return float((d / ".wall-since").read_text().strip())
+    except Exception:
+        return None
+
+
+def _wall_before(d: Path) -> Optional[Dict[str, str]]:
+    """What was in museum/ when the stamp was written (museum_offer.WALL_BEFORE), or None."""
+    try:
+        return json.loads((d / ".wall-before.json").read_text())
+    except Exception:
+        return None
+
+
+def placed(instance: Path, museum: Path, held: Optional[List[str]] = None) -> List[Dict]:
+    """What Sprout has put in `<instance>/museum/` and is not on the wall yet: [{name, title, text}].
+    The first line (a leading '#' dropped) is the title and the rest is the text; a file of one
+    line is all title-and-text. The seat's README is never a piece. Only a piece saved after the
+    being was told the folder is a public wall is hung: one placed under the older "nothing is
+    published" note stays its own until it changes it. That is judged by content against the
+    baseline recorded with the stamp (a checkout can make an old file look new); mtime is used
+    only when the baseline is missing. Each piece not hung gets a line in `held`, so none is
+    skipped silently."""
+    d = Path(instance) / "museum"
+    if not d.is_dir():
+        return []
+    held = held if held is not None else []
+    since = _wall_since(d)
+    before = _wall_before(d) if since is not None else None
+    out = []
+    for f in sorted(d.iterdir()):
+        if not f.is_file() or f.suffix.lower() not in (".md", ".txt") or f.name == "README.md":
+            continue
+        try:
+            raw = f.read_text(encoding="utf-8", errors="replace").strip()
+            mtime = f.stat().st_mtime
+            sha = hashlib.sha256(f.read_bytes()).hexdigest() if before is not None else None
+        except Exception:
+            continue
+        if not raw:
+            continue
+        first, _, rest = raw.partition("\n")
+        title = first.lstrip("#").strip() or f.stem.replace("-", " ")
+        text = rest.strip() or first.lstrip("#").strip() or raw
+        if already_present(museum, title, text):
+            held.append(f'not hung: museum/{f.name} ("{title}") is already on the wall')
+        elif since is None or (before.get(f.name) == sha if before is not None else mtime <= since):
+            held.append(f"not hung: museum/{f.name} was placed before the folder became a public "
+                        f"wall; it stays the being's own unless it changes it")
+        else:
+            out.append({"name": f.name, "title": title, "text": text})
+    return out
+
+
+def hang_placed(instance: Path, session_num) -> List[str]:
+    """Hang every piece Sprout placed in its own museum folder that is not hung yet. Its words
+    are the file, so the verbatim check holds by construction. Status lines, one per piece."""
+    museum = find_museum()
+    if not museum:
+        return []
+    out: List[str] = []
+    for p in placed(instance, museum, held=out):
+        out.append(publish(title=p["title"], text=p["text"], session_num=session_num,
+                           sprout_text=p["text"], why=PLACED_WHY,
+                           origin=f"placed by Sprout, museum/{p['name']}"))
+    return out
 
 
 if __name__ == "__main__":
