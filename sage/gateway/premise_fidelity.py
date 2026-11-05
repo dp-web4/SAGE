@@ -263,6 +263,89 @@ def _receipt_fields(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckR
     return _outcome(claim, "contradicted" if mismatches else "supported", ",".join(mismatches) if mismatches else "receipt_fields_match")
 
 
+def _heartbeat_receipts(data: Any) -> list[dict[str, Any]]:
+    if not isinstance(data, dict):
+        return []
+    if "effector" in data:
+        return [data]
+    receipts = []
+    for phase in ("explore", "reflect"):
+        phase_data = data.get(phase)
+        trace = phase_data.get("trace") if isinstance(phase_data, dict) else None
+        if isinstance(trace, list):
+            receipts.extend(item for item in trace if isinstance(item, dict) and "effector" in item)
+    return receipts
+
+
+def _execution_status(receipt: dict[str, Any]) -> str:
+    if type(receipt.get("ok")) is not bool or type(receipt.get("refused")) is not bool:
+        return "unknown"
+    if receipt["refused"]:
+        return "refused"
+    if receipt.get("effector") == "request_run":
+        return "unknown"
+    if receipt.get("effector") == "run":
+        return "executed"
+    return "not_executed"
+
+
+def _execution_coverage(sources: list[ResolvedSource]) -> str:
+    completeness = {source.artifact.completeness for source in sources}
+    if "ambiguous" in completeness:
+        return "unknown"
+    if "partial" in completeness:
+        return "incomplete"
+    return "complete"
+
+
+def _execution(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult:
+    assertion = claim.assertion
+    if not isinstance(assertion["effector"], str) or not assertion["effector"]:
+        return _outcome(claim, "unknown", "invalid_effector")
+    if not isinstance(assertion["path"], str) or not assertion["path"]:
+        return _outcome(claim, "unknown", "invalid_execution_path")
+    expected = assertion["expected"]
+    if expected not in {"executed", "refused", "not_executed"}:
+        return _outcome(claim, "unknown", "invalid_execution_expectation")
+    for field_name in ("witness_id", "error_contains", "result_contains"):
+        if field_name in assertion and (not isinstance(assertion[field_name], str) or not assertion[field_name]):
+            return _outcome(claim, "unknown", f"invalid_{field_name}")
+    matched = []
+    for source in sources:
+        for receipt in _heartbeat_receipts(source.data):
+            args = receipt.get("args")
+            if not isinstance(args, dict) or receipt.get("effector") != assertion["effector"] or args.get("path") != assertion["path"]:
+                continue
+            if "witness_id" in assertion and receipt.get("witness_id") != assertion["witness_id"]:
+                continue
+            if "error_contains" in assertion and (
+                not isinstance(receipt.get("error"), str) or assertion["error_contains"] not in receipt["error"]
+            ):
+                continue
+            if "result_contains" in assertion and (
+                not isinstance(receipt.get("result"), str) or assertion["result_contains"] not in receipt["result"]
+            ):
+                continue
+            matched.append(receipt)
+    if not matched:
+        coverage = _execution_coverage(sources)
+        return _outcome(claim, "unknown" if coverage == "complete" else coverage, "execution_receipt_not_found")
+    statuses = [_execution_status(receipt) for receipt in matched]
+    reason = f"execution_statuses:{statuses}"
+    if expected == "not_executed" and "executed" in statuses:
+        return _outcome(claim, "contradicted", reason)
+    if expected in ("executed", "refused") and expected in statuses:
+        return _outcome(claim, "supported", reason)
+    if "unknown" in statuses:
+        return _outcome(claim, "unknown", reason)
+    coverage = _execution_coverage(sources)
+    if coverage != "complete":
+        return _outcome(claim, coverage, reason)
+    if expected == "not_executed":
+        return _outcome(claim, "supported", reason)
+    return _outcome(claim, "contradicted", reason)
+
+
 def _file_type(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult:
     typed = [source.metadata["file_type"] for source in sources if "file_type" in source.metadata]
     if len(typed) != 1:
@@ -382,6 +465,7 @@ _CHECKERS = {
     "quote": _quote,
     "manifest_unexecuted": _manifest_unexecuted,
     "receipt_fields": _receipt_fields,
+    "execution": _execution,
     "file_type": _file_type,
     "interpretation": _interpretation,
     "own_message": _own_message,

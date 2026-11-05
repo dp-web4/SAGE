@@ -148,6 +148,69 @@ class PremiseFidelityTest(unittest.TestCase):
         bad = self.claim("receipt", "receipt_fields", effector="os.remove", ok=False)
         self.assertEqual(self.check(source, bad).support, "contradicted")
 
+    def test_execution_distinguishes_failed_run_refusal_and_script_writes(self):
+        receipts = [
+            {"effector": "memory_write", "args": {"path": "script.py", "content": "fcntl.ioctl returned ENXIO"}, "ok": True, "refused": False},
+            {"effector": "run", "args": {"path": "script.py"}, "ok": False, "refused": True, "error": "sandbox unavailable"},
+        ]
+        source = self.artifact("execution.jsonl", json.dumps({"explore": {"trace": receipts}}) + "\n", source_id="execution", source_type="heartbeat", pointer={"kind": "jsonl", "path": "execution.jsonl", "jsonl_line": 1})
+        write = self.claim("execution", "execution", kind="action_outcome", effector="memory_write", path="script.py", expected="not_executed")
+        self.assertEqual(self.check(source, write).support, "supported")
+        refused = self.claim("execution", "execution", kind="action_outcome", effector="run", path="script.py", expected="refused")
+        self.assertEqual(self.check(source, refused).support, "supported")
+        not_executed = self.claim("execution", "execution", kind="action_outcome", effector="run", path="script.py", expected="not_executed")
+        self.assertEqual(self.check(source, not_executed).support, "supported")
+        executed = self.claim("execution", "execution", kind="action_outcome", effector="run", path="script.py", expected="executed")
+        self.assertEqual(self.check(source, executed).support, "contradicted")
+        failed_run = {"effector": "run", "args": {"path": "script.py"}, "ok": False, "refused": False, "error": "ENXIO"}
+        failed = self.artifact("failed.jsonl", json.dumps(failed_run) + "\n", source_id="failed", source_type="tool_receipt", pointer={"kind": "jsonl", "path": "failed.jsonl", "jsonl_line": 1})
+        failed_absence = self.claim("failed", "execution", kind="action_outcome", effector="run", path="script.py", expected="not_executed")
+        self.assertEqual(self.check(failed, failed_absence).support, "contradicted")
+        failed_outcome = self.claim("failed", "execution", kind="action_outcome", effector="run", path="script.py", expected="executed", error_contains="ENXIO")
+        self.assertEqual(self.check(failed, failed_outcome).support, "supported")
+        wrong_outcome = self.claim("failed", "execution", kind="action_outcome", effector="run", path="script.py", expected="executed", error_contains="ENOENT")
+        self.assertEqual(self.check(failed, wrong_outcome).support, "unknown")
+
+    def test_execution_request_outcome_and_required_fields_fail_closed(self):
+        request = {"effector": "request_run", "args": {"path": "script.py"}, "ok": False, "refused": True}
+        source = self.artifact("request.jsonl", json.dumps(request) + "\n", source_id="request", source_type="tool_receipt", pointer={"kind": "jsonl", "path": "request.jsonl", "jsonl_line": 1})
+        refused = self.claim("request", "execution", kind="action_outcome", effector="request_run", path="script.py", expected="refused")
+        self.assertEqual(self.check(source, refused).support, "supported")
+        request.update(ok=True, refused=False, pending=True)
+        pending = self.artifact("pending.jsonl", json.dumps(request) + "\n", source_id="pending", source_type="tool_receipt", pointer={"kind": "jsonl", "path": "pending.jsonl", "jsonl_line": 1})
+        for expected in ("executed", "refused", "not_executed"):
+            with self.subTest(expected=expected):
+                claim = self.claim("pending", "execution", kind="action_outcome", effector="request_run", path="script.py", expected=expected)
+                self.assertEqual(self.check(pending, claim).support, "unknown")
+        malformed = {"effector": "run", "args": {"path": "script.py"}, "ok": False}
+        bad = self.artifact("malformed.jsonl", json.dumps(malformed) + "\n", source_id="malformed", source_type="tool_receipt", pointer={"kind": "jsonl", "path": "malformed.jsonl", "jsonl_line": 1})
+        claim = self.claim("malformed", "execution", kind="action_outcome", effector="run", path="script.py", expected="not_executed")
+        self.assertEqual(self.check(bad, claim).support, "unknown")
+
+    def test_execution_requires_exact_matches_and_complete_universal_evidence(self):
+        receipt = {"effector": "run", "args": {"path": "script.py", "comment": "other.py"}, "ok": False, "refused": True}
+        source = self.artifact("execution.jsonl", json.dumps(receipt) + "\n", source_id="execution", source_type="tool_receipt", pointer={"kind": "jsonl", "path": "execution.jsonl", "jsonl_line": 1})
+        other = self.claim("execution", "execution", kind="action_outcome", effector="run", path="other.py", expected="not_executed")
+        self.assertEqual(self.check(source, other).support, "unknown")
+        source["completeness"] = "partial"
+        claim = self.claim("execution", "execution", kind="action_outcome", effector="run", path="script.py", expected="not_executed")
+        self.assertEqual(self.check(source, claim).support, "incomplete")
+        source["completeness"] = "ambiguous"
+        self.assertEqual(self.check(source, claim).support, "unknown")
+
+    def test_execution_witness_binding_disambiguates_matching_receipts(self):
+        receipts = [
+            {"effector": "run", "args": {"path": "script.py"}, "ok": False, "refused": True, "witness_id": "a"},
+            {"effector": "run", "args": {"path": "script.py"}, "ok": False, "refused": False, "witness_id": "b", "result": "process output"},
+        ]
+        source = self.artifact("execution.jsonl", json.dumps({"reflect": {"trace": receipts}}) + "\n", source_id="execution", source_type="heartbeat", pointer={"kind": "jsonl", "path": "execution.jsonl", "jsonl_line": 1})
+        base = {"kind": "action_outcome", "effector": "run", "path": "script.py"}
+        self.assertEqual(self.check(source, self.claim("execution", "execution", **base, expected="executed")).support, "supported")
+        self.assertEqual(self.check(source, self.claim("execution", "execution", **base, expected="not_executed")).support, "contradicted")
+        self.assertEqual(self.check(source, self.claim("execution", "execution", **base, expected="executed", witness_id="a")).support, "contradicted")
+        self.assertEqual(self.check(source, self.claim("execution", "execution", **base, expected="executed", witness_id="b", result_contains="process output")).support, "supported")
+        self.assertEqual(self.check(source, self.claim("execution", "execution", **base, expected="executed", witness_id="c")).support, "unknown")
+
     def test_file_type_claim(self):
         source = self.artifact("inbox", "plain file", source_id="stat", pointer={"kind": "stat", "path": "inbox"})
         self.assertEqual(self.check(source, self.claim("stat", "file_type", expected="regular_file")).support, "supported")
