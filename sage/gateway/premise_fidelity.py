@@ -280,6 +280,8 @@ def _heartbeat_receipts(data: Any) -> list[dict[str, Any]]:
 def _execution_status(receipt: dict[str, Any]) -> str:
     if type(receipt.get("ok")) is not bool or type(receipt.get("refused")) is not bool:
         return "unknown"
+    if receipt["refused"] and receipt["ok"]:
+        return "unknown"
     if receipt["refused"]:
         return "refused"
     if receipt.get("effector") == "request_run":
@@ -310,6 +312,8 @@ def _execution(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult
     for field_name in ("witness_id", "error_contains", "result_contains"):
         if field_name in assertion and (not isinstance(assertion[field_name], str) or not assertion[field_name]):
             return _outcome(claim, "unknown", f"invalid_{field_name}")
+    if "result_null" in assertion and type(assertion["result_null"]) is not bool:
+        return _outcome(claim, "unknown", "invalid_result_null")
     matched = []
     for source in sources:
         for receipt in _heartbeat_receipts(source.data):
@@ -330,14 +334,23 @@ def _execution(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult
     if not matched:
         coverage = _execution_coverage(sources)
         return _outcome(claim, "unknown" if coverage == "complete" else coverage, "execution_receipt_not_found")
+    if "result_null" in assertion and any("result" not in receipt for receipt in matched):
+        return _outcome(claim, "unknown", "receipt_field_absent:result")
     statuses = [_execution_status(receipt) for receipt in matched]
     reason = f"execution_statuses:{statuses}"
+    result_mismatch = "result_null" in assertion and any(
+        (receipt["result"] is None) != assertion["result_null"] for receipt in matched
+    )
     if expected == "not_executed" and "executed" in statuses:
         return _outcome(claim, "contradicted", reason)
+    if expected in statuses and result_mismatch:
+        return _outcome(claim, "contradicted", f"{reason}:result_null_mismatch")
     if expected in ("executed", "refused") and expected in statuses:
         return _outcome(claim, "supported", reason)
     if "unknown" in statuses:
         return _outcome(claim, "unknown", reason)
+    if expected == "not_executed" and result_mismatch:
+        return _outcome(claim, "contradicted", f"{reason}:result_null_mismatch")
     coverage = _execution_coverage(sources)
     if coverage != "complete":
         return _outcome(claim, coverage, reason)
