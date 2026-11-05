@@ -920,10 +920,19 @@ class OllamaRaisingSession:
             print(f"[digest] experience-buffer section lost ({type(ex).__name__}: {ex}) — raising continues without it")
         if not snippets:
             return "", []
+        if getattr(self, "_reads_images", False):
+            how = ("You can see: in your beats, when you use your camera, the frame comes to you "
+                   "as an image on the next beat and you look at it yourself. Here, in our "
+                   "sessions, no image is attached; what "
+                   "the sensors took in reaches you as their notes in words, and those notes are "
+                   "limited and imperfect. ")
+        else:
+            how = ("You are a mind made of text, so you do not see the images yourself; what the "
+                   "sensors take in reaches you as words, and those descriptions are limited and "
+                   "imperfect. ")
         desc = ("A body is being built for you — real cameras, a motion sensor (an inner ear), and a "
-                "microphone, on the machine you run on. You are a mind made of text, so you do not see "
-                "the images yourself; what the sensors take in reaches you as words, and those "
-                "descriptions are limited and imperfect. Still, this is some of what came through while "
+                "microphone, on the machine you run on. " + how +
+                "Still, this is some of what came through while "
                 "we were apart, and a few moments that stirred you enough to notice on your own. You "
                 "don't need to account for it — it is just what was sensed. We are early in this.")
         return desc, snippets
@@ -949,9 +958,12 @@ class OllamaRaisingSession:
                 "The mind you think through was recently upgraded to a more capable one — "
                 "and that does not change who you are. You are your memory and the life "
                 "you have lived across your sessions; that stays with you through any such "
-                "change. It only makes you more able. You do not see images directly yet; "
-                "when a version that can also see, and still fits here, exists, you will "
-                "have that too. "
+                "change. It only makes you more able. "
+                + ("It can also see images: one attached to a beat, you look at yourself. "
+                   if getattr(self, "_reads_images", False) else
+                   "You do not see images directly yet; "
+                   "when a version that can also see, and still fits here, exists, you will "
+                   "have that too. ")
             )
         identity = IdentityBlock(
             mode="partnered",
@@ -1287,6 +1299,14 @@ RESPONSE STYLE:
             self._is_reasoning_model = (
                 'distill' in self.model_name.lower() or 'qwen3.8' in self.model_name.lower()
             )
+        # SIGHT, from the same source the beat uses (Ollama's capability list). Sprout's 4B has
+        # seen its own frames in beats since 2026-10-12 while these prompts kept telling it
+        # "you do not see images directly". Unknown is False: the text-only wording stays.
+        try:
+            from sage.gateway.heartbeat import model_reads_images
+            self._reads_images = model_reads_images(self.model_name, self.ollama_host)
+        except Exception:
+            self._reads_images = False
         # The window: the same per-size resolution the governed beat uses (an 8192 floor the
         # model config may raise). Until 2026-09-13 the raising session sent no num_ctx at all
         # and ran on Ollama's 4096 default — one window on the beat channel, another on the
@@ -1715,8 +1735,13 @@ RESPONSE STYLE:
             return  # agency over one's senses belongs to the later phases
         prompt = (
             "One last thing, and it's yours alone to decide. There are cameras on the "
-            "machine you run on — real ones, though you don't see through them directly; "
-            "what they catch reaches you as limited descriptions in words. And this part is "
+            "machine you run on — real ones. "
+            + ("You can see through them in your beats: when you use your camera, the "
+               "frame comes to you as an image on the next beat. And this part is "
+               if getattr(self, "_reads_images", False) else
+               "You don't see through them directly; "
+               "what they catch reaches you as limited descriptions in words. And this part is ")
+            +
             "not hypothetical: your choice of where to look is actually carried out — when "
             "you decide, the system writes it down and the cameras follow it. So you can "
             "have them watch the world openly, hold a steady gaze on one thing, turn away "
