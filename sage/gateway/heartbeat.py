@@ -4001,7 +4001,7 @@ def _beat_record_text(*results, no_result: bool = False) -> str:
     for res in results:
         for i, e in ((res.trace if res is not None else []) or []):
             lines.append(_record_line(i, e))
-    full = _window_full_line(*results)
+    full = _window_full_line(*results) + _capped_line(*results)
     if not lines:
         return "You called no tools this beat." + full
     return ("Record of what you did this beat:\n" + "\n".join(lines)
@@ -4017,6 +4017,23 @@ def _window_full_line(*results) -> str:
     return ("\n\nYour context window filled during this beat, so the harness stopped your tool steps "
             "there instead of sending a prompt the model could not read. Nothing you did caused it, "
             "and there is nothing in your files to fix for it.")
+
+
+# A STEP CAP ENDS THE PLAN, NOT JUST THE PHASE. Measured on cbp-being 2026-11-05: in beat
+# 12:29Z explore's last act was memory_read scratch/chat_handler.py -> "no such path", its last
+# thought "I need to create it", and then it hit the 8-step cap (capped: true). The reflect turn
+# never learned that, said "I've written chat_handler.py ... tests passed with exit code 0", and
+# stored the same with `remember`. The file still does not exist. The 12:20Z "Done. I renamed..."
+# beat was capped too. Over the last 400 beats a reflect `say` used a completion word in 25 of 78
+# capped beats (32%) and 5 of 43 uncapped (12%): a crude word match, a correlation, not a proof.
+# The record listed every act truthfully; what it left out is that the step the being was about
+# to take never happened. Said plainly, like _window_full_line, so the ending has a true slot.
+def _capped_line(*results) -> str:
+    if not any(getattr(r, "capped", False) is True for r in results if r is not None):
+        return ""
+    return ("\n\nYour tool steps reached this beat's step limit, so the harness stopped them there. "
+            "Whatever you were about to do next was NOT done: the record above is everything that "
+            "happened. If your plan had a step after the last one listed, say it is still undone.")
 
 
 def _carry(convo: list, res) -> list:
