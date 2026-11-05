@@ -288,17 +288,35 @@ def _own_message(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResu
     return _outcome(claim, "supported" if claimed_self else "contradicted", "receipt_marks_own_message")
 
 
+def _read_range_marker(text: str) -> tuple[int, ...] | None:
+    match = re.search(r"\[lines (\d+)-(\d+) of (\d+)", text)
+    return tuple(int(value) for value in match.groups()) if match else None
+
+
+def _coherent_read_range(bounds: tuple[Any, ...]) -> bool:
+    return (
+        len(bounds) == 3
+        and all(type(value) is int for value in bounds)
+        and 1 <= bounds[0] <= bounds[1] <= bounds[2]
+    )
+
+
 def _read_range(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult:
     try:
         text = sources[0].data["result"]
     except (KeyError, TypeError):
         return _outcome(claim, "unknown", "read_receipt_unavailable")
-    match = re.search(r"\[lines (\d+)-(\d+) of (\d+)", text)
-    if not match:
+    if not isinstance(text, str):
+        return _outcome(claim, "unknown", "read_receipt_unavailable")
+    actual = _read_range_marker(text)
+    if actual is None:
         return _outcome(claim, "unknown", "read_range_marker_absent")
-    actual = tuple(int(value) for value in match.groups())
+    if not _coherent_read_range(actual):
+        return _outcome(claim, "unknown", f"invalid_receipt_read_range:{actual}")
     assertion = claim.assertion
     expected = (assertion["start"], assertion["end"], assertion["total"])
+    if not _coherent_read_range(expected) or not isinstance(assertion["whole_file"], bool):
+        return _outcome(claim, "unknown", "invalid_read_range_assertion")
     whole = actual[0] == 1 and actual[1] == actual[2]
     if assertion["whole_file"] and not whole:
         return _outcome(claim, "contradicted", f"partial_read:{actual}")
@@ -311,12 +329,21 @@ def _absence(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult:
         text = source.data["result"] if isinstance(source.data, dict) else source.content
     except KeyError:
         return _outcome(claim, "unknown", "read_result_unavailable")
+    if not isinstance(text, str):
+        return _outcome(claim, "unknown", "read_result_unavailable")
     needle = claim.assertion["needle"]
     if not isinstance(needle, str) or not needle:
         return _outcome(claim, "unknown", "invalid_absence_needle")
+    if claim.assertion["scope"] != "whole_file":
+        return _outcome(claim, "unknown", "invalid_absence_scope")
+    actual = _read_range_marker(text) if source.artifact.source_type == "file_read" else None
+    if actual is not None and not _coherent_read_range(actual):
+        return _outcome(claim, "unknown", f"invalid_receipt_read_range:{actual}")
     if needle in text:
         return _outcome(claim, "contradicted", "needle_present")
-    if claim.assertion["scope"] == "whole_file" and _effective_completeness(source) != "complete":
+    if actual is not None and actual[:2] != (1, actual[2]):
+        return _outcome(claim, "incomplete", "partial_read_cannot_establish_whole_file_absence")
+    if _effective_completeness(source) != "complete":
         return _outcome(claim, "incomplete", "partial_read_cannot_establish_whole_file_absence")
     return _outcome(claim, "supported", "needle_absent_from_complete_source")
 
