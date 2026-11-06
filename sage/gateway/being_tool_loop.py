@@ -216,10 +216,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
             env = client.dispatch(intent)                  # gate + F1a dispatch + consume
             if env.ok:
                 # A successful act that CHANGES a path makes earlier identical acts on that path new
-                # acts again. Beat 2026-11-05T12:37Z: memory_write appended to an existing
-                # chat_handler.py, retire_note moved it away, and the identical memory_write that
-                # would have created it clean was answered "already done" -- the beat ended with the
-                # file gone. "Same bytes" means "same act" only while the target is unchanged.
+                # acts again. "Same bytes" means "same act" only while the target is unchanged.
                 target = _path_of(intent)
                 if target is not None and intent.effector in PATH_CHANGING_VERBS:
                     done_ok = {k for k in done_ok if done_path.get(k) != target}
