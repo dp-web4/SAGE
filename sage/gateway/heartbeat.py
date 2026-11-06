@@ -3885,24 +3885,22 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
 RECORD_RESULT_CHARS = 240
 
 
-# A RUN THAT EXITED NON-ZERO IS NOT "ok". Measured 2026-11-05 on cbp-being, beat
-# heartbeat-704ff2b9e4d5: the being ran test_chat_handler.py three times, each exit 1 with
-# ModuleNotFoundError, and three memory_edits failed. The envelope is ok (the run happened), so the
-# record printed "-> ok: {..."exit": 1, ... ModuleNotFoundErr…" — the error name cut by the
-# 240-char cap. Reflect wrote "All tools executed successfully" and said to the seat "Done. I renamed
-# chat-handler.py ... ran test_chat_handler.py and confirmed the rename worked." No rename was
-# attempted. The verdict word is what the reflect turn reads first; for a failed script it must say so,
-# and carry the line that names the failure instead of the JSON head.
-def _script_exit(e):
-    """Non-zero exit code of an ok run envelope, else None. Structured fields only."""
+# A RUN THAT EXITED NON-ZERO IS NOT "ok". A successful dispatch envelope means the run
+# happened; it does not mean the process succeeded. Reflection reads this record first, so a failed
+# script must be named as failed and carry the diagnostic line rather than a misleading "ok".
+def _script_exit(i, e):
+    """Non-zero integer exit code of an ok run envelope, else None. Structured fields only."""
+    if getattr(i, "effector", None) != "run":
+        return None
     res = getattr(e, "result", None)
-    if isinstance(res, dict) and isinstance(res.get("exit"), int) and res["exit"] != 0:
-        return res["exit"]
+    code = res.get("exit") if isinstance(res, dict) else None
+    if type(code) is int and code != 0:
+        return code
     return None
 
 
 def _record_line(i, e) -> str:
-    code = _script_exit(e) if e.ok else None
+    code = _script_exit(i, e) if e.ok else None
     if code is not None:
         res = e.result
         tail = [ln.strip() for ln in str(res.get("stderr") or res.get("stdout") or "").splitlines() if ln.strip()]
