@@ -1808,8 +1808,7 @@ def test_a_read_above_the_decoded_section_is_told_where_it_starts():
 
 
 def test_memory_write_through_a_file_names_the_file_not_a_raw_errno():
-    """cbp-being 2026-11-05: 'settled' was a file; writes to settled/s288.md raised a bare
-    FileExistsError five times, read as 'the folder exists', then reported as done."""
+    """A write through a file component names that file and explicitly says nothing was written."""
     disp, root = _disp()
     blocker = os.path.join(root, "settled")
     open(blocker, "w").write("an old note")
