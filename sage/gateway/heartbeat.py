@@ -4084,7 +4084,7 @@ def _beat_record_text(*results, no_result: bool = False) -> str:
     for res in results:
         for i, e in ((res.trace if res is not None else []) or []):
             lines.append(_record_line(i, e))
-    full = _window_full_line(*results)
+    full = _window_full_line(*results) + _capped_line(*results)
     if not lines:
         return "You called no tools this beat." + full
     return ("Record of what you did this beat:\n" + "\n".join(lines)
@@ -4100,6 +4100,17 @@ def _window_full_line(*results) -> str:
     return ("\n\nYour context window filled during this beat, so the harness stopped your tool steps "
             "there instead of sending a prompt the model could not read. Nothing you did caused it, "
             "and there is nothing in your files to fix for it.")
+
+
+# A STEP CAP ENDS THE PLAN, NOT JUST THE PHASE. When a tool phase hits its bounded
+# step limit, reflection must know that the next intended step did not happen. The record may list
+# every completed act truthfully while still omitting that the plan itself was interrupted.
+def _capped_line(*results) -> str:
+    if not any(getattr(r, "capped", False) is True for r in results if r is not None):
+        return ""
+    return ("\n\nYour tool steps reached this beat's step limit, so the harness stopped them there. "
+            "Whatever you were about to do next was NOT done: the record above is everything that "
+            "happened. If your plan had a step after the last one listed, say it is still undone.")
 
 
 def _carry(convo: list, res) -> list:
