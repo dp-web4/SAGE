@@ -1,9 +1,4 @@
-"""A run whose script exited non-zero reaches the reflect turn as FAILED, not "ok".
-
-Fixture: cbp-being beat heartbeat-704ff2b9e4d5 (2026-11-05). test_chat_handler.py ran three times,
-exit 1, ModuleNotFoundError; the record said "-> ok: {...", the error name cut by the cap, and
-reflect told the seat "Done ... confirmed the rename worked".
-"""
+"""A run whose script exits non-zero reaches the reflect turn as FAILED, not "ok"."""
 
 
 class I:
@@ -33,5 +28,8 @@ def test_a_clean_run_and_non_run_results_are_unchanged():
     ok_run = {**RUN_FAIL, "exit": 0, "stderr": "", "stdout": "3 passed"}
     assert "-> ok: " in _record_line(I("run", {"path": "t.py"}), E(True, ok_run))
     assert _record_line(I("memory_write", {"path": "j.md"}), E(True, "wrote 3 lines")).endswith("-> ok: wrote 3 lines")
-    # an exit field that is not an int is not read as a failure
+    # Only a real integer exit on a run is a process failure; bool/string lookalikes and
+    # non-run result dictionaries must not be reclassified.
     assert "-> ok" in _record_line(I("run", {"path": "t.py"}), E(True, {"exit": "1"}))
+    assert "-> ok" in _record_line(I("run", {"path": "t.py"}), E(True, {"exit": True}))
+    assert "-> ok" in _record_line(I("memory_read", {"path": "x"}), E(True, {"exit": 1}))
