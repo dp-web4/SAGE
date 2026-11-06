@@ -50,13 +50,16 @@ def test_gemma4_uses_its_measured_ratio_and_still_errs_high():
     assert cpt < 3.46, "must sit below every measured ratio (prose 3.46, schemas 3.64)"
 
 
-def test_the_stalled_gemma4_seed_is_admitted_at_its_window():
-    """mcnugget-being, 2026-11-02T01:14Z on: every beat refused at step 1, the seed estimated at
-    ~16,727 tokens at 2.9 against num_ctx 16384. The same chars at gemma4's 3.3 fit under
-    16384 - WINDOW_SEND_MARGIN, and still sit above the last server-counted step-1 prompt (12,301)."""
-    chars = 16727 * btl.PREFLIGHT_CPT
+def test_measured_gemma4_fixture_is_admitted_at_its_window():
+    """A synthetic fixture preserves the measured calibration relationship without publishing
+    instance identity or operational history. The configured estimate remains conservative for
+    this fixture; it is not a universal tokenizer bound."""
+    baseline_estimate = 16727
+    observed_server_tokens = 12301
+    window = 16384
+    chars = baseline_estimate * btl.PREFLIGHT_CPT
     est = chars / btl.preflight_cpt(_llm(load_capabilities("gemma4:12b")))
-    assert 12301 < est < 16384 - btl.WINDOW_SEND_MARGIN, est
+    assert observed_server_tokens < est < window - btl.WINDOW_SEND_MARGIN, est
 
 
 def test_gemma4_config_changes_nothing_but_the_ratio():
