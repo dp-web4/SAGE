@@ -1,4 +1,4 @@
-"""A capped tool phase is said in the reflect record (heartbeat._capped_line)."""
+"""A capped tool phase is said explicitly in the reflect record."""
 from types import SimpleNamespace
 
 from sage.gateway import heartbeat as H
