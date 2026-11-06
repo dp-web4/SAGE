@@ -629,11 +629,7 @@ def test_an_identical_call_in_the_same_turn_is_answered_not_re_executed():
 
 
 def test_an_identical_write_after_the_path_changed_is_a_new_act():
-    """Beat 2026-11-05T12:37Z (cbp-being, reflect): memory_write appended to an existing
-    scratch/chat_handler.py, retire_note moved it away, and the identical memory_write that
-    would have created it clean got "(already done this beat)". The beat ended with no file.
-    A retire or edit on the same path makes the identical write a new act; an unrelated
-    path does not."""
+    """A path-changing act makes a previously identical act on that path new again; an unrelated path does not."""
     from sage.gateway.being_tool_loop import run_tool_turn
     from sage.gateway.being_gate_client import BeingIntent, ResultEnvelope
     calls = []
