@@ -28,5 +28,6 @@
       20480
     ]
   },
-  "service_notes": false
+  "service_notes": false,
+  "run_census": true
 }

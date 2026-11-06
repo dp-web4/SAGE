@@ -1144,6 +1144,49 @@ def scope_grant_lines(st: dict) -> list:
             for g in (st.get("live_grants") or []) + (st.get("standing_grants") or [])]
 
 
+def _scope_wait(secs: float) -> str:
+    secs = max(0, int(secs))
+    if secs < 3600:
+        return f"{max(1, secs // 60)} min"
+    if secs < 172800:
+        return f"{secs // 3600} h"
+    return f"{secs // 86400} d"
+
+
+def pending_scope_lines(requests: list, now: Optional[float] = None, most: int = 8) -> str:
+    """The still-pending scope requests, each with its age and expiry, and what pending MEANS.
+
+    WHY (dp, 2026-11-05). The beat showed `requests: <id> <path> -> pending; ...`, one flat list, with no
+    age and nothing saying who decides or when. On 11-05 cbp-being asked dp the status of one apt-config
+    request every five minutes (dp seq 1012-1016, word for word), and the hub about ten pending DNS-config
+    requests. A request with no ruling is an open loop, and the only move the being could see for an
+    open loop was to ask. hestia already returns requested_at and secs_remaining; they were dropped
+    here. Now each pending request says how long it has waited and when it lapses, and the block says
+    once that a person rules by hand, that asking does not move it, and where the ruling will appear.
+    Sibling of run_census (the box measured): this is the wait measured."""
+    import time as _t
+    now = _t.time() if now is None else now
+    pend = [r for r in (requests or []) if (r.get("status") or r.get("decision")) == "pending"]
+    if not pend:
+        return ""
+    pend.sort(key=lambda r: r.get("requested_at") or 0)
+    lines = [f"pending ({len(pend)}), oldest first:"]
+    for r in pend[:most]:
+        age = (f"asked {_scope_wait(now - r['requested_at'])} ago" if r.get("requested_at")
+               else "asked at an unrecorded time")
+        left = r.get("secs_remaining")
+        exp = (f", lapses in {_scope_wait(left)} if nobody rules"
+               if isinstance(left, (int, float)) and left > 0 else "")
+        lines.append(f"- {r.get('request_id')} {r.get('path')}: {age}{exp}")
+    if len(pend) > most:
+        lines.append(f"- … and {len(pend) - most} more pending.")
+    lines.append("What pending means: a person (dp, or a peer he delegates) rules on each request by hand, "
+                 "with no timeline. Asking again, here or in any conversation, does not move it. When it is "
+                 "ruled, it appears under \"decided since your last beat\" with the ruler's note, the beat "
+                 "after. Until then it needs nothing from you; work that does not depend on it can go ahead.")
+    return "\n".join(lines) + "\n"
+
+
 def decided_requests(reqs):
     """The settled subset of hestia_scope_status `requests[]`, as (request_id, path, decision).
     hestia's `ScopeRequest::status` emits granted | refused | pending | expired, and its
@@ -2826,6 +2869,24 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
         files_block, files_refuted, files_facts = "", [], {}
     if files_block:
         parts.append(files_block)
+    # THE RUN BOX, MEASURED (run_census, operator switch `run_census`): what `run` can import and reach,
+    # beside the body and before every record that plans around it. Its todo half is shown under the
+    # todo, quoted beside the item. Fail-open: an error adds nothing.
+    census_block, census_todo = "", ""
+    if _bp.value(instance, "run_census", False):
+        try:
+            from sage.gateway import run_census as _census
+            from sage.gateway.governed_turn import instance_config as _icfg
+            _open, _ = todo_open((instance / "todo.md").read_text(errors="replace")
+                                 if (instance / "todo.md").exists() else "",
+                                 window_h=TODO_WINDOW_H)
+            census_block, census_todo = _census.blocks(
+                instance, _open, member or "",
+                modules=(_icfg(instance) or {}).get("run_census_modules"))
+        except Exception:
+            census_block, census_todo = "", ""
+    if census_block:
+        parts.append(census_block)
     # Conversations first among the channels: a turn addressed to the being and unanswered
     # is the one thing in its state that is waiting on IT, and it should never have to infer
     # that from a wall of notes. Both directions live in one ordered record.
@@ -2877,6 +2938,8 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     # tails are short now that recall searches the whole home (window pressure: median 6157
     # of 8192 tokens per prompt, max 8013, measured 2026-09-07)
     parts.append(todo_view(instance))
+    if census_todo:
+        parts.append(census_todo)
     journal = _read(instance / "journal.md", 1200)
     parts.append("## journal.md (tail)\n" + (journal.strip() or "(empty: this is your first beat)"))
     # SKILLS (being_skills), after the records they are matched against: a skill whose `when` words appear
@@ -4236,6 +4299,7 @@ def main(argv=None) -> int:
                             + (f". Their note: \"{str(why_ruled[i]).strip()[:400]}\"" if why_ruled.get(i) else "")
                             for i, p_, d in new_decisions) + "\n"
                         if new_decisions else "")
+                     + pending_scope_lines(st.get("requests") or [])
                      + "(live grants die when the daemon restarts; only standing grants persist)\n"
                      # SAGE #530: the being can ask, instead of acting to find out
                      + "(modes: r read, w write, e run, d delete. To see what you hold with who "

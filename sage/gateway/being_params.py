@@ -99,6 +99,9 @@ PARAMS: Dict[str, Param] = {p.name: p for p in (
     Param("listing_limit", "int", 30, lo=5, hi=60,
           doc="how many of the newest names in notes/ and scratch/ your state lists (recall and "
               "memory_read reach all of them)"),
+    Param("run_census", "bool", False, self_tunable=False,
+          doc="seat-run trial: whether your state shows your run box as measured (what imports, what is "
+              "on PATH, network) and quotes open todo items beside it (run_census.py)"),
     Param("entrustment_mode", "choice", "full", choices=("full", "daily"),
           doc="'full' shows your entrustment whole every beat; 'daily' shows it whole on the first "
               "beat of each day and whenever it changes, and its opening plus a pointer otherwise"),
