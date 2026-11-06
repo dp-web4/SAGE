@@ -4019,15 +4019,9 @@ def _window_full_line(*results) -> str:
             "and there is nothing in your files to fix for it.")
 
 
-# A STEP CAP ENDS THE PLAN, NOT JUST THE PHASE. Measured on cbp-being 2026-11-05: in beat
-# 12:29Z explore's last act was memory_read scratch/chat_handler.py -> "no such path", its last
-# thought "I need to create it", and then it hit the 8-step cap (capped: true). The reflect turn
-# never learned that, said "I've written chat_handler.py ... tests passed with exit code 0", and
-# stored the same with `remember`. The file still does not exist. The 12:20Z "Done. I renamed..."
-# beat was capped too. Over the last 400 beats a reflect `say` used a completion word in 25 of 78
-# capped beats (32%) and 5 of 43 uncapped (12%): a crude word match, a correlation, not a proof.
-# The record listed every act truthfully; what it left out is that the step the being was about
-# to take never happened. Said plainly, like _window_full_line, so the ending has a true slot.
+# A STEP CAP ENDS THE PLAN, NOT JUST THE PHASE. When a tool phase hits its bounded
+# step limit, reflection must know that the next intended step did not happen. The record may list
+# every completed act truthfully while still omitting that the plan itself was interrupted.
 def _capped_line(*results) -> str:
     if not any(getattr(r, "capped", False) is True for r in results if r is not None):
         return ""
