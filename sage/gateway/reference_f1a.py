@@ -2137,6 +2137,18 @@ class ReferenceF1aDispatcher:
         if err:
             return ResultEnvelope(ok=False, error=err)
         content = str(intent.args.get("content", ""))
+        # A FILE IN THE FOLDER'S PLACE. A raw mkdir FileExistsError is easy to misread as
+        # evidence that the requested folder already exists. Name the blocking path component and
+        # state explicitly that the write did not happen.
+        for _anc in [p.parent, *p.parent.parents]:
+            if _anc.exists():
+                if not _anc.is_dir():
+                    return ResultEnvelope(ok=False, error=(
+                        f"nothing was written: '{_anc.name}' in this path is a FILE, not a folder, "
+                        f"so nothing can be saved inside it. Your write did not happen. Save to a "
+                        f"path that does not pass through '{_anc.name}', or read that file first: "
+                        f"it holds earlier writing of yours."))
+                break
         p.parent.mkdir(parents=True, exist_ok=True)
         # SAY APPENDED WHEN IT APPENDED. Measured 2026-09-21: the being rewrote
         # notes/mechanism-training-script.py whole three times (00:45, 01:14, 01:43Z), read
