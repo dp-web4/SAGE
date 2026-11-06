@@ -3948,8 +3948,28 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
 RECORD_RESULT_CHARS = 240
 
 
+# A RUN THAT EXITED NON-ZERO IS NOT "ok". A successful dispatch envelope means the run
+# happened; it does not mean the process succeeded. Reflection reads this record first, so a failed
+# script must be named as failed and carry the diagnostic line rather than a misleading "ok".
+def _script_exit(i, e):
+    """Non-zero integer exit code of an ok run envelope, else None. Structured fields only."""
+    if getattr(i, "effector", None) != "run":
+        return None
+    res = getattr(e, "result", None)
+    code = res.get("exit") if isinstance(res, dict) else None
+    if type(code) is int and code != 0:
+        return code
+    return None
+
+
 def _record_line(i, e) -> str:
-    if e.ok:
+    code = _script_exit(i, e) if e.ok else None
+    if code is not None:
+        res = e.result
+        tail = [ln.strip() for ln in str(res.get("stderr") or res.get("stdout") or "").splitlines() if ln.strip()]
+        why = tail[-1][:RECORD_RESULT_CHARS] if tail else "no output"
+        verdict = f"ran, and the script FAILED (exit {code}): {why}"
+    elif e.ok:
         res = getattr(e, "result", None)
         res = res if isinstance(res, str) else (json.dumps(res, default=str) if res is not None else "")
         res = " ".join(res.split())
