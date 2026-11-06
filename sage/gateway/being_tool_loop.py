@@ -75,6 +75,21 @@ STAY_AWAKE = "stay_awake"
 DEDUP_VERBS = frozenset({"memory_write", "edit", "witness", "remember", "retire_note",
                          "say", "peer_ask", "mesh"})
 
+# Verbs whose success changes what is at their `path`. After one succeeds, an earlier identical
+# DEDUP_VERBS call on that same path is no longer a repeat: the world it acted on has moved.
+PATH_CHANGING_VERBS = frozenset({"memory_write", "memory_edit", "edit", "retire_note"})
+
+
+def _path_of(intent) -> Optional[str]:
+    """The `path` argument of an intent, normalized lexically only (never against the disk),
+    or None when there is none."""
+    args = intent.args if isinstance(intent.args, dict) else {}
+    raw = args.get("path")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    return os.path.normpath(raw.strip())
+
+
 REPEAT_NUDGE_AT = 3          # identical consecutive calls before the harness names the loop
 
 REPEAT_BREAK_AT = 6          # ... and before it ends the tool phase
@@ -118,6 +133,7 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
     convo = list(messages)
     trace: List[Tuple[BeingIntent, ResultEnvelope]] = []
     done_ok: set = set()
+    done_path: dict = {}                               # done_ok key -> the path that act touched
     duplicates: List[dict] = []
     spoke_in: set = set()                              # conversations this turn has delivered a say/speak to
     last_fp, repeats = None, 0
@@ -199,7 +215,13 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                 continue
             env = client.dispatch(intent)                  # gate + F1a dispatch + consume
             if env.ok:
+                # A successful act that CHANGES a path makes earlier identical acts on that path new
+                # acts again. "Same bytes" means "same act" only while the target is unchanged.
+                target = _path_of(intent)
+                if target is not None and intent.effector in PATH_CHANGING_VERBS:
+                    done_ok = {k for k in done_ok if done_path.get(k) != target}
                 done_ok.add(key)
+                done_path[key] = target
                 if conv is not None:
                     spoke_in.add(conv)
             trace.append((intent, env))

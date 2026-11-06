@@ -628,6 +628,40 @@ def test_an_identical_call_in_the_same_turn_is_answered_not_re_executed():
     assert r.duplicates == [{"step": 1, "effector": "memory_write"}]
 
 
+def test_an_identical_write_after_the_path_changed_is_a_new_act():
+    """A path-changing act makes a previously identical act on that path new again; an unrelated path does not."""
+    from sage.gateway.being_tool_loop import run_tool_turn
+    from sage.gateway.being_gate_client import BeingIntent, ResultEnvelope
+    calls = []
+    class C:
+        def dispatch(self, i):
+            calls.append(i.effector); return ResultEnvelope(ok=True, result="ok")
+    w = BeingIntent("memory_write", {"path": "scratch/chat_handler.py", "content": "same bytes"})
+    retire = BeingIntent("retire_note", {"path": "./scratch/chat_handler.py", "reason": "appended"})
+    other = BeingIntent("memory_write", {"path": "todo.md", "content": "x"})
+    outs = [{"content": "", "intents": [w, retire, w]},
+            {"content": "", "intents": [other, w]},
+            {"content": "done", "intents": []}]
+    r = run_tool_turn(C(), lambda convo: outs.pop(0), [], max_steps=3)
+    assert calls == ["memory_write", "retire_note", "memory_write", "memory_write"]
+    assert r.duplicates == [{"step": 1, "effector": "memory_write"}], "todo.md does not reset chat_handler.py"
+
+
+def test_an_edit_on_the_path_lets_the_identical_retire_run_again():
+    from sage.gateway.being_tool_loop import run_tool_turn
+    from sage.gateway.being_gate_client import BeingIntent, ResultEnvelope
+    calls = []
+    class C:
+        def dispatch(self, i):
+            calls.append(i.effector); return ResultEnvelope(ok=True, result="ok")
+    retire = BeingIntent("retire_note", {"path": "notes.md", "reason": "stale"})
+    write = BeingIntent("memory_write", {"path": "notes.md", "content": "fresh"})
+    outs = [{"content": "", "intents": [retire, retire, write, retire]}, {"content": "done", "intents": []}]
+    r = run_tool_turn(C(), lambda convo: outs.pop(0), [], max_steps=2)
+    assert calls == ["retire_note", "memory_write", "retire_note"]
+    assert r.duplicates == [{"step": 0, "effector": "retire_note"}]
+
+
 
 def test_one_object_holding_a_whole_beat_lifts_every_call_in_it():
     """Measured 2026-09-18T01:32:11Z. After two beats of composing an answer it could not
