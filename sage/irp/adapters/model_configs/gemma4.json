@@ -9,8 +9,18 @@
     "thinking_supported": false,
     "tier": "T3",
     "stop_sequences": [],
-    "echo_prefixes": ["[{self_name}]:", "{self_name}:", "[SAGE]:", "SAGE:"],
-    "bilateral_speakers": ["Claude", "System", "User", "Human"],
+    "echo_prefixes": [
+        "[{self_name}]:",
+        "{self_name}:",
+        "[SAGE]:",
+        "SAGE:"
+    ],
+    "bilateral_speakers": [
+        "Claude",
+        "System",
+        "User",
+        "Human"
+    ],
     "preflight_chars_per_token": 3.3,
-    "notes": "default.json verbatim plus a measured preflight_chars_per_token (2026-11-03): gemma4 tokenizes the being's prose at 3.46 chars/token and tool schemas at 3.64, so the fixed 2.9 over-estimated mcnugget-being's (gemma4:12b, num_ctx 16384) step-1 seed at ~16,700 tokens and refused every beat from 2026-11-02T01:14Z. 3.3 sits below both. No think_default on purpose: resolve_think must keep asking the server (#599). Every other field is the default's, so nothing else changes for gemma4."
+    "notes": "default.json plus a measured Gemma 4 preflight calibration. The configured 3.3 chars/token is below the two measured fixture ratios (3.46 prose, 3.64 tool-schema), so it reduces the prior 2.9 over-estimate while retaining margin on those fixtures. This is a calibration, not a universal tokenizer lower bound. No think_default: resolve_think continues to ask the server (#599)."
 }
