@@ -334,28 +334,37 @@ def _execution(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult
     if not matched:
         coverage = _execution_coverage(sources)
         return _outcome(claim, "unknown" if coverage == "complete" else coverage, "execution_receipt_not_found")
-    if "result_null" in assertion and any("result" not in receipt for receipt in matched):
-        return _outcome(claim, "unknown", "receipt_field_absent:result")
     statuses = [_execution_status(receipt) for receipt in matched]
     reason = f"execution_statuses:{statuses}"
-    result_mismatch = "result_null" in assertion and any(
-        (receipt["result"] is None) != assertion["result_null"] for receipt in matched
-    )
-    if expected == "not_executed" and "executed" in statuses:
-        return _outcome(claim, "contradicted", reason)
-    if expected in statuses and result_mismatch:
-        return _outcome(claim, "contradicted", f"{reason}:result_null_mismatch")
-    if expected in ("executed", "refused") and expected in statuses:
+    if expected == "not_executed":
+        if "executed" in statuses:
+            return _outcome(claim, "contradicted", reason)
+        if "unknown" in statuses:
+            return _outcome(claim, "unknown", reason)
+        if "result_null" in assertion:
+            if any("result" not in receipt for receipt in matched):
+                return _outcome(claim, "unknown", "receipt_field_absent:result")
+            if any((receipt["result"] is None) != assertion["result_null"] for receipt in matched):
+                return _outcome(claim, "contradicted", f"{reason}:result_null_mismatch")
+        coverage = _execution_coverage(sources)
+        if coverage != "complete":
+            return _outcome(claim, coverage, reason)
         return _outcome(claim, "supported", reason)
+    candidates = [receipt for receipt in matched if _execution_status(receipt) == expected]
+    if candidates:
+        if "result_null" not in assertion:
+            return _outcome(claim, "supported", reason)
+        present = [receipt for receipt in candidates if "result" in receipt]
+        if any((receipt["result"] is None) == assertion["result_null"] for receipt in present):
+            return _outcome(claim, "supported", reason)
+        if len(present) != len(candidates):
+            return _outcome(claim, "unknown", "receipt_field_absent:result")
+        return _outcome(claim, "contradicted", f"{reason}:result_null_mismatch")
     if "unknown" in statuses:
         return _outcome(claim, "unknown", reason)
-    if expected == "not_executed" and result_mismatch:
-        return _outcome(claim, "contradicted", f"{reason}:result_null_mismatch")
     coverage = _execution_coverage(sources)
     if coverage != "complete":
         return _outcome(claim, coverage, reason)
-    if expected == "not_executed":
-        return _outcome(claim, "supported", reason)
     return _outcome(claim, "contradicted", reason)
 
 

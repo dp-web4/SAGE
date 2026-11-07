@@ -202,6 +202,24 @@ class PremiseFidelityTest(unittest.TestCase):
         source = self.artifact("read.jsonl", json.dumps(receipt) + "\n", source_id="read", source_type="tool_receipt", pointer={"kind": "jsonl", "path": "read.jsonl", "jsonl_line": 1})
         self.assertEqual(self.check(source, claim).support, "unknown")
 
+    def test_execution_existential_result_binds_to_same_receipt(self):
+        refused = {"effector": "memory_read", "args": {"path": "source"}, "ok": False, "refused": True, "result": None}
+        successful = {"effector": "memory_read", "args": {"path": "source"}, "ok": True, "refused": False, "result": "content"}
+        missing = {"effector": "memory_read", "args": {"path": "source"}, "ok": False, "refused": True}
+        for receipts in ([refused, successful], [successful, refused], [refused, missing], [missing, refused]):
+            with self.subTest(receipts=receipts):
+                source = self.artifact("read.jsonl", json.dumps({"explore": {"trace": receipts}}) + "\n", source_id="read", source_type="heartbeat", pointer={"kind": "jsonl", "path": "read.jsonl", "jsonl_line": 1})
+                claim = self.claim("read", "execution", kind="action_outcome", effector="memory_read", path="source", expected="refused", result_null=True)
+                self.assertEqual(self.check(source, claim).support, "supported")
+        source = self.artifact("read.jsonl", json.dumps({"explore": {"trace": [successful, missing]}}) + "\n", source_id="read", source_type="heartbeat", pointer={"kind": "jsonl", "path": "read.jsonl", "jsonl_line": 1})
+        claim = self.claim("read", "execution", kind="action_outcome", effector="memory_read", path="source", expected="refused", result_null=True)
+        self.assertEqual(self.check(source, claim).support, "unknown")
+        run_refused = {"effector": "run", "args": {"path": "script.py"}, "ok": False, "refused": True, "result": None}
+        run_content = {"effector": "run", "args": {"path": "script.py"}, "ok": False, "refused": True, "result": "content"}
+        source = self.artifact("read.jsonl", json.dumps({"explore": {"trace": [run_refused, run_content]}}) + "\n", source_id="read", source_type="heartbeat", pointer={"kind": "jsonl", "path": "read.jsonl", "jsonl_line": 1})
+        universal = self.claim("read", "execution", kind="action_outcome", effector="run", path="script.py", expected="not_executed", result_null=True)
+        self.assertEqual(self.check(source, universal).support, "contradicted")
+
     def test_execution_requires_exact_matches_and_complete_universal_evidence(self):
         receipt = {"effector": "run", "args": {"path": "script.py", "comment": "other.py"}, "ok": False, "refused": True}
         source = self.artifact("execution.jsonl", json.dumps(receipt) + "\n", source_id="execution", source_type="tool_receipt", pointer={"kind": "jsonl", "path": "execution.jsonl", "jsonl_line": 1})
