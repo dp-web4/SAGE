@@ -449,6 +449,41 @@ def test_a_placeholder_is_not_a_message():
     assert not is_stub("[short]"), "too short to be one of these briefs"
 
 
+ASK = ("Could you please clarify the gating condition that would cause a pending-action act to be "
+       "refused? I want to understand what must be true before I retry it.")
+
+
+def test_saying_your_own_unanswered_turn_again_is_a_repeat():
+    """Specimen (hub-being, 2026-11-06 07:20Z-23:40Z): this question to dp, 13 times, nobody between."""
+    inst = _inst()
+    _two(inst)
+    first = conv.append(inst, "dp", speaker="legion-being", text=ASK)
+    conv.append(inst, "dp", speaker="legion-being", text="Something else entirely, said in between the two asks.")
+    assert conv.repeat_of_own(inst, "dp", "legion-being", ASK)["seq"] == first["seq"], \
+        "the whole unanswered run counts, not only the last turn"
+    assert conv.repeat_of_own(inst, "dp", "legion-being", "  " + ASK.upper() + " Thanks. ") is not None
+
+
+def test_asking_again_after_someone_answered_is_let_through():
+    inst = _inst()
+    _two(inst)
+    conv.append(inst, "dp", speaker="legion-being", text=ASK)
+    conv.append(inst, "dp", speaker="dp", text="There is no such rule; nothing was refused.")
+    assert conv.repeat_of_own(inst, "dp", "legion-being", ASK) is None
+    assert conv.repeat_of_own(inst, "legion-claude", "legion-being", ASK) is None, "per conversation"
+
+
+def test_a_short_or_new_turn_is_never_a_repeat():
+    inst = _inst()
+    _two(inst)
+    conv.append(inst, "dp", speaker="legion-being", text="Yes, understood.")
+    conv.append(inst, "dp", speaker="legion-being", text=ASK)
+    assert conv.repeat_of_own(inst, "dp", "legion-being", "Yes, understood.") is None, "below the gram floor"
+    assert conv.repeat_of_own(inst, "dp", "legion-being",
+                              "While I wait I read the trace: no act of mine came back refused, "
+                              "so I am closing the todo item and will not ask again.") is None
+
+
 def test_a_reverted_log_never_renumbers_and_the_scar_is_recorded_once():
     """2026-09-18: a `git rebase` across the live tree reverted dp's channel to a committed
     1-turn snapshot; the next `say` took seq 2 and thirteen turns read as a fresh start.
