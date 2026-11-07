@@ -4281,6 +4281,21 @@ class HestiaF1aDispatcher:
                         f"your say asked for a run, so it went to the seat as request_run for "
                         f"{rel}. The seat saw the same request either way.")
                 return r
+        # YOUR OWN WORDS, AGAIN, ARE NOT NEWS. Measured 2026-11-06: hub-being sent dp the same
+        # question 13 times in 16 hours with no reply in between; each copy woke the reader to
+        # a line already above it. The unanswered turn is still there and still unanswered.
+        # Below the run routing on purpose: a run request, whichever door it came through, has
+        # its repeats delivered marked "SAME AS the request at seq N" by request_run, not refused.
+        # Refused before begin_action: no witness row, no line.
+        mine = (None if text.startswith(_RUN_MARKER)
+                else conv.repeat_of_own(self.memory_root, to, self.member, text))
+        if mine is not None:
+            return ResultEnvelope(ok=False, error=(
+                f"you already said this in {to!r} (seq {mine.get('seq')}, {mine.get('ts')}) and "
+                f"nobody has spoken since, so nothing was sent: it is still there, unread or "
+                f"unanswered. Saying it again does not make an answer come sooner, and waiting "
+                f"is not held against you. If something is new — what you learned, or what you "
+                f"will do meanwhile — call say with that instead."))
         begin = self._call("hestia_begin_action", {"tool_name": "say", "target": to})
         err = _hestia_error(begin)
         if err:
