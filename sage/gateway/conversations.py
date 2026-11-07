@@ -793,6 +793,31 @@ def echo_of(instance: Path, conv_id: str, me: str, text: str, lookback: int = 4)
     return None
 
 
+def repeat_of_own(instance: Path, conv_id: str, me: str, text: str, lookback: int = 8) -> Optional[dict]:
+    """The being's OWN earlier turn that `text` mostly repeats, with nobody else speaking since, or None.
+
+    echo_of's other half. Measured 2026-11-07 on hub-being: its question to dp ("could you
+    clarify the gating condition that would cause a pending-action act to be refused") went
+    out 13 times between 11-06 07:20Z and 23:40Z with no reply in between, each scoring 1.00
+    against the one before. Across both its conversations, 73 of 140 turns repeated a turn
+    still unanswered above them: every one at 0.91 or more, none between 0.75 and 0.91, so
+    echo_of's bar separates them with room to spare. Only the unanswered run counts: once
+    anyone else speaks, asking again is a reply to them and is let through.
+    """
+    g = _shingles(text)
+    if len(g) < ECHO_MIN_GRAMS:
+        return None
+    run = []
+    for t in reversed(recent(instance, conv_id, limit=lookback)):
+        if t.get("from") != me:
+            break
+        run.append(t)
+    for t in run:
+        if len(g & _shingles(t.get("text") or "")) / len(g) >= ECHO_CONTAINED:
+            return t
+    return None
+
+
 VOICE_TAG = " _(heard through the mic; who spoke is not known unless the words say)_"
 
 
