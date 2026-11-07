@@ -105,6 +105,27 @@ def test_reflect_records_are_required_unless_the_instance_makes_them_optional():
     assert "if you keep a todo list" in both and "if you keep a journal" not in both
 
 
+def test_the_journal_asks_what_was_refused_only_when_something_was():
+    from types import SimpleNamespace
+    from sage.gateway.being_gate_client import BeingIntent, ResultEnvelope
+    from sage.gateway.heartbeat import REFLECT, reflect_prompt, refused_this_beat
+    kw = dict(date="D", say_line="", say_first="")
+    said = (BeingIntent("say", {"to": "dp", "text": "hi"}), ResultEnvelope(ok=True))
+    denied = (BeingIntent("memory_write", {"path": "x"}), ResultEnvelope(ok=False, refused=True))
+    failed = (BeingIntent("memory_read", {"path": "x"}), ResultEnvelope(ok=False, error="no such file"))
+    clean, gated = SimpleNamespace(trace=[said, failed]), SimpleNamespace(trace=[said, denied])
+    assert not refused_this_beat(clean, None) and not refused_this_beat(None, None)
+    assert refused_this_beat(clean, gated) and refused_this_beat(gated, None)
+    # Unchanged when something was refused, and when the caller does not say (the default).
+    assert reflect_prompt(refused=True, **kw) == REFLECT.format(**kw) == reflect_prompt(**kw)
+    none = reflect_prompt(refused=False, **kw)
+    assert "what was refused" not in none and "Nothing you did this beat was refused" in none
+    assert "what you noticed, what you want next time." in none
+    # It composes with an optional journal.
+    j = reflect_prompt(["journal"], refused=False, **kw)
+    assert "if you keep a journal" in j and "what was refused" not in j
+
+
 # -- Nova's review of 0557d9bcf: item age, concurrent appends, interrupted retires ------------
 
 def test_carried_items_keep_the_date_they_were_opened():

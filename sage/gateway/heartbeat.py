@@ -1032,12 +1032,31 @@ def reflect_optional_for(cfg: Optional[dict]) -> list:
     return [r for r in REFLECT_RECORDS if isinstance(v, list) and r in v]
 
 
-def reflect_prompt(optional=(), **kw) -> str:
-    """REFLECT, with the records in `optional` offered rather than required."""
+# ASK WHAT WAS REFUSED ONLY WHEN SOMETHING WAS. The journal line asked every beat, and a question that
+# presumes a refusal gets one. Measured on hub-being 2026-11-07, journals 11-01..11-07: 336 beats, 8 with a
+# real refusal in any trace; 228 entries carried a "What was refused" heading, and 97 of the 328 clean beats
+# still said something was refused ("tool calls were refused because the context window would be
+# exceeded"). The invented refusal of 11-05 then returned for days through todo.md and journal.md. The
+# harness knows from the trace; it says so, and the being has a fact to write instead of a blank to fill.
+_REFLECT_REFUSED = ("what was refused and why you think so, what you want next time.",
+                    "what you want next time. Nothing you did this beat was refused; do not guess at a refusal.")
+
+
+def refused_this_beat(*turns) -> bool:
+    """Whether any act in these turns' traces, (intent, envelope) pairs, was refused (a turn may be None)."""
+    return any(getattr(item[1], "refused", False) for turn in turns
+               for item in (getattr(turn, "trace", None) or []) if isinstance(item, tuple) and len(item) == 2)
+
+
+def reflect_prompt(optional=(), refused=True, **kw) -> str:
+    """REFLECT, with the records in `optional` offered rather than required, and the refusal question
+    only when `refused`."""
     body = REFLECT.format(**kw)
     for r in optional:
         old, new = _REFLECT_OPTIONAL_LINE[r]
         body = body.replace(old, new, 1)
+    if not refused:
+        body = body.replace(*_REFLECT_REFUSED, 1)
     return body
 
 
@@ -4759,8 +4778,8 @@ def main(argv=None) -> int:
             if _wo:
                 convo.append({"role": "user", "content": _wo})
             convo.append({"role": "user", "content": reflect_prompt(
-                reflect_optional_for(instance_config(instance)), date=f"{now:%Y-%m-%d %H:%M} UTC",
-                say_line=say_line, say_first=say_first)})
+                reflect_optional_for(instance_config(instance)), refused=refused_this_beat(explore, after),
+                date=f"{now:%Y-%m-%d %H:%M} UTC", say_line=say_line, say_first=say_first)})
             # One extra step when someone is waiting, because the routine three fill the budget exactly.
             # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
             # asked: reflect spent all three steps on journal, todo and remember, and there was no
