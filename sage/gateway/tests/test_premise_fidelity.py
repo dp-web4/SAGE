@@ -220,6 +220,20 @@ class PremiseFidelityTest(unittest.TestCase):
         universal = self.claim("read", "execution", kind="action_outcome", effector="run", path="script.py", expected="not_executed", result_null=True)
         self.assertEqual(self.check(source, universal).support, "contradicted")
 
+    def test_execution_existential_unknown_and_coverage_precede_contradiction(self):
+        mismatch = {"effector": "memory_read", "args": {"path": "source"}, "ok": False, "refused": True, "result": "content"}
+        unknown = {"effector": "memory_read", "args": {"path": "source"}, "ok": False, "result": None}
+        for receipts in ([mismatch, unknown], [unknown, mismatch]):
+            with self.subTest(receipts=receipts):
+                source = self.artifact("read.jsonl", json.dumps({"explore": {"trace": receipts}}) + "\n", source_id="read", source_type="heartbeat", pointer={"kind": "jsonl", "path": "read.jsonl", "jsonl_line": 1})
+                claim = self.claim("read", "execution", kind="action_outcome", effector="memory_read", path="source", expected="refused", result_null=True)
+                self.assertEqual(self.check(source, claim).support, "unknown")
+        for completeness, expected in (("partial", "incomplete"), ("ambiguous", "unknown")):
+            with self.subTest(completeness=completeness):
+                source = self.artifact("read.jsonl", json.dumps(mismatch) + "\n", source_id="read", source_type="tool_receipt", completeness=completeness, pointer={"kind": "jsonl", "path": "read.jsonl", "jsonl_line": 1})
+                claim = self.claim("read", "execution", kind="action_outcome", effector="memory_read", path="source", expected="refused", result_null=True)
+                self.assertEqual(self.check(source, claim).support, expected)
+
     def test_execution_requires_exact_matches_and_complete_universal_evidence(self):
         receipt = {"effector": "run", "args": {"path": "script.py", "comment": "other.py"}, "ok": False, "refused": True}
         source = self.artifact("execution.jsonl", json.dumps(receipt) + "\n", source_id="execution", source_type="tool_receipt", pointer={"kind": "jsonl", "path": "execution.jsonl", "jsonl_line": 1})

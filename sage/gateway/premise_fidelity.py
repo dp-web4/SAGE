@@ -359,6 +359,11 @@ def _execution(claim: SourceClaim, sources: list[ResolvedSource]) -> CheckResult
             return _outcome(claim, "supported", reason)
         if len(present) != len(candidates):
             return _outcome(claim, "unknown", "receipt_field_absent:result")
+        if "unknown" in statuses:
+            return _outcome(claim, "unknown", reason)
+        coverage = _execution_coverage(sources)
+        if coverage != "complete":
+            return _outcome(claim, coverage, reason)
         return _outcome(claim, "contradicted", f"{reason}:result_null_mismatch")
     if "unknown" in statuses:
         return _outcome(claim, "unknown", reason)
