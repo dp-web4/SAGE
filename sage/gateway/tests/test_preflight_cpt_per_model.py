@@ -44,11 +44,39 @@ def test_a_missing_or_implausible_declaration_falls_back():
     assert btl.preflight_cpt(SimpleNamespace()) == btl.PREFLIGHT_CPT, "no adapter at all"
 
 
-def test_only_llama31_declares_one_today():
-    """A guard on the blast radius: this change alters exactly one family's preflight."""
+def test_gemma4_uses_its_measured_ratio_and_still_errs_high():
+    cpt = btl.preflight_cpt(_llm(load_capabilities("gemma4:12b")))
+    assert cpt == 3.3
+    assert cpt < 3.46, "must sit below every measured ratio (prose 3.46, schemas 3.64)"
+
+
+def test_measured_gemma4_fixture_is_admitted_at_its_window():
+    """A synthetic fixture preserves the measured calibration relationship without publishing
+    instance identity or operational history. The configured estimate remains conservative for
+    this fixture; it is not a universal tokenizer bound."""
+    baseline_estimate = 16727
+    observed_server_tokens = 12301
+    window = 16384
+    chars = baseline_estimate * btl.PREFLIGHT_CPT
+    est = chars / btl.preflight_cpt(_llm(load_capabilities("gemma4:12b")))
+    assert observed_server_tokens < est < window - btl.WINDOW_SEND_MARGIN, est
+
+
+def test_gemma4_config_changes_nothing_but_the_ratio():
+    """gemma4 ran on default.json; its own config must not move any other field — in particular no
+    think_default, so resolve_think still asks the server (#599)."""
+    from dataclasses import asdict
+    g, d = asdict(load_capabilities("gemma4:12b")), asdict(load_capabilities("some-unknown:1b"))
+    diff = {k for k in g if g[k] != d[k]} - {"family", "notes"}
+    assert diff == {"preflight_chars_per_token"}, diff
+    assert load_capabilities("gemma4:e4b").declared_think("gemma4:e4b") is None
+
+
+def test_only_measured_families_declare_one():
+    """A guard on the blast radius: only families with a measured ratio change their preflight."""
     import json
     import glob
     cfg_dir = os.path.join(os.path.dirname(__file__), "..", "..", "irp", "adapters", "model_configs")
     declared = sorted(json.load(open(f)).get("family") for f in glob.glob(os.path.join(cfg_dir, "*.json"))
                       if "preflight_chars_per_token" in json.load(open(f)))
-    assert declared == ["llama3.1"], declared
+    assert declared == ["gemma4", "llama3.1"], declared
