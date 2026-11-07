@@ -359,3 +359,7 @@ This PRD is successful when SAGE can demonstrate, on a fixed corpus and live bei
 5. later action governance receives the corrected/provenanced state without absorbing this logic into Hestia.
 
 That is enough to close the structural gap without inventing a general-purpose reasoning police.
+
+## 14. Inheritance-boundary extension (2026-09-27)
+
+[PRD_INHERITANCE_BOUNDARIES.md](PRD_INHERITANCE_BOUNDARIES.md) carries the same support, uncertainty and supersession semantics across restart/handoff/consolidation. It adds transition lineage and current-authority separation, not a second truth checker. The IH-01 runner is synthetic research instrumentation; runtime promotion/hydration integration remains proposed.
