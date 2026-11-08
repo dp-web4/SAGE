@@ -89,3 +89,26 @@ def test_the_log_itself_is_never_changed(tmp_path):
     (tmp_path / "todo.md").write_text(raw)
     hb.todo_view(tmp_path, now=NOW)
     assert (tmp_path / "todo.md").read_text() == raw
+
+
+def test_a_bare_all_line_is_a_closing_act():
+    """Live, 2026-11-08 21:58Z: the first beat that could see its list wrote `all: camera advice, peer_ask` on
+    its own line, untagged; read as nothing, it closed nothing."""
+    text = ("2026-11-08 10:00 UTC: [still open] Follow up on camera advice for sprout-being.\n"
+            "2026-11-08 11:00 UTC: [still open] Check the hub notify route.\n"
+            "all: camera advice\n")
+    assert list(_open(text)) == ["Check the hub notify route."]
+
+
+def test_a_comma_list_in_all_closes_items_naming_either_phrase():
+    text = ("2026-11-08 10:00 UTC: [still open] Follow up on camera advice for sprout-being.\n"
+            "2026-11-08 10:30 UTC: [still open] Verify the peer_ask path to sprout-being.\n"
+            "2026-11-08 11:00 UTC: [still open] Check the hub notify route.\n"
+            "2026-11-08 12:00 UTC: all: camera advice, peer_ask\n")
+    assert list(_open(text)) == ["Check the hub notify route."]
+
+
+def test_a_short_fragment_in_an_all_list_does_not_widen_the_close():
+    text = ("2026-11-08 10:00 UTC: [still open] Check the hub notify route.\n"
+            "2026-11-08 12:00 UTC: all: ok, dp\n")
+    assert list(_open(text)) == ["Check the hub notify route."]

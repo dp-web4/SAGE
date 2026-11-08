@@ -2608,11 +2608,22 @@ _TODO_PARSE: dict = {}
 _INLINE_ITEM = re.compile(r"^\s*(20\d\d-\d\d-\d\d)(?:[ T](\d\d:\d\d)(?::\d\d)?)?\s*(?:UTC|Z)?\s*:?\s*"
                           r"(\[(?:still open|open|added|done|completed|x| )\].*\S)\s*$", re.I)
 _BARE_TAG = re.compile(r"^\s*(\[(?:still open|open|added|done|completed)\].*\S)\s*$", re.I)
+# A bare `all: <words>` line is a closing act whatever it sits under. Live on mcnugget-being (2026-11-08 21:58Z,
+# the first beat that could see its list): it wrote `all: camera advice, peer_ask` on its own line, untagged and
+# outside a done: section, so the parser read it as nothing and nothing closed.
+_BARE_ALL = re.compile(r"^\s*(?:(20\d\d-\d\d-\d\d)(?:[ T](\d\d:\d\d)(?::\d\d)?)?\s*(?:UTC|Z)?\s*:?\s*)?"
+                       r"((?:all|every)\s*:\s*\S.*?)\s*$", re.I)
 
 
 def _canonical_todo(text: str) -> str:
     out = []
     for line in text.splitlines():
+        a = _BARE_ALL.match(line)
+        if a:
+            if a.group(1):
+                out.append(f"{a.group(1)} {a.group(2) or '00:00'} UTC")
+            out.append(f"- [done] {a.group(3)}")
+            continue
         m = _INLINE_ITEM.match(line)
         if m:
             out.append(f"{m.group(1)} {m.group(2) or '00:00'} UTC")
