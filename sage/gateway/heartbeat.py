@@ -3349,14 +3349,15 @@ def pending_turns(instance: Path, member: str) -> list:
     and the reflect selection each call it, at different moments of the beat; a turn arriving
     or answered in between makes them differ, and the beat record says so (`reconcile_recall`)."""
     from sage.gateway import conversations as _conv
-    ids = [m["id"] for m in _conv.listing(instance) if member in (m.get("participants") or [])]
+    ids = [m["id"] for m in _conv.listing(instance) if isinstance(m, dict) and member in (m.get("participants") or [])]
     pend = []
     for cid in ids:
         # unseen first; failing that, the recent UNANSWERED tail — a turn marked seen
         # without a reply must not silence the ask (2026-09-19, dp's 03:51Z turn)
         for t in (_conv.awaiting(instance, cid, member)
                   or _conv.unanswered(instance, cid, member))[-PENDING_TURNS:]:
-            pend.append((cid, t))
+            if isinstance(t, dict):
+                pend.append((cid, t))
     # ORDER BY WHEN IT WAS SAID, not by list construction. `listing()` is newest-
     # conversation FIRST, so `pend[-1]` used to pick the LEAST recent conversation and the
     # truncation below kept the oldest turns (GPT on #147: an old dp "keep going!" was
@@ -3385,7 +3386,7 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
     LAST_PENDING_SCAN = None
     try:
         ids, pend = pending_turns(instance, member)
-        LAST_PENDING_SCAN = [[cid, t.get("seq")] for cid, t in pend if t.get("from") != member]
+        LAST_PENDING_SCAN = [[cid, t.get("seq")] for cid, t in pend if isinstance(t, dict) and t.get("from") != member]
         if pend:
             lines = []
             for cid, t in pend:
