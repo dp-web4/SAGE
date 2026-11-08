@@ -117,12 +117,24 @@ def listing(instance: Path) -> list[dict]:
     if not d.is_dir():
         return out
     for meta_path in sorted(d.glob("*.meta.json")):
-        m = json.loads(meta_path.read_text())
-        turns = recent(instance, m["id"], limit=1)
-        m["last"] = turns[-1] if turns else None
-        m["count"] = count(instance, m["id"])
+        try:
+            m = json.loads(meta_path.read_text())
+        except Exception:
+            continue
+        if not isinstance(m, dict):
+            continue
+        cid = m.get("id")
+        if not cid:
+            continue
+        turns = recent(instance, cid, limit=1)
+        m["last"] = turns[-1] if turns and isinstance(turns[-1], dict) else None
+        m["count"] = count(instance, cid)
         out.append(m)
-    out.sort(key=lambda m: (m["last"] or {}).get("ts") or m["created"], reverse=True)
+    def _sort_key(m: dict):
+        last = m.get("last")
+        ts = last.get("ts") if isinstance(last, dict) else None
+        return ts or m.get("created") or ""
+    out.sort(key=_sort_key, reverse=True)
     return out
 
 
@@ -163,7 +175,9 @@ def next_seq(instance: Path, conv_id: str, lines) -> int:
         # a corruption of the account itself. So the raw count is a floor, never the answer.
         occupied += 1
         try:
-            max_in_log = max(max_in_log, int(json.loads(line).get("seq", 0)))
+            val = json.loads(line)
+            if isinstance(val, dict):
+                max_in_log = max(max_in_log, int(val.get("seq", 0)))
         except Exception:
             continue
     wp = witness_path(instance, conv_id)
@@ -194,6 +208,21 @@ def _write_meta(instance: Path, conv_id: str, m: dict) -> None:
     os.replace(tmp, meta)
 
 
+REQUIRED_TURN_KEYS = frozenset({"ts", "seq", "from", "text"})
+
+
+def is_turn(val: Any) -> bool:
+    """True when `val` is a mapping matching the minimum conversation turn schema."""
+    if not isinstance(val, dict):
+        return False
+    return bool(
+        REQUIRED_TURN_KEYS.issubset(val.keys())
+        and val.get("from")
+        and val.get("text") is not None
+        and isinstance(val.get("seq"), (int, float))
+    )
+
+
 def integrity(instance: Path, conv_id: str) -> dict:
     """Readable turns vs lines that will not parse.
 
@@ -215,9 +244,12 @@ def integrity(instance: Path, conv_id: str) -> dict:
             if not line.strip():
                 continue
             try:
-                json.loads(line)
-                readable += 1
-            except json.JSONDecodeError:
+                val = json.loads(line)
+                if is_turn(val):
+                    readable += 1
+                else:
+                    unreadable += 1
+            except Exception:
                 unreadable += 1
     except Exception:
         pass
@@ -238,11 +270,16 @@ def recent(instance: Path, conv_id: str, limit: int = DEFAULT_LIMIT) -> list[dic
     except Exception:
         return []
     out = []
-    for line in lines[-max(1, limit):]:
+    for line in reversed(lines):
         try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError:
+            val = json.loads(line)
+        except Exception:
             continue
+        if is_turn(val):
+            out.append(val)
+            if len(out) >= max(1, limit):
+                break
+    out.reverse()
     return out
 
 
@@ -353,10 +390,10 @@ def latest_seqs(instance: Path, me: str) -> dict:
     shown it could act on it (heartbeat.mark_conversations_after_beat)."""
     out = {}
     for m in listing(instance):
-        if me not in m.get("participants", []):
+        if not isinstance(m, dict) or me not in (m.get("participants") or []):
             continue
-        turns = recent(instance, m["id"], limit=1)
-        if turns:
+        turns = recent(instance, m.get("id", ""), limit=1)
+        if turns and isinstance(turns[-1], dict):
             out[m["id"]] = int(turns[-1].get("seq", 0))
     return out
 
@@ -381,6 +418,7 @@ def awaiting(instance: Path, conv_id: str, me: str) -> list[dict]:
     the proxy for a being with no seen-record yet, so a fresh instance is not told it has
     read everything."""
     turns = recent(instance, conv_id, limit=200)
+    turns = [t for t in turns if isinstance(t, dict)]
     seen = last_seen(instance, me, conv_id)
     if seen:
         return [t for t in turns if int(t.get("seq", 0)) > seen and t.get("from") != me]
@@ -403,12 +441,18 @@ def unanswered(instance: Path, conv_id: str, me: str, max_age_h: float = 24.0) -
     """
     from datetime import datetime, timezone, timedelta
     turns = recent(instance, conv_id, limit=200)
+    turns = [t for t in turns if isinstance(t, dict)]
     if not turns or turns[-1].get("from") == me:
         return []
     last_mine = max((i for i, t in enumerate(turns) if t.get("from") == me), default=-1)
     tail = turns[last_mine + 1:]
+    if not tail:
+        return []
     try:
-        newest = datetime.strptime(tail[-1]["ts"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        ts_str = tail[-1].get("ts")
+        if not ts_str:
+            return []
+        newest = datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
         if datetime.now(timezone.utc) - newest > timedelta(hours=max_age_h):
             return []
     except Exception:

@@ -578,3 +578,64 @@ def test_an_old_unanswered_turn_is_a_choice_not_a_debt():
     log = inst / "conversations" / "dp.jsonl"
     log.write_text(json.dumps({"ts": "2026-01-01T00:00:00Z", "seq": 1, "from": "dp", "text": "long ago"}) + "\n")
     assert c.unanswered(inst, "dp", "b") == [], "silence that has lasted is an answer; do not nag"
+
+
+def test_non_object_and_malformed_turns_do_not_crash_readers_or_drop_valid_turns():
+    """SAGE #652: Conversation readers must handle non-object JSON values (arrays, scalars),
+    malformed JSON, and records missing required fields without crashing (AttributeError on .get)
+    while preserving valid neighboring turns."""
+    import tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+
+    inst = Path(tempfile.mkdtemp(prefix="non-object-turns-"))
+    c.create(inst, "dp", title="dp", participants=["dp", "b"], writable_by=["dp", "b"])
+
+    # 1. Start with a valid turn from b
+    c.append(inst, "dp", speaker="b", text="initial from being")
+
+    log = inst / "conversations" / "dp.jsonl"
+
+    # 2. Inject malformed JSON and missing required fields between valid turns
+    with open(log, "a", encoding="utf-8") as f:
+        f.write("{not json\n")
+        f.write('{"unrelated": 123}\n')
+        f.write("{}\n")
+
+    # 3. Add a valid pending question from dp
+    c.append(inst, "dp", speaker="dp", text="valid pending question after invalid records")
+
+    # 4. Inject JSON array and scalar at EOF
+    with open(log, "a", encoding="utf-8") as f:
+        f.write("[1, 2]\n")
+        f.write("42\n")
+        f.write('"just a string"\n')
+
+    # Integrity check: 2 valid readable turns, 6 unreadable lines
+    integ = c.integrity(inst, "dp")
+    assert integ["readable"] == 2
+    assert integ["unreadable"] == 6
+    assert c.count(inst, "dp") == 2
+
+    # recent only returns valid turns
+    rec = c.recent(inst, "dp", limit=10)
+    assert len(rec) == 2
+    assert [t["text"] for t in rec] == ["initial from being", "valid pending question after invalid records"]
+
+    # listing should NOT crash on non-object EOF and must report the last valid turn
+    lst = c.listing(inst)
+    assert len(lst) == 1
+    assert lst[0]["count"] == 2
+    assert lst[0]["last"]["text"] == "valid pending question after invalid records"
+
+    # awaiting should correctly see the pending turn from dp waiting on b
+    pend = c.awaiting(inst, "dp", "b")
+    assert [t["text"] for t in pend] == ["valid pending question after invalid records"]
+
+    # unanswered should correctly report the unanswered tail
+    tail = c.unanswered(inst, "dp", "b")
+    assert [t["text"] for t in tail] == ["valid pending question after invalid records"]
+
+    # latest_seqs should report the last valid turn's seq
+    latest = c.latest_seqs(inst, "b")
+    assert latest.get("dp") == rec[-1]["seq"]
