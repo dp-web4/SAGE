@@ -1038,24 +1038,32 @@ def reflect_optional_for(cfg: Optional[dict]) -> list:
 # still said something was refused ("tool calls were refused because the context window would be
 # exceeded"). The invented refusal of 11-05 then returned for days through todo.md and journal.md. The
 # harness knows from the trace; it says so, and the being has a fact to write instead of a blank to fill.
+# Worded as what the record holds, not as a fact about the beat (Nova on #651): it is said only when the
+# traces were read whole, and anything unreadable leaves the question as it was.
 _REFLECT_REFUSED = ("what was refused and why you think so, what you want next time.",
-                    "what you want next time. Nothing you did this beat was refused; do not guess at a refusal.")
+                    "what you want next time. No act of yours this beat is recorded as refused; do not guess at a refusal.")
 
 
-def refused_this_beat(*turns) -> bool:
-    """Whether any act in these turns' traces, (intent, envelope) pairs, was refused (a turn may be None)."""
-    return any(getattr(item[1], "refused", False) for turn in turns
-               for item in (getattr(turn, "trace", None) or []) if isinstance(item, tuple) and len(item) == 2)
+def refused_this_beat(*turns) -> Optional[bool]:
+    """Whether any act in these turns' traces, (intent, envelope) pairs, was refused. A turn may be None (it
+    did not run). None, meaning unknown, when no turn has a trace or any trace is not a list of such pairs."""
+    traces = [getattr(t, "trace", None) for t in turns if t is not None]
+    if not traces or not all(isinstance(tr, list) for tr in traces):
+        return None
+    items = [i for tr in traces for i in tr]
+    if not all(isinstance(i, tuple) and len(i) == 2 and hasattr(i[1], "refused") for i in items):
+        return None
+    return any(bool(i[1].refused) for i in items)
 
 
 def reflect_prompt(optional=(), refused=True, **kw) -> str:
     """REFLECT, with the records in `optional` offered rather than required, and the refusal question
-    only when `refused`."""
+    unless `refused` is False (known: nothing recorded as refused). True and None (unknown) keep it."""
     body = REFLECT.format(**kw)
     for r in optional:
         old, new = _REFLECT_OPTIONAL_LINE[r]
         body = body.replace(old, new, 1)
-    if not refused:
+    if refused is False:
         body = body.replace(*_REFLECT_REFUSED, 1)
     return body
 
