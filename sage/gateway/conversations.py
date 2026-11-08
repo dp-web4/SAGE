@@ -58,15 +58,18 @@ the conversation's seat-owned meta:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 # The fleet's display convention, from sage-daemon's /chat-history?limit=N: an append-only
 # file, the last N read for display. Storage keeps everything; only the view is bounded.
 DEFAULT_LIMIT = 50
+
+_log = logging.getLogger(__name__)
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 
@@ -111,7 +114,12 @@ def get_meta(instance: Path, conv_id: str) -> Optional[dict]:
 
 def listing(instance: Path) -> list[dict]:
     """Every conversation, most-recently-spoken first, each with its last turn — which is
-    the one thing a reader needs to know whether it is their move."""
+    the one thing a reader needs to know whether it is their move.
+
+    A metadata file that will not parse, or has no string `id`, is SKIPPED with a warning on
+    the `sage.gateway.conversations` logger rather than failing the whole listing: one bad
+    file must not hide every other conversation. The warning is what tells an operator that
+    an empty-looking inbox is really an unreadable one."""
     out = []
     d = conv_dir(instance)
     if not d.is_dir():
@@ -119,13 +127,13 @@ def listing(instance: Path) -> list[dict]:
     for meta_path in sorted(d.glob("*.meta.json")):
         try:
             m = json.loads(meta_path.read_text())
-        except Exception:
+        except Exception as e:
+            _log.warning("conversations: skipping unreadable metadata %s: %s", meta_path, e)
             continue
-        if not isinstance(m, dict):
+        if not isinstance(m, dict) or not isinstance(m.get("id"), str) or not m["id"]:
+            _log.warning("conversations: skipping metadata without a string id: %s", meta_path)
             continue
-        cid = m.get("id")
-        if not cid:
-            continue
+        cid = m["id"]
         turns = recent(instance, cid, limit=1)
         m["last"] = turns[-1] if turns and isinstance(turns[-1], dict) else None
         m["count"] = count(instance, cid)
@@ -176,8 +184,10 @@ def next_seq(instance: Path, conv_id: str, lines) -> int:
         occupied += 1
         try:
             val = json.loads(line)
-            if isinstance(val, dict):
-                max_in_log = max(max_in_log, int(val.get("seq", 0)))
+            # Only a seq a writer could have produced moves the floor: `True`, `3.5`, NaN,
+            # `"9"` or a negative number must not, any more than an unparseable line does.
+            if isinstance(val, dict) and is_seq(val.get("seq")):
+                max_in_log = max(max_in_log, val["seq"])
         except Exception:
             continue
     wp = witness_path(instance, conv_id)
@@ -210,16 +220,30 @@ def _write_meta(instance: Path, conv_id: str, m: dict) -> None:
 
 REQUIRED_TURN_KEYS = frozenset({"ts", "seq", "from", "text"})
 
+# The shape both writers produce: `_now()` here, and the Rust daemon's turns.
+TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+
+def is_seq(val: Any) -> bool:
+    """True for a sequence number a writer could have produced: a positive int.
+
+    `bool` is an `int` subclass and is refused, as are floats (`3.5`, NaN, infinity),
+    zero and negatives. The Rust daemon reads `seq` with `as_u64`, so this is the same rule."""
+    return isinstance(val, int) and not isinstance(val, bool) and val > 0
+
 
 def is_turn(val: Any) -> bool:
-    """True when `val` is a mapping matching the minimum conversation turn schema."""
-    if not isinstance(val, dict):
+    """True when `val` matches the conversation turn schema every reader relies on:
+    a positive int `seq`, a `ts` in the writers' `%Y-%m-%dT%H:%M:%SZ` shape, a nonempty
+    string `from` and a string `text`. Extra keys (`via`, `witness`, annotations) are allowed."""
+    if not isinstance(val, dict) or not REQUIRED_TURN_KEYS.issubset(val.keys()):
         return False
-    return bool(
-        REQUIRED_TURN_KEYS.issubset(val.keys())
-        and val.get("from")
-        and val.get("text") is not None
-        and isinstance(val.get("seq"), (int, float))
+    ts, speaker, text = val["ts"], val["from"], val["text"]
+    return (
+        is_seq(val["seq"])
+        and isinstance(ts, str) and TS_RE.match(ts) is not None
+        and isinstance(speaker, str) and speaker != ""
+        and isinstance(text, str)
     )
 
 
