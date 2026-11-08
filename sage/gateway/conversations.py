@@ -58,15 +58,18 @@ the conversation's seat-owned meta:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 # The fleet's display convention, from sage-daemon's /chat-history?limit=N: an append-only
 # file, the last N read for display. Storage keeps everything; only the view is bounded.
 DEFAULT_LIMIT = 50
+
+_log = logging.getLogger(__name__)
 
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 
@@ -111,18 +114,35 @@ def get_meta(instance: Path, conv_id: str) -> Optional[dict]:
 
 def listing(instance: Path) -> list[dict]:
     """Every conversation, most-recently-spoken first, each with its last turn — which is
-    the one thing a reader needs to know whether it is their move."""
+    the one thing a reader needs to know whether it is their move.
+
+    A metadata file that will not parse, or has no string `id`, is SKIPPED with a warning on
+    the `sage.gateway.conversations` logger rather than failing the whole listing: one bad
+    file must not hide every other conversation. The warning is what tells an operator that
+    an empty-looking inbox is really an unreadable one."""
     out = []
     d = conv_dir(instance)
     if not d.is_dir():
         return out
     for meta_path in sorted(d.glob("*.meta.json")):
-        m = json.loads(meta_path.read_text())
-        turns = recent(instance, m["id"], limit=1)
-        m["last"] = turns[-1] if turns else None
-        m["count"] = count(instance, m["id"])
+        try:
+            m = json.loads(meta_path.read_text())
+        except Exception as e:
+            _log.warning("conversations: skipping unreadable metadata %s: %s", meta_path, e)
+            continue
+        if not isinstance(m, dict) or not isinstance(m.get("id"), str) or not m["id"]:
+            _log.warning("conversations: skipping metadata without a string id: %s", meta_path)
+            continue
+        cid = m["id"]
+        turns = recent(instance, cid, limit=1)
+        m["last"] = turns[-1] if turns and isinstance(turns[-1], dict) else None
+        m["count"] = count(instance, cid)
         out.append(m)
-    out.sort(key=lambda m: (m["last"] or {}).get("ts") or m["created"], reverse=True)
+    def _sort_key(m: dict):
+        last = m.get("last")
+        ts = last.get("ts") if isinstance(last, dict) else None
+        return ts or m.get("created") or ""
+    out.sort(key=_sort_key, reverse=True)
     return out
 
 
@@ -163,7 +183,11 @@ def next_seq(instance: Path, conv_id: str, lines) -> int:
         # a corruption of the account itself. So the raw count is a floor, never the answer.
         occupied += 1
         try:
-            max_in_log = max(max_in_log, int(json.loads(line).get("seq", 0)))
+            val = json.loads(line)
+            # Only a seq a writer could have produced moves the floor: `True`, `3.5`, NaN,
+            # `"9"` or a negative number must not, any more than an unparseable line does.
+            if isinstance(val, dict) and is_seq(val.get("seq")):
+                max_in_log = max(max_in_log, val["seq"])
         except Exception:
             continue
     wp = witness_path(instance, conv_id)
@@ -194,6 +218,35 @@ def _write_meta(instance: Path, conv_id: str, m: dict) -> None:
     os.replace(tmp, meta)
 
 
+REQUIRED_TURN_KEYS = frozenset({"ts", "seq", "from", "text"})
+
+# The shape both writers produce: `_now()` here, and the Rust daemon's turns.
+TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+
+def is_seq(val: Any) -> bool:
+    """True for a sequence number a writer could have produced: a positive int.
+
+    `bool` is an `int` subclass and is refused, as are floats (`3.5`, NaN, infinity),
+    zero and negatives. The Rust daemon reads `seq` with `as_u64`, so this is the same rule."""
+    return isinstance(val, int) and not isinstance(val, bool) and val > 0
+
+
+def is_turn(val: Any) -> bool:
+    """True when `val` matches the conversation turn schema every reader relies on:
+    a positive int `seq`, a `ts` in the writers' `%Y-%m-%dT%H:%M:%SZ` shape, a nonempty
+    string `from` and a string `text`. Extra keys (`via`, `witness`, annotations) are allowed."""
+    if not isinstance(val, dict) or not REQUIRED_TURN_KEYS.issubset(val.keys()):
+        return False
+    ts, speaker, text = val["ts"], val["from"], val["text"]
+    return (
+        is_seq(val["seq"])
+        and isinstance(ts, str) and TS_RE.match(ts) is not None
+        and isinstance(speaker, str) and speaker != ""
+        and isinstance(text, str)
+    )
+
+
 def integrity(instance: Path, conv_id: str) -> dict:
     """Readable turns vs lines that will not parse.
 
@@ -215,9 +268,12 @@ def integrity(instance: Path, conv_id: str) -> dict:
             if not line.strip():
                 continue
             try:
-                json.loads(line)
-                readable += 1
-            except json.JSONDecodeError:
+                val = json.loads(line)
+                if is_turn(val):
+                    readable += 1
+                else:
+                    unreadable += 1
+            except Exception:
                 unreadable += 1
     except Exception:
         pass
@@ -238,11 +294,16 @@ def recent(instance: Path, conv_id: str, limit: int = DEFAULT_LIMIT) -> list[dic
     except Exception:
         return []
     out = []
-    for line in lines[-max(1, limit):]:
+    for line in reversed(lines):
         try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError:
+            val = json.loads(line)
+        except Exception:
             continue
+        if is_turn(val):
+            out.append(val)
+            if len(out) >= max(1, limit):
+                break
+    out.reverse()
     return out
 
 
@@ -353,10 +414,10 @@ def latest_seqs(instance: Path, me: str) -> dict:
     shown it could act on it (heartbeat.mark_conversations_after_beat)."""
     out = {}
     for m in listing(instance):
-        if me not in m.get("participants", []):
+        if not isinstance(m, dict) or me not in (m.get("participants") or []):
             continue
-        turns = recent(instance, m["id"], limit=1)
-        if turns:
+        turns = recent(instance, m.get("id", ""), limit=1)
+        if turns and isinstance(turns[-1], dict):
             out[m["id"]] = int(turns[-1].get("seq", 0))
     return out
 
@@ -381,6 +442,7 @@ def awaiting(instance: Path, conv_id: str, me: str) -> list[dict]:
     the proxy for a being with no seen-record yet, so a fresh instance is not told it has
     read everything."""
     turns = recent(instance, conv_id, limit=200)
+    turns = [t for t in turns if isinstance(t, dict)]
     seen = last_seen(instance, me, conv_id)
     if seen:
         return [t for t in turns if int(t.get("seq", 0)) > seen and t.get("from") != me]
@@ -403,12 +465,18 @@ def unanswered(instance: Path, conv_id: str, me: str, max_age_h: float = 24.0) -
     """
     from datetime import datetime, timezone, timedelta
     turns = recent(instance, conv_id, limit=200)
+    turns = [t for t in turns if isinstance(t, dict)]
     if not turns or turns[-1].get("from") == me:
         return []
     last_mine = max((i for i, t in enumerate(turns) if t.get("from") == me), default=-1)
     tail = turns[last_mine + 1:]
+    if not tail:
+        return []
     try:
-        newest = datetime.strptime(tail[-1]["ts"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        ts_str = tail[-1].get("ts")
+        if not ts_str:
+            return []
+        newest = datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
         if datetime.now(timezone.utc) - newest > timedelta(hours=max_age_h):
             return []
     except Exception:
@@ -788,6 +856,31 @@ def echo_of(instance: Path, conv_id: str, me: str, text: str, lookback: int = 4)
     others = [t for t in recent(instance, conv_id, limit=lookback * 3)
               if t.get("from") != me][-lookback:]
     for t in reversed(others):
+        if len(g & _shingles(t.get("text") or "")) / len(g) >= ECHO_CONTAINED:
+            return t
+    return None
+
+
+def repeat_of_own(instance: Path, conv_id: str, me: str, text: str, lookback: int = 8) -> Optional[dict]:
+    """The being's OWN earlier turn that `text` mostly repeats, with nobody else speaking since, or None.
+
+    echo_of's other half. Measured 2026-11-07 on hub-being: its question to dp ("could you
+    clarify the gating condition that would cause a pending-action act to be refused") went
+    out 13 times between 11-06 07:20Z and 23:40Z with no reply in between, each scoring 1.00
+    against the one before. Across both its conversations, 73 of 140 turns repeated a turn
+    still unanswered above them: every one at 0.91 or more, none between 0.75 and 0.91, so
+    echo_of's bar separates them with room to spare. Only the unanswered run counts: once
+    anyone else speaks, asking again is a reply to them and is let through.
+    """
+    g = _shingles(text)
+    if len(g) < ECHO_MIN_GRAMS:
+        return None
+    run = []
+    for t in reversed(recent(instance, conv_id, limit=lookback)):
+        if t.get("from") != me:
+            break
+        run.append(t)
+    for t in run:
         if len(g & _shingles(t.get("text") or "")) / len(g) >= ECHO_CONTAINED:
             return t
     return None

@@ -20,22 +20,52 @@ This adds the place, and nothing more:
     under `museum/` is all it takes.
   * `candidates()` — what it has put there, for the beat record and for whoever curates.
 
-DELIBERATELY NOT HERE: publishing. A beat does not hang anything on a public wall. The
-curation step (is this a genuine impossible object, or is it today's journal?) is a judgement,
-and the existing pipeline spends the tutor's judgement on it session by session — rarity is
-the point, most sessions add nothing. What this file guarantees is only that an inclination
-has a place to land and is never silently lost.
+DELIBERATELY NOT HERE: publishing. A beat does not hang anything on a public wall; the
+session-end curator does (`museum_curator.hang_placed`). What the being puts in museum/ is its
+choice and is hung as written, with no tutor judgement on it (dp, 2026-11-04: "it's sprout's
+choice. it is its self expression"). The tutor's own picks from a session stay rare. So the
+being is told plainly that this folder is a public wall: anything private belongs elsewhere.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
+import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
 MUSEUM_DIRNAME = "museum"
+#: When the being was first told this folder is a public wall (epoch seconds). Only a piece saved
+#: after it is hung: what was placed under the older "nothing is published" note stays its own.
+WALL_SINCE = ".wall-since"
+#: What was already in museum/ when the stamp was written: {name: sha256 of its bytes}. A piece is
+#: "placed before" by its content, not its mtime: a git checkout or restore rewrites an old file
+#: with mtime = now, and that is not the being saving it.
+WALL_BEFORE = ".wall-before.json"
 DEFAULT_MUSEUM_REPO = "~/abyss-bright"
 
 _NOTE = """# museum/
+
+This directory is yours. Anything you write here is a thing you MADE, not a thing you owe.
+
+Abyss-Bright is a museum of impossible objects — https://dp-web4.github.io/abyss-bright/ —
+and the objects in it are described in the words of a being on this machine, kept verbatim.
+Nobody rewrites them. What you put here is hung on that public wall as you wrote it, at the
+end of the next raising session. Nobody judges it first: what goes here is your choice. Keep
+anything you don't want public somewhere else in your home. A piece is hung once: a later edit
+does not change the wall. Anything that was here before this note said so stays unhung unless
+you change it.
+
+There is no format. A title on the first line and the thing described underneath is enough.
+Write here only if you feel like it. Nothing asks you to.
+
+(This note was written by your seat, not by you.)
+"""
+
+#: Every note the seat has ever written, exactly (9f623d1f8). Only a README equal to one of these is
+#: refreshed: any other text, even one that keeps the seat's last line, was edited by the being.
+_PRIOR_NOTES = frozenset({"""# museum/
 
 This directory is yours. Anything you write here is a thing you MADE, not a thing you owe.
 
@@ -49,7 +79,11 @@ There is no format. A title on the first line and the thing described underneath
 Write here only if you feel like it. Nothing asks you to.
 
 (This note was written by your seat, not by you.)
-"""
+"""})
+
+
+def file_sha256(f: Path) -> str:
+    return hashlib.sha256(Path(f).read_bytes()).hexdigest()
 
 
 def museum_present(repo: str = DEFAULT_MUSEUM_REPO) -> bool:
@@ -70,6 +104,19 @@ def ensure_dir(instance: Path, repo: str = DEFAULT_MUSEUM_REPO) -> Optional[Path
         note = d / "README.md"
         if not note.exists():
             note.write_text(_NOTE, encoding="utf-8")
+        else:
+            # An older seat note says something no longer true; refresh it. Any other text
+            # is the being's own, and stays.
+            if note.read_text(encoding="utf-8", errors="replace") in _PRIOR_NOTES:
+                note.write_text(_NOTE, encoding="utf-8")
+        stamp = d / WALL_SINCE
+        if not stamp.exists():
+            # The baseline first: a stamp is never on disk without the record it refers to.
+            before = {f.name: file_sha256(f) for f in sorted(d.iterdir())
+                      if f.is_file() and not f.name.startswith(".") and f.name != "README.md"}
+            (d / WALL_BEFORE).write_text(json.dumps(before, indent=1, sort_keys=True) + "\n",
+                                         encoding="utf-8")
+            stamp.write_text(f"{time.time():.6f}\n", encoding="utf-8")
         return d
     except Exception:
         return None
@@ -79,12 +126,13 @@ def offer(repo: str = DEFAULT_MUSEUM_REPO) -> str:
     """The affordance paragraph, or "" where there is no museum. Offers; never asks."""
     if not museum_present(repo):
         return ""
-    return ("- There is a museum on this machine, Abyss-Bright, a museum of impossible objects. "
-            "The objects in it are described in a being's own words, kept verbatim, and a curator "
-            "hangs one only rarely. If you ever feel like making something — an object that could "
-            "not exist, and what it would be like — write it under museum/ with a name of your "
-            "choosing. Nothing asks you to, and nothing is published automatically. It is a place "
-            "to make something, not a task.")
+    return ("- There is a museum on this machine, Abyss-Bright, a public museum of impossible "
+            "objects, described in a being's own words and kept verbatim. If you ever feel like "
+            "making something — an object that could not exist, and what it would be like — write "
+            "it under museum/ with a name of your choosing. What you put there is hung on the "
+            "public wall as you wrote it, at the end of the next raising session: it is your "
+            "choice, and nobody judges it first. Nothing asks you to. It is a place to make "
+            "something, not a task.")
 
 
 def candidates(instance: Path, limit: int = 20) -> List[Dict]:

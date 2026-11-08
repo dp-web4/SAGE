@@ -35,6 +35,17 @@ def test_settling_the_same_question_again_replaces_the_answer_and_keeps_the_old_
     assert log[1]["from"]["answer"] == "no, it is fixed" and log[1]["why"] == "tried it again"
 
 
+def test_a_question_spelled_with_another_hyphen_is_the_same_question(tmp_path):
+    # These spellings must reuse one settled entry.
+    ok, msg, _ = _s(tmp_path, question="What prevents tool calls after context window fills?", answer="first")
+    assert ok and "s1" in msg
+    for spelled in ("what prevents tool calls after context-window fills", "What prevents tool calls after context‑window fills?"):
+        ok, msg, _ = _s(tmp_path, question=spelled, answer=f"again: {spelled[-20:]}")
+        assert ok, msg
+    entries, _, err = st.read(tmp_path)
+    assert err is None and [e["id"] for e in entries] == ["s1"], entries
+
+
 def test_an_id_changes_or_reopens_one_and_a_reopened_one_is_no_longer_shown(tmp_path):
     _s(tmp_path, question="q one", answer="a one")
     _s(tmp_path, question="q two", answer="a two")

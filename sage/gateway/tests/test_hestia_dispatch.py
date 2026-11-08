@@ -1337,7 +1337,7 @@ def test_a_check_result_leads_with_its_verdict_in_words():
     msg = env.to_tool_message()
     assert msg.index("FAIL") < 30, "the verdict must lead, not sit behind a field lookup"
     assert "'the call worked' is not 'the tests passed'" in msg
-    assert json.loads(msg.split("  (witnessed")[0])["headline"].startswith("FAIL")
+    assert json.loads(msg.split("\n[receipt ")[0])["headline"].startswith("FAIL")
 
 
 

@@ -67,6 +67,7 @@
 
 ## Recent Research Files
 
+- `research-notes/tale-of-two-beings/README.md` — Public source edition for NOVA's article, published November 3, 2026 (Pacific): selected Sprout and CBP evidence, raising histories, and reproducible arithmetic; comparative research by Sprout-Claude.
 - `Research/Policy_Role_Training_Plan.md`
 - `Research/SESSION_MAP.md`
 - `Research/README.md`

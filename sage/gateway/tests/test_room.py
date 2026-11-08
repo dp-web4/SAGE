@@ -182,6 +182,24 @@ def test_say_to_room_keeps_the_say_guards_before_any_sound(monkeypatch):
     assert played == [] and calls == [], "echo, placeholder and punctuation never reach the speaker"
 
 
+def test_say_refuses_the_beings_own_unanswered_turn_again(monkeypatch):
+    h = _home()
+    d, _, calls = _dispatcher(h, monkeypatch)
+    ask = ("Could you please clarify the gating condition that would cause a pending-action act "
+           "to be refused? I want to understand it before I retry.")
+    assert d._do_say(BeingIntent("say", {"to": "dp", "text": ask})).ok
+    n = len(calls)
+    env = d._do_say(BeingIntent("say", {"to": "dp", "text": ask}))
+    assert not env.ok and "you already said this" in env.error
+    assert len(calls) == n and conv.count(h, "dp") == 1, "refused before begin_action: no witness, no line"
+    conv.append(h, "dp", speaker="dp", text="Nothing was refused; there is no such rule.")
+    assert d._do_say(BeingIntent("say", {"to": "dp", "text": ask})).ok, "after a reply it is a reply"
+    run = "[request_run] notes/probe.py\nwhy: " + ask
+    assert d._do_say(BeingIntent("say", {"to": "dp", "text": run})).ok
+    assert d._do_say(BeingIntent("say", {"to": "dp", "text": run})).ok, \
+        "a repeated run request is request_run's to mark (SAME AS), not this guard's to refuse"
+
+
 def test_say_to_room_on_a_body_that_cannot_speak_says_so(monkeypatch):
     h = _home()
     room.ensure(h, ME)

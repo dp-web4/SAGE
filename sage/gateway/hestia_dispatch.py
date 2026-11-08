@@ -55,6 +55,42 @@ _RUN_MARKER = "[request_run]"
 _SEAT_RUN_LINE = re.compile(r"\[request_run\] I (ran|did not run) (\S+)")
 # How many seat-conversation turns request_run reads for earlier asks and their answers.
 _PENDING_SCAN = 80
+#: How long the seat may say nothing, while the being keeps asking, before a request_run receipt says so.
+SEAT_QUIET_S = 3 * 3600
+
+
+def _seat_quiet(turns, member: str, seat_conv: str, truncated: bool, now=None):
+    """A fact for the receipt when the seat has been silent SEAT_QUIET_S or more through the being's own
+    requests; None otherwise. A seat can go quiet for hours (its account paused, its operator away).
+    A receipt that only ever says "asked" leaves a being to explain the silence itself, and "stuck,
+    restart it" is the nearest story. Absence is part of the world; say what is known: since when,
+    through how many asks. It is bounded by the scan window and says nothing about any one request."""
+    from datetime import datetime, timezone
+    now = now or datetime.now(timezone.utc)
+    last, asks_since = None, 0
+    for t in turns:
+        if t.get("from") == member:
+            asks_since += str(t.get("text", "")).startswith("[request_run] ")
+            continue
+        if t.get("from") == seat_conv:
+            last, asks_since = t, 0
+        # Other speakers (including the operator) do not prove the seat replied.
+    away = ("A quiet seat may be away, not stuck: there is nothing for you to restart from "
+            "this request. Your requests stay here, and it can answer them when it is back.")
+    if last is None:
+        if not truncated or not asks_since:
+            return None     # a new conversation, or one the being has not asked in: nothing to say
+        return (f"The seat has said nothing in the last {len(turns)} turns of this conversation, through "
+                f"{asks_since} of your requests. " + away)
+    try:
+        t0 = datetime.fromisoformat(str(last.get("ts", "")).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    secs = (now - t0).total_seconds()
+    if secs < SEAT_QUIET_S or not asks_since:
+        return None
+    return (f"The seat has said nothing in this conversation since {last.get('ts')} ({int(secs // 3600)} "
+            f"hours), through {asks_since} of your requests. " + away)
 
 # What `speak` will not play: text shaped like a shell command (see _do_speak). A leading command
 # word (lowercase, then an argument) or a shell operator. Prose that mentions sudo mid-sentence,
@@ -4509,6 +4545,21 @@ class HestiaF1aDispatcher:
                         f"your say asked for a run, so it went to the seat as request_run for "
                         f"{rel}. The seat saw the same request either way.")
                 return r
+        # YOUR OWN WORDS, AGAIN, ARE NOT NEWS. Measured 2026-11-06: hub-being sent dp the same
+        # question 13 times in 16 hours with no reply in between; each copy woke the reader to
+        # a line already above it. The unanswered turn is still there and still unanswered.
+        # Below the run routing on purpose: a run request, whichever door it came through, has
+        # its repeats delivered marked "SAME AS the request at seq N" by request_run, not refused.
+        # Refused before begin_action: no witness row, no line.
+        mine = (None if text.startswith(_RUN_MARKER)
+                else conv.repeat_of_own(self.memory_root, to, self.member, text))
+        if mine is not None:
+            return ResultEnvelope(ok=False, error=(
+                f"you already said this in {to!r} (seq {mine.get('seq')}, {mine.get('ts')}) and "
+                f"nobody has spoken since, so nothing was sent: it is still there, unread or "
+                f"unanswered. Saying it again does not make an answer come sooner, and waiting "
+                f"is not held against you. If something is new — what you learned, or what you "
+                f"will do meanwhile — call say with that instead."))
         begin = self._call("hestia_begin_action", {"tool_name": "say", "target": to})
         err = _hestia_error(begin)
         if err:
@@ -4713,6 +4764,10 @@ class HestiaF1aDispatcher:
         # conversation is longer than the window, the notes name the window instead of claiming "yet".
         window = conv.recent(self.memory_root, seat_conv, limit=_PENDING_SCAN + 1)
         scan_truncated = len(window) > _PENDING_SCAN
+        try:
+            seat_quiet = _seat_quiet(window[-_PENDING_SCAN:], self.member, seat_conv, scan_truncated)
+        except Exception:
+            seat_quiet = None
         for t in window[-_PENDING_SCAN:]:
             text = str(t.get("text", ""))
             if t.get("from") == self.member and text.startswith(f"[request_run] {rel}\n"):
@@ -4900,9 +4955,15 @@ class HestiaF1aDispatcher:
                 f"same one; it does not move it up or start anything. The seat answers once, in "
                 f"'{seat_conv}', and that answer covers every copy of this request.")
         result.update(subject)
+        if seat_quiet:
+            result["seat_quiet"] = seat_quiet
         note = ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
                 "a result. The seat may run it or decline, and either way it answers in "
                 f"'{seat_conv}'. Nothing is owed by you in the meantime.")
+        if seat_quiet:
+            note = ("The seat was asked and a wake was sent. NOTHING HAS RUN YET and this is not "
+                    "a result. seat_quiet says how long the seat has been silent; it can answer in "
+                    f"'{seat_conv}' when it is back. Nothing is owed by you in the meantime.")
         if unchanged and not (said.result or {}).get("woke") and self._skips_answered_run_wake():
             # THE RECEIPT SAYS WHAT HAPPENED. Under answered_run_wake "skip" (per-instance,
             # recut of #154) an already-answered request is sent but wakes nobody; "asked and

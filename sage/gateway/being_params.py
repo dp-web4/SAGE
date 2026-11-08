@@ -110,6 +110,9 @@ PARAMS: Dict[str, Param] = {p.name: p for p in (
     Param("handoff_acts", "int", 10, lo=3, hi=20,
           doc="how many of your last acts the harness's handoff note lists when your window reaches "
               "its floor"),
+    Param("run_census", "bool", False, self_tunable=False,
+          doc="seat-run trial: whether your state shows your run box as measured (what imports, what is "
+              "on PATH, network) and quotes open todo items beside it (run_census.py)"),
     Param("entrustment_mode", "choice", "full", choices=("full", "daily"),
           doc="'full' shows your entrustment whole every beat; 'daily' shows it whole on the first "
               "beat of each day and whenever it changes, and its opening plus a pointer otherwise"),

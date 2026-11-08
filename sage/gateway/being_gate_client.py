@@ -3879,7 +3879,7 @@ class ResultEnvelope:
         if self.ok:
             import json as _json
             body = self.result if isinstance(self.result, str) else _json.dumps(self.result)
-            return body + (f"  (witnessed {self.witness_id})" if self.witness_id else "")
+            return body + self._receipt_line()
         if self.error:
             return f"[dispatch error — {self.error}]"
         # A FAILURE THAT EXPLAINS ITSELF IN `result` MUST NOT RENDER AS "None".
@@ -3899,10 +3899,26 @@ class ResultEnvelope:
         if self.result is not None:
             import json as _json
             body = self.result if isinstance(self.result, str) else _json.dumps(self.result)
-            return (f"[failed — {body}]"
-                    + (f"  (witnessed {self.witness_id})" if self.witness_id else ""))
+            return f"[failed — {body}]" + self._receipt_line()
         return ("[dispatch error — the envelope carried neither an error nor a result, which "
                 "is a harness defect: the act failed and nothing said why]")
+
+    # THE RECEIPT MUST NOT LOOK LIKE THE RESULT'S LAST LINE.
+    #
+    # Measured 2026-11-07 on cbp-being (qwen3.8-distill-4b). The id used to be glued to the
+    # body as "  (witnessed <id>)". A memory_read body ends in a newline, so the id arrived
+    # as an indented line directly under the file's text, shaped like content. Across its
+    # last beats the being copied that line as the last line of `old` in four memory_edit
+    # calls, each with that read's own fresh id (e4f1ba33, ef77e0f0, 382bcac2, 09ce7c77).
+    # memory_edit refused each one, saying the line was not in the file. The being then appended
+    # instead, which left the file with three '## Conclusion' sections. It also wrote two
+    # "(witnessed ...)" lines into the file, one with an id it made up in the same shape.
+    # Bracketed notices like "[end of file: ...]" were never copied in any of those calls,
+    # so the receipt goes on its own line in the same bracket form, and says what it is.
+    def _receipt_line(self) -> str:
+        if not self.witness_id:
+            return ""
+        return f"\n[receipt {self.witness_id}: the record of this act, not part of its output]"
 
 
 # A Dispatcher is F1a's contract, SAGE-side: given an ALLOWED intent + its verdict,

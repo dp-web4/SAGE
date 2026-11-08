@@ -1096,12 +1096,39 @@ def reflect_optional_for(cfg: Optional[dict]) -> list:
     return [r for r in REFLECT_RECORDS if isinstance(v, list) and r in v]
 
 
-def reflect_prompt(optional=(), **kw) -> str:
-    """REFLECT, with the records in `optional` offered rather than required."""
+# ASK WHAT WAS REFUSED ONLY WHEN SOMETHING WAS. The journal line asked every beat, and a question that
+# presumes a refusal gets one. Measured on hub-being 2026-11-07, journals 11-01..11-07: 336 beats, 8 with a
+# real refusal in any trace; 228 entries carried a "What was refused" heading, and 97 of the 328 clean beats
+# still said something was refused ("tool calls were refused because the context window would be
+# exceeded"). The invented refusal of 11-05 then returned for days through todo.md and journal.md. The
+# harness knows from the trace; it says so, and the being has a fact to write instead of a blank to fill.
+# Worded as what the record holds, not as a fact about the beat (Nova on #651): it is said only when the
+# traces were read whole, and anything unreadable leaves the question as it was.
+_REFLECT_REFUSED = ("what was refused and why you think so, what you want next time.",
+                    "what you want next time. No act of yours this beat is recorded as refused; do not guess at a refusal.")
+
+
+def refused_this_beat(*turns) -> Optional[bool]:
+    """Whether any act in these turns' traces, (intent, envelope) pairs, was refused. A turn may be None (it
+    did not run). None, meaning unknown, when no turn has a trace or any trace is not a list of such pairs."""
+    traces = [getattr(t, "trace", None) for t in turns if t is not None]
+    if not traces or not all(isinstance(tr, list) for tr in traces):
+        return None
+    items = [i for tr in traces for i in tr]
+    if not all(isinstance(i, tuple) and len(i) == 2 and hasattr(i[1], "refused") for i in items):
+        return None
+    return any(bool(i[1].refused) for i in items)
+
+
+def reflect_prompt(optional=(), refused=True, **kw) -> str:
+    """REFLECT, with the records in `optional` offered rather than required, and the refusal question
+    unless `refused` is False (known: nothing recorded as refused). True and None (unknown) keep it."""
     body = REFLECT.format(**kw)
     for r in optional:
         old, new = _REFLECT_OPTIONAL_LINE[r]
         body = body.replace(old, new, 1)
+    if refused is False:
+        body = body.replace(*_REFLECT_REFUSED, 1)
     return body
 
 
@@ -1206,6 +1233,49 @@ def scope_grant_lines(st: dict) -> list:
                 for g in st.get("grants_by_mode") or []]
     return [f"{g.get('path')}{'/**' if g.get('recursive') else ''}"
             for g in (st.get("live_grants") or []) + (st.get("standing_grants") or [])]
+
+
+def _scope_wait(secs: float) -> str:
+    secs = max(0, int(secs))
+    if secs < 3600:
+        return f"{max(1, secs // 60)} min"
+    if secs < 172800:
+        return f"{secs // 3600} h"
+    return f"{secs // 86400} d"
+
+
+def pending_scope_lines(requests: list, now: Optional[float] = None, most: int = 8) -> str:
+    """The still-pending scope requests, each with its age and expiry, and what pending MEANS.
+
+    WHY (dp, 2026-11-05). The beat showed `requests: <id> <path> -> pending; ...`, one flat list, with no
+    age and nothing saying who decides or when. On 11-05 cbp-being asked dp the status of one apt-config
+    request every five minutes (dp seq 1012-1016, word for word), and the hub about ten pending DNS-config
+    requests. A request with no ruling is an open loop, and the only move the being could see for an
+    open loop was to ask. hestia already returns requested_at and secs_remaining; they were dropped
+    here. Now each pending request says how long it has waited and when it lapses, and the block says
+    once that a person rules by hand, that asking does not move it, and where the ruling will appear.
+    Sibling of run_census (the box measured): this is the wait measured."""
+    import time as _t
+    now = _t.time() if now is None else now
+    pend = [r for r in (requests or []) if (r.get("status") or r.get("decision")) == "pending"]
+    if not pend:
+        return ""
+    pend.sort(key=lambda r: r.get("requested_at") or 0)
+    lines = [f"pending ({len(pend)}), oldest first:"]
+    for r in pend[:most]:
+        age = (f"asked {_scope_wait(now - r['requested_at'])} ago" if r.get("requested_at")
+               else "asked at an unrecorded time")
+        left = r.get("secs_remaining")
+        exp = (f", lapses in {_scope_wait(left)} if nobody rules"
+               if isinstance(left, (int, float)) and left > 0 else "")
+        lines.append(f"- {r.get('request_id')} {r.get('path')}: {age}{exp}")
+    if len(pend) > most:
+        lines.append(f"- … and {len(pend) - most} more pending.")
+    lines.append("What pending means: a person (dp, or a peer he delegates) rules on each request by hand, "
+                 "with no timeline. Asking again, here or in any conversation, does not move it. When it is "
+                 "ruled, it appears under \"decided since your last beat\" with the ruler's note, the beat "
+                 "after. Until then it needs nothing from you; work that does not depend on it can go ahead.")
+    return "\n".join(lines) + "\n"
 
 
 def decided_requests(reqs):
@@ -2893,6 +2963,24 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     # (The entrustment is appended ONCE, above, after the body. This carrier's own 09-21 copy
     # stood here too after main's 09-28 version merged back in, so from then until 2026-10-07
     # every beat carried the entrustment twice: ~4k chars, ~1,250 tokens of a 32,768 window.)
+    # THE RUN BOX, MEASURED (run_census, operator switch `run_census`): what `run` can import and reach,
+    # beside the body and before every record that plans around it. Its todo half is shown under the
+    # todo, quoted beside the item. Fail-open: an error adds nothing.
+    census_block, census_todo = "", ""
+    if _bp.value(instance, "run_census", False):
+        try:
+            from sage.gateway import run_census as _census
+            from sage.gateway.governed_turn import instance_config as _icfg
+            _open, _ = todo_open((instance / "todo.md").read_text(errors="replace")
+                                 if (instance / "todo.md").exists() else "",
+                                 window_h=TODO_WINDOW_H)
+            census_block, census_todo = _census.blocks(
+                instance, _open, member or "",
+                modules=(_icfg(instance) or {}).get("run_census_modules"))
+        except Exception:
+            census_block, census_todo = "", ""
+    if census_block:
+        parts.append(census_block)
     # Conversations first among the channels: a turn addressed to the being and unanswered
     # is the one thing in its state that is waiting on IT, and it should never have to infer
     # that from a wall of notes. Both directions live in one ordered record.
@@ -2947,6 +3035,8 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     # tails are short now that recall searches the whole home (window pressure: median 6157
     # of 8192 tokens per prompt, max 8013, measured 2026-09-07)
     parts.append(todo_view(instance))
+    if census_todo:
+        parts.append(census_todo)
     journal = _read(instance / "journal.md", 1200)
     parts.append("## journal.md (tail)\n" + (journal.strip() or "(empty: this is your first beat)"))
     # SKILLS (being_skills), after the records they are matched against: a skill whose `when` words appear
@@ -3342,6 +3432,30 @@ def person_turns_that_woke(events) -> list:
     return out
 
 
+def pending_turns(instance: Path, member: str) -> list:
+    """[(cid, turn)] addressed to `member` and waiting on it, oldest first, at most
+    PENDING_TURNS: unseen first, failing that the recent unanswered tail. Beat-start recall (SG1)
+    and the reflect selection each call it, at different moments of the beat; a turn arriving
+    or answered in between makes them differ, and the beat record says so (`reconcile_recall`)."""
+    from sage.gateway import conversations as _conv
+    ids = [m["id"] for m in _conv.listing(instance) if isinstance(m, dict) and member in (m.get("participants") or [])]
+    pend = []
+    for cid in ids:
+        # unseen first; failing that, the recent UNANSWERED tail — a turn marked seen
+        # without a reply must not silence the ask (2026-09-19, dp's 03:51Z turn)
+        for t in (_conv.awaiting(instance, cid, member)
+                  or _conv.unanswered(instance, cid, member))[-PENDING_TURNS:]:
+            if isinstance(t, dict):
+                pend.append((cid, t))
+    # ORDER BY WHEN IT WAS SAID, not by list construction. `listing()` is newest-
+    # conversation FIRST, so `pend[-1]` used to pick the LEAST recent conversation and the
+    # truncation below kept the oldest turns (GPT on #147: an old dp "keep going!" was
+    # frozen as the selection while a newer seat question waited). ts is ISO-8601 Z,
+    # so it sorts as text; seq breaks ties within one conversation.
+    pend.sort(key=lambda ct: (str(ct[1].get("ts") or ""), int(ct[1].get("seq") or 0)))
+    return ids, pend[-PENDING_TURNS:]
+
+
 def pending_selection(instance: Path, member: str, woke: Optional[list] = None) -> tuple:
     """(say_line, pending_block, say_first, target, selected) for the reflect turn: what is
     waiting on the being, the instruction naming who to answer, and the ONE turn selected to be
@@ -3356,25 +3470,12 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
       * conversations exist, nothing waiting -> the generic form, ids listed.
       * something waiting -> the person's name, the real id, and WHAT THEY SAID.
     """
-    global LAST_SELECTION_ERROR
+    global LAST_SELECTION_ERROR, LAST_PENDING_SCAN
     LAST_SELECTION_ERROR = None     # describes THIS selection, the one whose result the beat records
+    LAST_PENDING_SCAN = None
     try:
-        from sage.gateway import conversations as _conv
-        ids = [m["id"] for m in _conv.listing(instance) if member in (m.get("participants") or [])]
-        pend = []
-        for cid in ids:
-            # unseen first; failing that, the recent UNANSWERED tail — a turn marked seen
-            # without a reply must not silence the ask (2026-09-19, dp's 03:51Z turn)
-            for t in (_conv.awaiting(instance, cid, member)
-                      or _conv.unanswered(instance, cid, member))[-PENDING_TURNS:]:
-                pend.append((cid, t))
-        # ORDER BY WHEN IT WAS SAID, not by list construction. `listing()` is newest-
-        # conversation FIRST, so `pend[-1]` used to pick the LEAST recent conversation and the
-        # truncation below kept the oldest turns (GPT on #147: an old dp "keep going!" was
-        # frozen as the selection while a newer seat question waited). ts is ISO-8601 Z,
-        # so it sorts as text; seq breaks ties within one conversation.
-        pend.sort(key=lambda ct: (str(ct[1].get("ts") or ""), int(ct[1].get("seq") or 0)))
-        pend = pend[-PENDING_TURNS:]
+        ids, pend = pending_turns(instance, member)
+        LAST_PENDING_SCAN = [[cid, t.get("seq")] for cid, t in pend if isinstance(t, dict) and t.get("from") != member]
         if pend:
             lines = []
             for cid, t in pend:
@@ -3460,6 +3561,61 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
 
 
 LAST_SELECTION_ERROR: Optional[str] = None
+LAST_PENDING_SCAN: Optional[list] = None    # [[cid, seq]] the last selection saw, not the member's own
+
+
+def reconcile_recall(record: dict, scan: Optional[list], selected) -> dict:
+    """Witness between beat-start recall and the selection made later in the beat (nova on
+    SAGE#650). Recall is keyed on the turns pending when the beat began; the reflect or
+    preempt selection scans again. `selected_keyed` says whether the turn being answered is
+    one the recall was keyed on; `added` and `removed` are the pending turns that changed in
+    between (None when the selection could not scan). Recorded, never acted on."""
+    out = dict(record or {})
+    keyed = {(c, s) for c, s in out.get("turns") or []}
+    sel = [selected.cid, selected.seq] if selected is not None else None
+    now = None if scan is None else {(c, s) for c, s in scan}
+    order = lambda cs: (str(cs[0]), int(cs[1] or 0))
+    out["reconcile"] = {
+        "selected": sel,
+        "selected_keyed": sel is not None and (sel[0], sel[1]) in keyed,
+        "added": None if now is None else [list(x) for x in sorted(now - keyed, key=order)],
+        "removed": None if now is None else [list(x) for x in sorted(keyed - now, key=order)],
+    }
+    return out
+
+
+def recall_uptake(record: dict, results: list) -> dict:
+    """SG1 uptake rungs for beat-start recall (PRD P5, §8), added to its record.
+
+    listed: what the recall block showed (already in the record).
+    opened: a memory_read in this beat whose path is one of the listed sources.
+    recalled: recall calls the being made itself this beat.
+    lexical_reuse: says whose text holds a word from the recall's word directory. Word reuse
+    only: it is not evidence the being used the recall (the word may be the asker's own), and
+    zero opened is not evidence it chose not to look.
+    Measured, never acted on: nothing here changes what the being sees or may do."""
+    out = dict(record or {})
+    listed = {str(s[0]) for s in (out.get("listed") or [])}
+    terms = {str(d[0]).lower() for d in (out.get("directory") or [])}
+    opened, recalled, reuse = [], 0, 0
+    for res in results:
+        if res is None:
+            continue
+        for it, env in getattr(res, "trace", None) or []:
+            eff = getattr(it, "effector", "")
+            args = getattr(it, "args", None) or {}
+            if eff == "memory_read":
+                path = str(args.get("path") or "")
+                if path in listed:
+                    opened.append(path)
+            elif eff == "recall":
+                recalled += 1
+            elif eff == "say" and getattr(env, "ok", False) and terms:
+                text = str(args.get("text") or "").lower()
+                if any(t in text for t in terms):
+                    reuse += 1
+    out["uptake"] = {"opened": opened, "recalled": recalled, "lexical_reuse": reuse}
+    return out
 
 
 def mark_conversations_after_beat(instance: Path, member: str, shown_upto: dict,
@@ -3979,8 +4135,28 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
 RECORD_RESULT_CHARS = 240
 
 
+# A RUN THAT EXITED NON-ZERO IS NOT "ok". A successful dispatch envelope means the run
+# happened; it does not mean the process succeeded. Reflection reads this record first, so a failed
+# script must be named as failed and carry the diagnostic line rather than a misleading "ok".
+def _script_exit(i, e):
+    """Non-zero integer exit code of an ok run envelope, else None. Structured fields only."""
+    if getattr(i, "effector", None) != "run":
+        return None
+    res = getattr(e, "result", None)
+    code = res.get("exit") if isinstance(res, dict) else None
+    if type(code) is int and code != 0:
+        return code
+    return None
+
+
 def _record_line(i, e) -> str:
-    if e.ok:
+    code = _script_exit(i, e) if e.ok else None
+    if code is not None:
+        res = e.result
+        tail = [ln.strip() for ln in str(res.get("stderr") or res.get("stdout") or "").splitlines() if ln.strip()]
+        why = tail[-1][:RECORD_RESULT_CHARS] if tail else "no output"
+        verdict = f"ran, and the script FAILED (exit {code}): {why}"
+    elif e.ok:
         res = getattr(e, "result", None)
         res = res if isinstance(res, str) else (json.dumps(res, default=str) if res is not None else "")
         res = " ".join(res.split())
@@ -4095,7 +4271,7 @@ def _beat_record_text(*results, no_result: bool = False) -> str:
     for res in results:
         for i, e in ((res.trace if res is not None else []) or []):
             lines.append(_record_line(i, e))
-    full = _window_full_line(*results)
+    full = _window_full_line(*results) + _capped_line(*results)
     if not lines:
         return "You called no tools this beat." + full
     return ("Record of what you did this beat:\n" + "\n".join(lines)
@@ -4111,6 +4287,17 @@ def _window_full_line(*results) -> str:
     return ("\n\nYour context window filled during this beat, so the harness stopped your tool steps "
             "there instead of sending a prompt the model could not read. Nothing you did caused it, "
             "and there is nothing in your files to fix for it.")
+
+
+# A STEP CAP ENDS THE PLAN, NOT JUST THE PHASE. When a tool phase hits its bounded
+# step limit, reflection must know that the next intended step did not happen. The record may list
+# every completed act truthfully while still omitting that the plan itself was interrupted.
+def _capped_line(*results) -> str:
+    if not any(getattr(r, "capped", False) is True for r in results if r is not None):
+        return ""
+    return ("\n\nYour tool steps reached this beat's step limit, so the harness stopped them there. "
+            "Whatever you were about to do next was NOT done: the record above is everything that "
+            "happened. If your plan had a step after the last one listed, say it is still undone.")
 
 
 def _carry(convo: list, res) -> list:
@@ -4351,6 +4538,7 @@ def main(argv=None) -> int:
                             + (f". Their note: \"{str(why_ruled[i]).strip()[:400]}\"" if why_ruled.get(i) else "")
                             for i, p_, d in new_decisions) + "\n"
                         if new_decisions else "")
+                     + pending_scope_lines(st.get("requests") or [])
                      + "(live grants die when the daemon restarts; only standing grants persist)\n"
                      # SAGE #530: the being can ask, instead of acting to find out
                      + "(modes: r read, w write, e run, d delete. To see what you hold with who "
@@ -4362,18 +4550,43 @@ def main(argv=None) -> int:
     appeals_text, appeals_record = appeals_block(disp, last)
     # what it starts oriented by: its own recent writing (searched, not just the tail) and
     # long-term memory. The home search is the S5 answer to "34 KB written, 900 chars seen".
-    from sage.gateway.home_recall import search_home, render as _render_home
+    from sage.gateway.home_recall import search_home, render as _render_home, question_recall
     q0 = "what I was doing, what I want next, what I learned, what was refused"
-    try:
-        recall = _render_home(search_home(instance, q0, top_k=4, snippet=260)) or "(nothing in your home matched)"
-    except Exception as e:
-        recall = f"(home search failed: {type(e).__name__})"
+    # SG1 (paged-context PRD §9a): THE QUESTION IS THE PAGE FAULT. When someone's turn is
+    # waiting on the being, recall is keyed on the words of that turn, not on q0. Measured
+    # 2026-11-07 on nomad-being: dp asked for "details on textstats project", recall ran q0,
+    # and the being said it had no details while its journal held 105 textstats entries and
+    # the conversation held its own 10-31 diagnosis. With nothing pending, q0 runs as before.
+    _q_turns, _pending_error = [], None
+    if args.member:
+        try:
+            _q_turns = [dict(t, cid=cid) for cid, t in pending_turns(instance, args.member)[1]
+                        if t.get("from") != args.member]
+        except Exception as e:
+            _pending_error = type(e).__name__
+    if _q_turns:
+        _qr = question_recall(instance, _q_turns, top_k=4, snippet=260)
+        home_text, recall_query, mem_query = _qr["text"], _qr["record"], _qr["query"][:600]
+    else:
+        recall_query = {"source": "default", **({"pending_error": _pending_error} if _pending_error else {})}
+        mem_query = q0
+        try:
+            home_text = _render_home(search_home(instance, q0, top_k=4, snippet=260)) or "(nothing in your home matched)"
+        except Exception as e:
+            home_text = f"(home search failed: {type(e).__name__})"
+    lt_text = ""
     if disp is not None and hasattr(disp, "_membot_call"):
         try:
-            lt = disp._membot_call("memory_search", {"query": q0, "top_k": 4})[:1200]
-            recall += "\n\nFrom long-term memory:\n" + lt
+            lt = disp._membot_call("memory_search", {"query": mem_query, "top_k": 4})[:1200]
+            lt_text = "From long-term memory:\n" + lt
         except Exception as e:
-            recall += f"\n\n(long-term memory unreachable: {type(e).__name__})"
+            lt_text = f"(long-term memory unreachable: {type(e).__name__})"
+    # Question-keyed: long-term memory first, the home block last, so the window fit (which
+    # keeps recall's TAIL) cuts snippets before the word directory and the coverage line.
+    if _q_turns:
+        recall = (lt_text + "\n\n" + home_text) if lt_text else home_text
+    else:
+        recall = home_text + ("\n\n" + lt_text if lt_text else "")
 
     now = datetime.now(timezone.utc)
     t0 = time.time()
@@ -4837,8 +5050,8 @@ def main(argv=None) -> int:
             if _wo:
                 convo.append({"role": "user", "content": _wo})
             convo.append({"role": "user", "content": reflect_prompt(
-                reflect_optional_for(instance_config(instance)), date=f"{now:%Y-%m-%d %H:%M} UTC",
-                say_line=say_line, say_first=say_first)})
+                reflect_optional_for(instance_config(instance)), refused=refused_this_beat(explore, after),
+                date=f"{now:%Y-%m-%d %H:%M} UTC", say_line=say_line, say_first=say_first)})
             # One extra step when someone is waiting, because the routine three fill the budget exactly.
             # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
             # asked: reflect spent all three steps on journal, todo and remember, and there was no
@@ -5083,6 +5296,8 @@ def main(argv=None) -> int:
         **({"reflect_optional": _ro} if (_ro := reflect_optional_for(instance_config(instance))) else {}),
         **({} if proprioception_for(instance_config(instance)) else {"proprioception": False}),
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
+        "recall_query": recall_uptake(reconcile_recall(recall_query, LAST_PENDING_SCAN, selected),
+                                      [explore, after, reflect, answer]),
         # the window and budget actually sent, so a beat is verifiable from this file alone
         # (beat 46's 8192 wall was reconstructed from stderr; Sprout's review of SAGE #40)
         # num_predict is what OllamaIRP resolves and sends (the config's num_predict_think

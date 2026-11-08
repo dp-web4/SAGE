@@ -2301,3 +2301,17 @@ def test_a_read_above_the_decoded_section_is_told_where_it_starts():
     open(os.path.join(root, "long.py"), "w").write("".join(f"line {i}\n" for i in range(1, 501)))
     r = disp(BeingIntent("memory_read", {"path": "long.py", "start_line": 100, "end_line": 102}), _ALLOW)
     assert note not in r.result and r.result.startswith("[lines 100-102 of 500"), r.result[:80]
+
+
+def test_memory_write_through_a_file_names_the_file_not_a_raw_errno():
+    """A write through a file component names that file and explicitly says nothing was written."""
+    disp, root = _disp()
+    blocker = os.path.join(root, "settled")
+    open(blocker, "w").write("an old note")
+    env = disp(BeingIntent("memory_write", {"path": os.path.join(root, "settled", "s288.md"),
+                                            "content": "x"}), _ALLOW)
+    assert not env.ok
+    assert "is a FILE, not a folder" in env.error and "'settled'" in env.error
+    assert "did not happen" in env.error
+    assert "Errno" not in env.error
+    assert open(blocker).read() == "an old note"

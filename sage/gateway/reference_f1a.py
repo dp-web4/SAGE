@@ -2029,6 +2029,11 @@ class ReferenceF1aDispatcher:
             rng = (s0, s1)
         if not path or (not old and rng is None):
             got = ", ".join(sorted(a)) or "nothing"
+            # NAME AN EMPTY 'old': "You sent: new, old, path" lists every requested argument,
+            # but does not explain that old = "" provides no text to find.
+            empty = (" 'old' was empty, so there was no text to find."
+                     if any(k in a for k in ("old", "old_text", "old_str", "old_string"))
+                     and not old and rng is None else "")
             # PATH AND NEW, NOTHING TO REPLACE: AN APPEND (measured on mcnugget-being, 150 beats to 2026-10-28:
             # every one of its path+new-only calls was a journal line, a todo item or a log entry to ADD). This
             # verb only replaces; the one that adds is memory_write, and the refusal now names it.
@@ -2038,7 +2043,7 @@ class ReferenceF1aDispatcher:
             return ResultEnvelope(ok=False, error=(
                 f"memory_edit needs 'path', and either 'old' (the exact text to replace, "
                 f"unique in the file) or 'start_line' and 'end_line' (the lines to replace), "
-                f"and 'new' (what replaces it; empty string deletes it). You sent: {got}.{add}"))
+                f"and 'new' (what replaces it; empty string deletes it). You sent: {got}.{empty}{add}"))
         if new_key is None:
             got = ", ".join(sorted(a)) or "nothing"
             return ResultEnvelope(ok=False, error=(
@@ -2443,6 +2448,18 @@ class ReferenceF1aDispatcher:
             return ResultEnvelope(ok=False, error=f"memory_write 'mode' is 'append' (the default), "
                                                   f"'replace', or 'restore' (put back the version a "
                                                   f"replace kept); got {mode!r}")
+        # A FILE IN THE FOLDER'S PLACE. A raw mkdir FileExistsError is easy to misread as
+        # evidence that the requested folder already exists. Name the blocking path component and
+        # state explicitly that the write did not happen.
+        for _anc in [p.parent, *p.parent.parents]:
+            if _anc.exists():
+                if not _anc.is_dir():
+                    return ResultEnvelope(ok=False, error=(
+                        f"nothing was written: '{_anc.name}' in this path is a FILE, not a folder, "
+                        f"so nothing can be saved inside it. Your write did not happen. Save to a "
+                        f"path that does not pass through '{_anc.name}', or read that file first: "
+                        f"it holds earlier writing of yours."))
+                break
         # Existence, not line count, decides "created": an existing EMPTY file has 0 lines and
         # was not created by this write (GPT review on #141).
         existed = p.exists()
