@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 _DATE = re.compile(r"(?m)^\s*\[?(20\d\d-\d\d-\d\d[ T]\d\d:\d\d)")
 _TOKEN = re.compile(r"[a-z0-9][a-z0-9'-]{1,}")
@@ -58,10 +58,15 @@ def _entries(text: str, source: str) -> List[Dict]:
     return out
 
 
-def index_home(instance: Path, max_files: int = 40, conversations: bool = True) -> List[Dict]:
+def index_home(instance: Path, max_files: int = 40, conversations: bool = True,
+               problems: Optional[List[Dict]] = None) -> List[Dict]:
     """Every searchable unit in the being's home: journal entries, todo blocks, each notes/
     and scratch/ file as one unit, and each conversation turn (SG1). Read fresh each call;
-    the home is small."""
+    the home is small.
+
+    `problems`, when given, collects {source, reason} for each source that could not be read
+    or held malformed lines, so a caller can say what it did NOT search (nova on SAGE#650:
+    an unreadable conversation skipped in silence reads as a home with nothing in it)."""
     instance = Path(instance)
     units: List[Dict] = []
     # A retired journal or todo (retire_note, journal.retired-<date>.md) stays searchable: retiring
@@ -82,16 +87,24 @@ def index_home(instance: Path, max_files: int = 40, conversations: bool = True) 
             for f in files:
                 try:
                     t = f.read_text(errors="replace").strip()
-                except Exception:
+                except Exception as e:
+                    _problem(problems, str(f.relative_to(instance)), e)
                     continue
                 if t:
                     units.append({"source": str(f.relative_to(instance)), "date": "", "text": t})
     if conversations:
-        units.extend(conversation_units(instance))
+        units.extend(conversation_units(instance, problems=problems))
     return units
 
 
-def conversation_units(instance: Path, per_conversation: int = CONVERSATION_TURNS) -> List[Dict]:
+def _problem(problems: Optional[List[Dict]], source: str, why) -> None:
+    if problems is not None:
+        reason = f"{type(why).__name__}: {why}" if isinstance(why, BaseException) else str(why)
+        problems.append({"source": source, "reason": reason[:160]})
+
+
+def conversation_units(instance: Path, per_conversation: int = CONVERSATION_TURNS,
+                       problems: Optional[List[Dict]] = None) -> List[Dict]:
     """Each turn of each conversation in the home, as one unit naming its speaker and seq.
 
     SG1 (paged-context PRD §9a), measured 2026-11-07 on nomad-being: dp asked for "details on
@@ -109,24 +122,36 @@ def conversation_units(instance: Path, per_conversation: int = CONVERSATION_TURN
     d = Path(instance) / "conversations"
     if not d.is_dir():
         return out
-    for f in sorted(x for x in d.iterdir() if x.is_file() and x.suffix == ".jsonl"):
+    try:
+        files = sorted(x for x in d.iterdir() if x.is_file() and x.suffix == ".jsonl")
+    except Exception as e:
+        _problem(problems, "conversations/", e)
+        return out
+    for f in files:
+        src = f"conversations/{f.name}"
         try:
             lines, whole = _tail_lines(f, max(1, per_conversation))
-        except Exception:
+        except Exception as e:
+            _problem(problems, src, e)
             continue
-        units = []
+        units, bad = [], 0
         for line in lines:
             try:
                 turn = json.loads(line)
             except Exception:
+                turn = None
+            if not isinstance(turn, dict):
+                bad += 1
                 continue
             text = " ".join(str(turn.get("text") or "").split())
             if not text:
                 continue
             ts = str(turn.get("ts") or "")
-            units.append({"source": f"conversations/{f.name}", "date": ts[:16].replace("T", " "),
+            units.append({"source": src, "date": ts[:16].replace("T", " "),
                           "seq": turn.get("seq"), "from": turn.get("from"),
                           "text": f"{turn.get('from')}: {text}"})
+        if bad:
+            _problem(problems, src, f"{bad} malformed line{'s' if bad != 1 else ''} not searched")
         if units and not whole:
             units[0]["omitted_before"] = True
         out.extend(units)
@@ -326,8 +351,9 @@ def question_recall(instance: Path, turns: List[Dict], top_k: int = 4, snippet: 
     where = ", ".join(dict.fromkeys(f'"{t.get("cid")}"' for t in turns))
     record = {"source": "pending", "turns": [[t.get("cid"), t.get("seq")] for t in turns],
               "terms": sorted(set(_terms(query)))[:20]}
+    problems: List[Dict] = []
     try:
-        units = index_home(instance)
+        units = index_home(instance, problems=problems)
     except Exception as e:
         record["error"] = f"{type(e).__name__}: {e}"[:200]
         return {"text": f"(searching your home for the words of what {who} said failed: "
@@ -339,6 +365,7 @@ def question_recall(instance: Path, turns: List[Dict], top_k: int = 4, snippet: 
     left = omitted(units)
     record.update({"coverage": cov,
                    "omitted": [[o["source"], o["before_seq"], o["date"]] for o in left],
+                   "unread": [[x["source"], x["reason"]] for x in problems],
                    "listed": [[r["source"], r.get("seq"), r["date"]] for r in results],
                    "directory": [[r["term"], r["count"]] for r in rows]})
     lines = []
@@ -347,9 +374,9 @@ def question_recall(instance: Path, turns: List[Dict], top_k: int = 4, snippet: 
                      f"(one entry per kind per day first; not judged for relevance):")
         for r in results:
             lines.append(f"- [{_tag(r['source'], r.get('seq'), r['date'])}] {r['snippet']}")
-    elif left:
-        lines.append(f"No searched entry shares a word with what {who} said in {where} at {when}. "
-                     f"Older conversation turns were not searched (below).")
+    elif left or problems:
+        lines.append(f"No match in the entries searched for what {who} said in {where} at {when}. "
+                     f"Part of your home was not searched (below).")
     else:
         lines.append(f"No entry in your home shares a word with what {who} said in {where} at {when}.")
     if rows:
@@ -365,4 +392,6 @@ def question_recall(instance: Path, turns: List[Dict], top_k: int = 4, snippet: 
         lines.append("Not searched: " + "; ".join(
             f"{o['source']} before seq {o['before_seq']}" + (f" ({o['date'][:10]})" if o["date"] else "")
             for o in left) + ".")
+    if problems:
+        lines.append("Could not read: " + "; ".join(f"{x['source']} ({x['reason']})" for x in problems) + ".")
     return {"text": "\n".join(lines), "query": query, "record": record}

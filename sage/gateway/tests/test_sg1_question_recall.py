@@ -230,3 +230,63 @@ def test_a_turn_racing_the_beat_is_witnessed():
         {"selected": ["dp", 3], "selected_keyed": True, "added": [], "removed": []}
     # the selection could not scan: unknown, not "nothing changed"
     assert hb.reconcile_recall(rec2, None, _Sel("dp", 3))["reconcile"]["added"] is None
+
+
+# ---- read failures are not absence (nova's second pass on SAGE#650)
+
+def _two_conversations() -> Path:
+    """dp's conversation holds only the question; the diagnosis lives in nomad-claude's."""
+    d = Path(tempfile.mkdtemp(prefix="sg1-unread-"))
+    conv.create(d, "dp", title="dp", participants=["dp", BEING], writable_by=["dp", BEING])
+    conv.create(d, "nomad-claude", title="nc", participants=["nomad-claude", BEING],
+                writable_by=["nomad-claude", BEING])
+    conv.append(d, "nomad-claude", speaker=BEING, text=DIAGNOSIS, ts="2026-10-31T23:56:06Z",
+                enforce_write=False)
+    conv.append(d, "dp", speaker="dp", text=QUESTION, ts="2026-11-07T20:24:19Z", enforce_write=False)
+    return d
+
+
+def test_an_unreadable_conversation_cannot_masquerade_as_empty():
+    d = _two_conversations()
+    assert any(q == 1 for s, q, _ in hr.question_recall(d, _pending(d))["record"]["listed"]
+               if s == "conversations/nomad-claude.jsonl")       # readable: found
+    orig = hr._tail_lines
+
+    def failing(path, n, block=65536):
+        if path.name == "nomad-claude.jsonl":
+            raise PermissionError(13, "Permission denied")
+        return orig(path, n, block)
+    try:
+        hr._tail_lines = failing
+        qr = hr.question_recall(d, _pending(d))
+    finally:
+        hr._tail_lines = orig
+    rec, text = qr["record"], qr["text"]
+    assert rec["listed"] == []
+    assert rec["unread"] and rec["unread"][0][0] == "conversations/nomad-claude.jsonl"
+    assert rec["unread"][0][1].startswith("PermissionError")
+    assert "No entry in your home" not in text
+    assert text.startswith("No match in the entries searched") and "Part of your home was not searched" in text
+    assert "Could not read: conversations/nomad-claude.jsonl (PermissionError" in text
+
+
+def test_malformed_turns_are_reported_not_dropped():
+    d = _two_conversations()
+    pending = _pending(d)
+    # written after the pending scan: a non-object line also breaks conversations.listing and
+    # awaiting, which is outside this recall path
+    f = d / "conversations" / "nomad-claude.jsonl"
+    f.write_text("{not json\n[1, 2]\n" + f.read_text())
+    problems = []
+    units = hr.conversation_units(d, problems=problems)
+    assert any(u["source"] == "conversations/nomad-claude.jsonl" for u in units)   # the good turn stays
+    assert problems == [{"source": "conversations/nomad-claude.jsonl",
+                         "reason": "2 malformed lines not searched"}]
+    rec = hr.question_recall(d, pending)["record"]
+    assert rec["unread"] == [["conversations/nomad-claude.jsonl", "2 malformed lines not searched"]]
+
+
+def test_complete_coverage_reports_nothing_unread():
+    d = _two_conversations()
+    rec = hr.question_recall(d, _pending(d))["record"]
+    assert rec["unread"] == [] and rec["omitted"] == []
