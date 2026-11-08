@@ -578,3 +578,140 @@ def test_an_old_unanswered_turn_is_a_choice_not_a_debt():
     log = inst / "conversations" / "dp.jsonl"
     log.write_text(json.dumps({"ts": "2026-01-01T00:00:00Z", "seq": 1, "from": "dp", "text": "long ago"}) + "\n")
     assert c.unanswered(inst, "dp", "b") == [], "silence that has lasted is an answer; do not nag"
+
+
+def test_non_object_and_malformed_turns_do_not_crash_readers_or_drop_valid_turns():
+    """SAGE #652: Conversation readers must handle non-object JSON values (arrays, scalars),
+    malformed JSON, and records missing required fields without crashing (AttributeError on .get)
+    while preserving valid neighboring turns."""
+    import tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+
+    inst = Path(tempfile.mkdtemp(prefix="non-object-turns-"))
+    c.create(inst, "dp", title="dp", participants=["dp", "b"], writable_by=["dp", "b"])
+
+    # 1. Start with a valid turn from b
+    c.append(inst, "dp", speaker="b", text="initial from being")
+
+    log = inst / "conversations" / "dp.jsonl"
+
+    # 2. Inject malformed JSON and missing required fields between valid turns
+    with open(log, "a", encoding="utf-8") as f:
+        f.write("{not json\n")
+        f.write('{"unrelated": 123}\n')
+        f.write("{}\n")
+
+    # 3. Add a valid pending question from dp
+    c.append(inst, "dp", speaker="dp", text="valid pending question after invalid records")
+
+    # 4. Inject JSON array and scalar at EOF
+    with open(log, "a", encoding="utf-8") as f:
+        f.write("[1, 2]\n")
+        f.write("42\n")
+        f.write('"just a string"\n')
+
+    # Integrity check: 2 valid readable turns, 6 unreadable lines
+    integ = c.integrity(inst, "dp")
+    assert integ["readable"] == 2
+    assert integ["unreadable"] == 6
+    assert c.count(inst, "dp") == 2
+
+    # recent only returns valid turns
+    rec = c.recent(inst, "dp", limit=10)
+    assert len(rec) == 2
+    assert [t["text"] for t in rec] == ["initial from being", "valid pending question after invalid records"]
+
+    # listing should NOT crash on non-object EOF and must report the last valid turn
+    lst = c.listing(inst)
+    assert len(lst) == 1
+    assert lst[0]["count"] == 2
+    assert lst[0]["last"]["text"] == "valid pending question after invalid records"
+
+    # awaiting should correctly see the pending turn from dp waiting on b
+    pend = c.awaiting(inst, "dp", "b")
+    assert [t["text"] for t in pend] == ["valid pending question after invalid records"]
+
+    # unanswered should correctly report the unanswered tail
+    tail = c.unanswered(inst, "dp", "b")
+    assert [t["text"] for t in tail] == ["valid pending question after invalid records"]
+
+    # latest_seqs should report the last valid turn's seq
+    latest = c.latest_seqs(inst, "b")
+    assert latest.get("dp") == rec[-1]["seq"]
+
+
+def test_is_turn_holds_every_field_to_the_schema_the_writers_produce():
+    """SAGE #654 review: `seq` is a positive int (not bool, float, NaN, infinity, zero or
+    negative), `ts` is the writers' `%Y-%m-%dT%H:%M:%SZ` string, `from` a nonempty string,
+    `text` a string."""
+    from sage.gateway import conversations as c
+
+    good = {"ts": "2026-11-08T03:43:48Z", "seq": 3, "from": "dp", "text": "hi"}
+    assert c.is_turn(good)
+    assert c.is_turn({**good, "text": "", "via": "say", "witness": "act-1"})
+
+    bad = [
+        {"seq": True}, {"seq": False}, {"seq": 3.0}, {"seq": 3.5}, {"seq": float("nan")},
+        {"seq": float("inf")}, {"seq": 0}, {"seq": -4}, {"seq": "3"}, {"seq": None},
+        {"ts": ""}, {"ts": "x"}, {"ts": "2026-11-08 03:43:48"}, {"ts": 1762573428},
+        {"from": ""}, {"from": 7}, {"from": None},
+        {"text": None}, {"text": 5}, {"text": ["hi"]},
+    ]
+    for override in bad:
+        assert not c.is_turn({**good, **override}), override
+    for key in ("ts", "seq", "from", "text"):
+        assert not c.is_turn({k: v for k, v in good.items() if k != key}), key
+
+
+def test_malformed_seq_values_do_not_move_next_seq_or_crash_readers():
+    """SAGE #654 review: `next_seq` used `int(...)` on any dict `seq`, so `True`, `3.5`,
+    `"99"` or a huge float could raise or jump the numbering. Only a valid seq moves it."""
+    import tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+
+    inst = Path(tempfile.mkdtemp(prefix="bad-seq-"))
+    c.create(inst, "dp", title="dp", participants=["dp", "b"], writable_by=["dp", "b"])
+    c.append(inst, "dp", speaker="b", text="one")
+    log = inst / "conversations" / "dp.jsonl"
+    ts = "2026-11-08T03:00:00Z"
+    with open(log, "a", encoding="utf-8") as f:
+        for seq in ("true", "3.5", "NaN", "Infinity", "-Infinity", "-7", '"99"', "1e30", "0"):
+            f.write(f'{{"ts": "{ts}", "seq": {seq}, "from": "dp", "text": "bad seq"}}\n')
+    c.witness_path(inst, "dp").unlink()
+
+    # Nine damaged lines still occupy positions 2..10, so the next turn is 11, not 100
+    # or 1e30 + 1, and nothing raised on the way.
+    assert c.append(inst, "dp", speaker="dp", text="next")["seq"] == 11
+    rec = c.recent(inst, "dp", limit=50)
+    assert [t["text"] for t in rec] == ["one", "next"]
+    integ = c.integrity(inst, "dp")
+    assert (integ["readable"], integ["unreadable"]) == (2, 9)
+    assert c.latest_seqs(inst, "b") == {"dp": 11}
+    assert [t["text"] for t in c.awaiting(inst, "dp", "b")] == ["next"]
+
+
+def test_listing_skips_unreadable_metadata_and_says_so(caplog):
+    """SAGE #654 review: an unreadable `.meta.json` must not look like an empty inbox
+    silently. It is skipped (the other conversations still list) and a warning names it."""
+    import logging
+    import tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+
+    inst = Path(tempfile.mkdtemp(prefix="bad-meta-"))
+    c.create(inst, "dp", title="dp", participants=["dp", "b"], writable_by=["dp", "b"])
+    c.append(inst, "dp", speaker="dp", text="still listed")
+    d = inst / "conversations"
+    (d / "broken.meta.json").write_text("{not json", encoding="utf-8")
+    (d / "array.meta.json").write_text("[1, 2]", encoding="utf-8")
+    (d / "noid.meta.json").write_text('{"id": 5}', encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING, logger="sage.gateway.conversations"):
+        lst = c.listing(inst)
+
+    assert [m["id"] for m in lst] == ["dp"]
+    warned = " ".join(r.getMessage() for r in caplog.records)
+    for name in ("broken.meta.json", "array.meta.json", "noid.meta.json"):
+        assert name in warned, name
