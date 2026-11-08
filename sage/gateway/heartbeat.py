@@ -2595,11 +2595,42 @@ def todo_open(text, now=None, window_h=48):
 _TODO_PARSE: dict = {}
 
 
+# THE SHAPES THE BEING ACTUALLY WRITES. Measured on mcnugget-being 2026-11-08: the reflect asks for a dated
+# block with added / done / still open under it, and in its first weeks it wrote that. By November it wrote
+# every entry on ONE line, the date first: `2026-11-08 17:09 UTC: [still open] Follow up on ...` (253 such
+# lines in Nov 1-8, against 1 `- item` line). _BLOCK matches the date at the start of that line, so the parser
+# took it as a header and never read the item after it: 983 of 2,374 lines were skipped, the beat's view said
+# "still open (0) / (nothing open)" while 591 items were open, and the being re-read its own notes
+# (~25k chars a beat) to rebuild what the view no longer told it, restating each item in new words. Its
+# `[done]` lines in that shape were skipped too, so nothing it closed ever closed. This rewrites each such
+# line, and a bare `[tag] text` line with no dash, into the canonical shape (a dated header, then a `- [tag]`
+# item) before the parse. Only lines that carry a status tag are touched; the log itself is never changed.
+_INLINE_ITEM = re.compile(r"^\s*(20\d\d-\d\d-\d\d)(?:[ T](\d\d:\d\d)(?::\d\d)?)?\s*(?:UTC|Z)?\s*:?\s*"
+                          r"(\[(?:still open|open|added|done|completed|x| )\].*\S)\s*$", re.I)
+_BARE_TAG = re.compile(r"^\s*(\[(?:still open|open|added|done|completed)\].*\S)\s*$", re.I)
+
+
+def _canonical_todo(text: str) -> str:
+    out = []
+    for line in text.splitlines():
+        m = _INLINE_ITEM.match(line)
+        if m:
+            out.append(f"{m.group(1)} {m.group(2) or '00:00'} UTC")
+            out.append(f"- {m.group(3)}")
+            continue
+        b = _BARE_TAG.match(line)
+        if b and not _ITEM.match(line):
+            out.append(f"- {b.group(1)}")
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
 def _todo_parsed(text: str) -> tuple:
     key = hashlib.sha256(text.encode("utf-8", "surrogateescape")).hexdigest()
     hit = _TODO_PARSE.get(key)
     if hit is None:
-        hit = (_parse_todo(text), list(_LAST_TODO_CLOSURES))
+        hit = (_parse_todo(_canonical_todo(text)), list(_LAST_TODO_CLOSURES))
         _TODO_PARSE.clear()
         _TODO_PARSE[key] = hit
     return hit
