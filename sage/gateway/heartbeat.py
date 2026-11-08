@@ -3529,8 +3529,15 @@ def recall_uptake(record: dict, results: list) -> dict:
 
 
 def mark_conversations_after_beat(instance: Path, member: str, shown_upto: dict,
-                                  explore, later: list) -> dict:
+                                  explore, later: list, selected=None, answering: tuple = ()) -> dict:
     """Mark the turns a beat was shown as seen, but only where the beat could act on them.
+
+    `selected` is the turn the reflect prompt named, and `answering` the phases that ran with it
+    in view. An ok say into its conversation from one of those phases marks it too. `shown_upto`
+    is taken before the beat's long phases, so a turn that arrives during them is past that mark:
+    answered and still unseen, the next beat listed it as "not yet answered" (measured
+    2026-11-08 on cbp-being: 14164, answered by 14165, was listed again and answered again by
+    14167, and that reply also closed the newer 14166 it never answered).
 
     A conversation's turns are marked when the EXPLORE turn executed at least one call (it
     read its state and acted), or when the being said something into that conversation in
@@ -3559,6 +3566,15 @@ def mark_conversations_after_beat(instance: Path, member: str, shown_upto: dict,
             marked[cid] = upto
         else:
             held.append(cid)
+    if selected is not None and selected.seq and selected.seq > int(marked.get(selected.cid) or 0):
+        for res in answering:
+            if res is not None and any(it.effector == "say" and env.ok
+                                       and str((it.args or {}).get("to") or "") == selected.cid
+                                       for it, env in res.trace):
+                _conv.mark_seen(instance, member, selected.cid, int(selected.seq))
+                marked[selected.cid] = int(selected.seq)
+                held = [c for c in held if c != selected.cid]
+                break
     return {"explore_acted": explore_acted, "marked": marked, "held_unseen": held}
 
 
@@ -5018,7 +5034,9 @@ def main(argv=None) -> int:
     # Route refusals AI-to-AI (dp 2026-09-04), the same as governed_turn: a scope-class deny
     # files the being's own scope request + a note and wakes the seat's auto session; a
     conversations_marked = mark_conversations_after_beat(
-        instance, args.member, _shown_upto, explore, [after, reflect, answer])
+        instance, args.member, _shown_upto, explore, [after, reflect, answer], selected=selected,
+        # A preempted beat selects after reflect ran, so reflect's says were not about this turn.
+        answering=(answer,) if preempted else (reflect, answer))
     try:
         # Whether explore acted is read from explore itself (the rule mark_conversations_after_beat
         # applies), NOT from its return: that returns explore_acted=None when the being has no
