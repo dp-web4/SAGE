@@ -105,6 +105,38 @@ def test_reflect_records_are_required_unless_the_instance_makes_them_optional():
     assert "if you keep a todo list" in both and "if you keep a journal" not in both
 
 
+def test_the_journal_asks_what_was_refused_only_when_something_was():
+    from types import SimpleNamespace
+    from sage.gateway.being_gate_client import BeingIntent, ResultEnvelope
+    from sage.gateway.heartbeat import REFLECT, reflect_prompt, refused_this_beat
+    kw = dict(date="D", say_line="", say_first="")
+    said = (BeingIntent("say", {"to": "dp", "text": "hi"}), ResultEnvelope(ok=True))
+    denied = (BeingIntent("memory_write", {"path": "x"}), ResultEnvelope(ok=False, refused=True))
+    failed = (BeingIntent("memory_read", {"path": "x"}), ResultEnvelope(ok=False, error="no such file"))
+    clean, gated = SimpleNamespace(trace=[said, failed]), SimpleNamespace(trace=[said, denied])
+    # An ordinary failure (ok=False, not refused) is not a refusal; a turn that did not run is skipped.
+    assert refused_this_beat(clean, None) is False
+    assert refused_this_beat(clean, SimpleNamespace(trace=[])) is False
+    # A refusal in either turn counts, including only in the second (posture) turn.
+    assert refused_this_beat(clean, gated) is True and refused_this_beat(gated, None) is True
+    assert refused_this_beat(SimpleNamespace(trace=[said]), gated) is True
+    # Unknown, never "nothing refused", when there is no trace to read or it is not what it should be.
+    assert refused_this_beat(None, None) is None and refused_this_beat() is None
+    assert refused_this_beat(SimpleNamespace(trace=None), None) is None
+    assert refused_this_beat(SimpleNamespace(), clean) is None
+    assert refused_this_beat(SimpleNamespace(trace=[said, ("truncated",)]), None) is None
+    assert refused_this_beat(SimpleNamespace(trace=[(said[0], {"refused": True})]), None) is None
+    # Unchanged when something was refused, when it is unknown, and when the caller does not say (the default).
+    assert (reflect_prompt(refused=True, **kw) == reflect_prompt(refused=None, **kw)
+            == REFLECT.format(**kw) == reflect_prompt(**kw))
+    none = reflect_prompt(refused=False, **kw)
+    assert "what was refused" not in none and "No act of yours this beat is recorded as refused" in none
+    assert "what you noticed, what you want next time." in none
+    # It composes with an optional journal.
+    j = reflect_prompt(["journal"], refused=False, **kw)
+    assert "if you keep a journal" in j and "what was refused" not in j
+
+
 # -- Nova's review of 0557d9bcf: item age, concurrent appends, interrupted retires ------------
 
 def test_carried_items_keep_the_date_they_were_opened():

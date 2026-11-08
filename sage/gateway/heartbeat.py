@@ -1032,12 +1032,39 @@ def reflect_optional_for(cfg: Optional[dict]) -> list:
     return [r for r in REFLECT_RECORDS if isinstance(v, list) and r in v]
 
 
-def reflect_prompt(optional=(), **kw) -> str:
-    """REFLECT, with the records in `optional` offered rather than required."""
+# ASK WHAT WAS REFUSED ONLY WHEN SOMETHING WAS. The journal line asked every beat, and a question that
+# presumes a refusal gets one. Measured on hub-being 2026-11-07, journals 11-01..11-07: 336 beats, 8 with a
+# real refusal in any trace; 228 entries carried a "What was refused" heading, and 97 of the 328 clean beats
+# still said something was refused ("tool calls were refused because the context window would be
+# exceeded"). The invented refusal of 11-05 then returned for days through todo.md and journal.md. The
+# harness knows from the trace; it says so, and the being has a fact to write instead of a blank to fill.
+# Worded as what the record holds, not as a fact about the beat (Nova on #651): it is said only when the
+# traces were read whole, and anything unreadable leaves the question as it was.
+_REFLECT_REFUSED = ("what was refused and why you think so, what you want next time.",
+                    "what you want next time. No act of yours this beat is recorded as refused; do not guess at a refusal.")
+
+
+def refused_this_beat(*turns) -> Optional[bool]:
+    """Whether any act in these turns' traces, (intent, envelope) pairs, was refused. A turn may be None (it
+    did not run). None, meaning unknown, when no turn has a trace or any trace is not a list of such pairs."""
+    traces = [getattr(t, "trace", None) for t in turns if t is not None]
+    if not traces or not all(isinstance(tr, list) for tr in traces):
+        return None
+    items = [i for tr in traces for i in tr]
+    if not all(isinstance(i, tuple) and len(i) == 2 and hasattr(i[1], "refused") for i in items):
+        return None
+    return any(bool(i[1].refused) for i in items)
+
+
+def reflect_prompt(optional=(), refused=True, **kw) -> str:
+    """REFLECT, with the records in `optional` offered rather than required, and the refusal question
+    unless `refused` is False (known: nothing recorded as refused). True and None (unknown) keep it."""
     body = REFLECT.format(**kw)
     for r in optional:
         old, new = _REFLECT_OPTIONAL_LINE[r]
         body = body.replace(old, new, 1)
+    if refused is False:
+        body = body.replace(*_REFLECT_REFUSED, 1)
     return body
 
 
@@ -4849,8 +4876,8 @@ def main(argv=None) -> int:
             if _wo:
                 convo.append({"role": "user", "content": _wo})
             convo.append({"role": "user", "content": reflect_prompt(
-                reflect_optional_for(instance_config(instance)), date=f"{now:%Y-%m-%d %H:%M} UTC",
-                say_line=say_line, say_first=say_first)})
+                reflect_optional_for(instance_config(instance)), refused=refused_this_beat(explore, after),
+                date=f"{now:%Y-%m-%d %H:%M} UTC", say_line=say_line, say_first=say_first)})
             # One extra step when someone is waiting, because the routine three fill the budget exactly.
             # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
             # asked: reflect spent all three steps on journal, todo and remember, and there was no
