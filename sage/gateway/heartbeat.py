@@ -3318,9 +3318,9 @@ def person_turns_that_woke(events) -> list:
 
 def pending_turns(instance: Path, member: str) -> list:
     """[(cid, turn)] addressed to `member` and waiting on it, oldest first, at most
-    PENDING_TURNS: unseen first, failing that the recent unanswered tail. The one scan both
-    the reflect selection and beat-start recall (SG1) read, so recall is keyed on exactly the
-    turns the beat will show."""
+    PENDING_TURNS: unseen first, failing that the recent unanswered tail. Beat-start recall (SG1)
+    and the reflect selection each call it, at different moments of the beat; a turn arriving
+    or answered in between makes them differ, and the beat record says so (`reconcile_recall`)."""
     from sage.gateway import conversations as _conv
     ids = [m["id"] for m in _conv.listing(instance) if member in (m.get("participants") or [])]
     pend = []
@@ -3353,10 +3353,12 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
       * conversations exist, nothing waiting -> the generic form, ids listed.
       * something waiting -> the person's name, the real id, and WHAT THEY SAID.
     """
-    global LAST_SELECTION_ERROR
+    global LAST_SELECTION_ERROR, LAST_PENDING_SCAN
     LAST_SELECTION_ERROR = None     # describes THIS selection, the one whose result the beat records
+    LAST_PENDING_SCAN = None
     try:
         ids, pend = pending_turns(instance, member)
+        LAST_PENDING_SCAN = [[cid, t.get("seq")] for cid, t in pend if t.get("from") != member]
         if pend:
             lines = []
             for cid, t in pend:
@@ -3442,6 +3444,27 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
 
 
 LAST_SELECTION_ERROR: Optional[str] = None
+LAST_PENDING_SCAN: Optional[list] = None    # [[cid, seq]] the last selection saw, not the member's own
+
+
+def reconcile_recall(record: dict, scan: Optional[list], selected) -> dict:
+    """Witness between beat-start recall and the selection made later in the beat (nova on
+    SAGE#650). Recall is keyed on the turns pending when the beat began; the reflect or
+    preempt selection scans again. `selected_keyed` says whether the turn being answered is
+    one the recall was keyed on; `added` and `removed` are the pending turns that changed in
+    between (None when the selection could not scan). Recorded, never acted on."""
+    out = dict(record or {})
+    keyed = {(c, s) for c, s in out.get("turns") or []}
+    sel = [selected.cid, selected.seq] if selected is not None else None
+    now = None if scan is None else {(c, s) for c, s in scan}
+    order = lambda cs: (str(cs[0]), int(cs[1] or 0))
+    out["reconcile"] = {
+        "selected": sel,
+        "selected_keyed": sel is not None and (sel[0], sel[1]) in keyed,
+        "added": None if now is None else [list(x) for x in sorted(now - keyed, key=order)],
+        "removed": None if now is None else [list(x) for x in sorted(keyed - now, key=order)],
+    }
+    return out
 
 
 def recall_uptake(record: dict, results: list) -> dict:
@@ -3450,12 +3473,14 @@ def recall_uptake(record: dict, results: list) -> dict:
     listed: what the recall block showed (already in the record).
     opened: a memory_read in this beat whose path is one of the listed sources.
     recalled: recall calls the being made itself this beat.
-    cited (HEURISTIC): a say whose text holds a word from the recall's word directory.
+    lexical_reuse: says whose text holds a word from the recall's word directory. Word reuse
+    only: it is not evidence the being used the recall (the word may be the asker's own), and
+    zero opened is not evidence it chose not to look.
     Measured, never acted on: nothing here changes what the being sees or may do."""
     out = dict(record or {})
     listed = {str(s[0]) for s in (out.get("listed") or [])}
     terms = {str(d[0]).lower() for d in (out.get("directory") or [])}
-    opened, recalled, cited = [], 0, 0
+    opened, recalled, reuse = [], 0, 0
     for res in results:
         if res is None:
             continue
@@ -3471,8 +3496,8 @@ def recall_uptake(record: dict, results: list) -> dict:
             elif eff == "say" and getattr(env, "ok", False) and terms:
                 text = str(args.get("text") or "").lower()
                 if any(t in text for t in terms):
-                    cited += 1
-    out["uptake"] = {"opened": opened, "recalled": recalled, "cited_heuristic": cited}
+                    reuse += 1
+    out["uptake"] = {"opened": opened, "recalled": recalled, "lexical_reuse": reuse}
     return out
 
 
@@ -5060,7 +5085,8 @@ def main(argv=None) -> int:
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "drive_source": "entrusted" if entrusted else "curiosity",
         "conversations_marked": conversations_marked,
-        "recall_query": recall_uptake(recall_query, [explore, after, reflect, answer]),
+        "recall_query": recall_uptake(reconcile_recall(recall_query, LAST_PENDING_SCAN, selected),
+                                      [explore, after, reflect, answer]),
         # the window and budget actually sent, so a beat is verifiable from this file alone
         # (beat 46's 8192 wall was reconstructed from stderr; Sprout's review of SAGE #40)
         # num_predict is what OllamaIRP resolves and sends (the config's num_predict_think

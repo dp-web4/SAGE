@@ -98,7 +98,12 @@ def conversation_units(instance: Path, per_conversation: int = CONVERSATION_TURN
     textstats project" and the being said it had none. Its own diagnosis of the bug was seq 55
     of that same conversation (2026-10-31), and the index this module built did not include
     conversations at all, so neither `recall` nor beat-start recall could reach it. Reading
-    its own conversations is reading its own home: nothing here is written or chosen for it."""
+    its own conversations is reading its own home: nothing here is written or chosen for it.
+
+    Only the last `per_conversation` turns are read, from the end of the file. When older turns
+    exist, the first unit kept carries `omitted_before: True`, so whoever reports a search over
+    these units can say what it did not search (nova on SAGE#650: "Searched N entries" and "No
+    entry in your home" were claims about the whole conversation, made from its tail)."""
     import json
     out: List[Dict] = []
     d = Path(instance) / "conversations"
@@ -106,10 +111,11 @@ def conversation_units(instance: Path, per_conversation: int = CONVERSATION_TURN
         return out
     for f in sorted(x for x in d.iterdir() if x.is_file() and x.suffix == ".jsonl"):
         try:
-            lines = [l for l in f.read_text(errors="replace").splitlines() if l.strip()]
+            lines, whole = _tail_lines(f, max(1, per_conversation))
         except Exception:
             continue
-        for line in lines[-max(1, per_conversation):]:
+        units = []
+        for line in lines:
             try:
                 turn = json.loads(line)
             except Exception:
@@ -118,10 +124,36 @@ def conversation_units(instance: Path, per_conversation: int = CONVERSATION_TURN
             if not text:
                 continue
             ts = str(turn.get("ts") or "")
-            out.append({"source": f"conversations/{f.name}", "date": ts[:16].replace("T", " "),
-                        "seq": turn.get("seq"), "from": turn.get("from"),
-                        "text": f"{turn.get('from')}: {text}"})
+            units.append({"source": f"conversations/{f.name}", "date": ts[:16].replace("T", " "),
+                          "seq": turn.get("seq"), "from": turn.get("from"),
+                          "text": f"{turn.get('from')}: {text}"})
+        if units and not whole:
+            units[0]["omitted_before"] = True
+        out.extend(units)
     return out
+
+
+def _tail_lines(path: Path, n: int, block: int = 65536) -> Tuple[List[str], bool]:
+    """The last `n` non-blank lines of a file, read backwards in blocks, and whether that is
+    the whole file. Memory and IO are bounded by the tail, not the file."""
+    with open(path, "rb") as fh:
+        fh.seek(0, 2)
+        pos, buf = fh.tell(), b""
+        while pos > 0 and buf.count(b"\n") <= n:
+            step = min(block, pos)
+            pos -= step
+            fh.seek(pos)
+            buf = fh.read(step) + buf
+    lines = [l for l in buf.decode("utf-8", errors="replace").splitlines() if l.strip()]
+    if pos > 0:
+        lines = lines[1:]       # the first line of a mid-file block is usually partial
+    return lines[-n:], pos == 0 and len(lines) <= n
+
+
+def omitted(units: List[Dict]) -> List[Dict]:
+    """[{source, before_seq, date}] for each conversation whose older turns were not indexed."""
+    return [{"source": u["source"], "before_seq": u.get("seq"), "date": u.get("date", "")}
+            for u in units if u.get("omitted_before")]
 
 
 def search_home(instance: Path, query: str, top_k: int = 5, snippet: int = 320,
@@ -185,27 +217,39 @@ def _shingles(text: str) -> set:
 
 
 def _spread(scored: List[Tuple[float, int, Dict]]) -> List[Tuple[float, int, Dict]]:
-    """At most one dated unit per day, and no near-duplicate of one already kept.
+    """Ordering, not removal: the best entry of each kind per day first, then the rest held
+    back in score order. Near-duplicates of an entry already placed are dropped.
 
     SG1, measured 2026-11-07 on nomad-being's home: ranked by overlap and recency alone, the
     top four for dp's textstats question were all that day's restatements ("asked for
     details", "attempted to investigate"), which hold no details. A being that rewrites the
-    same lesson many times a day crowds its own older work out of the ranking. One per day is
-    a rule about spread over time, not a judgment of which entry matters."""
-    out, days, seen = [], set(), []
+    same lesson many times a day crowds its own older work out of the ranking.
+
+    Per KIND per day, and held rather than discarded (nova on SAGE#650): a hard one-per-day
+    rule let a journal echo take the day's only slot from a conversation turn holding the
+    diagnosis, and dropped a same-day fact even when slots were left. This is a rule about
+    spread over time and source, not a judgment of which entry matters."""
+    def near(sh, seen):
+        return bool(sh) and any(len(sh & x) / len(sh | x) > 0.5 for x in seen)
+    first, held, slots, seen = [], [], set(), []
     for s in scored:
         u = s[2]
-        day = (u.get("date") or "")[:10]
-        if day and day in days:
-            continue
         sh = _shingles(u["text"])
-        if sh and any(len(sh & x) / len(sh | x) > 0.5 for x in seen):
+        if near(sh, seen):
             continue
-        out.append(s)
-        if day:
-            days.add(day)
+        day = (u.get("date") or "")[:10]
+        slot = (_kind(u["source"]), day)
+        if day and slot in slots:
+            held.append((s, sh))
+            continue
+        first.append(s)
+        slots.add(slot)
         seen.append(sh)
-    return out
+    for s, sh in held:
+        if not near(sh, seen):
+            first.append(s)
+            seen.append(sh)
+    return first
 
 
 def _kind(source: str) -> str:
@@ -226,10 +270,14 @@ def coverage(units: List[Dict]) -> Dict[str, int]:
     return c
 
 
-def term_directory(units: List[Dict], query: str, max_terms: int = 3, min_units: int = 2) -> List[Dict]:
+def term_directory(units: List[Dict], query: str, max_terms: int = 6, min_units: int = 2) -> List[Dict]:
     """Per query word: how many units hold it, of which kinds, over what dates, and where it
     first appears. A low-resolution map of what exists (PRD P2), so the being can reach for
-    more than the few snippets shown. Rarest-first among the words that matched enough."""
+    more than the few snippets shown. In the order the words were said.
+
+    Not rarest-first: dry-run on nomad-being's home (2026-11-08), rarest-first kept "give",
+    "details" and "project" and dropped "textstats", the topic, because the topic is common in
+    a home that has worked on it. Which word matters is not this function's call."""
     rows = []
     unit_terms = [set(_terms(u["text"])) for u in units]
     for term in dict.fromkeys(_terms(query)):
@@ -242,7 +290,6 @@ def term_directory(units: List[Dict], query: str, max_terms: int = 3, min_units:
                      "first_date": dated[0]["date"] if dated else "",
                      "last_date": dated[-1]["date"] if dated else "",
                      "first_source": first["source"], "first_seq": first.get("seq")})
-    rows.sort(key=lambda r: r["count"])
     return rows[:max_terms]
 
 
@@ -289,19 +336,24 @@ def question_recall(instance: Path, turns: List[Dict], top_k: int = 4, snippet: 
     results = _rank(units, query, top_k, snippet, exclude=exclude, spread=True)
     rows = term_directory(units, query)
     cov = coverage(units)
+    left = omitted(units)
     record.update({"coverage": cov,
+                   "omitted": [[o["source"], o["before_seq"], o["date"]] for o in left],
                    "listed": [[r["source"], r.get("seq"), r["date"]] for r in results],
                    "directory": [[r["term"], r["count"]] for r in rows]})
     lines = []
     if results:
         lines.append(f"From your own home, by word overlap with what {who} said in {where} at {when} "
-                     f"(at most one entry per day; not judged for relevance):")
+                     f"(one entry per kind per day first; not judged for relevance):")
         for r in results:
             lines.append(f"- [{_tag(r['source'], r.get('seq'), r['date'])}] {r['snippet']}")
+    elif left:
+        lines.append(f"No searched entry shares a word with what {who} said in {where} at {when}. "
+                     f"Older conversation turns were not searched (below).")
     else:
         lines.append(f"No entry in your home shares a word with what {who} said in {where} at {when}.")
     if rows:
-        lines.append("Where those words appear in your home:")
+        lines.append("Where those words appear in the entries searched:")
         for r in rows:
             kinds = ", ".join(f"{k} {n}" for k, n in sorted(r["kinds"].items(), key=lambda kv: -kv[1]))
             span = f", {r['first_date'][:10]} to {r['last_date'][:10]}" if r["first_date"] else ""
@@ -309,4 +361,8 @@ def question_recall(instance: Path, turns: List[Dict], top_k: int = 4, snippet: 
                          f'{_tag(r["first_source"], r["first_seq"], r["first_date"])}')
     lines.append("Searched " + str(sum(cov.values())) + " entries: "
                  + ", ".join(f"{k} {n}" for k, n in sorted(cov.items(), key=lambda kv: -kv[1])) + ".")
+    if left:
+        lines.append("Not searched: " + "; ".join(
+            f"{o['source']} before seq {o['before_seq']}" + (f" ({o['date'][:10]})" if o["date"] else "")
+            for o in left) + ".")
     return {"text": "\n".join(lines), "query": query, "record": record}
