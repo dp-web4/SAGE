@@ -3316,6 +3316,29 @@ def person_turns_that_woke(events) -> list:
     return out
 
 
+def pending_turns(instance: Path, member: str) -> list:
+    """[(cid, turn)] addressed to `member` and waiting on it, oldest first, at most
+    PENDING_TURNS: unseen first, failing that the recent unanswered tail. Beat-start recall (SG1)
+    and the reflect selection each call it, at different moments of the beat; a turn arriving
+    or answered in between makes them differ, and the beat record says so (`reconcile_recall`)."""
+    from sage.gateway import conversations as _conv
+    ids = [m["id"] for m in _conv.listing(instance) if member in (m.get("participants") or [])]
+    pend = []
+    for cid in ids:
+        # unseen first; failing that, the recent UNANSWERED tail — a turn marked seen
+        # without a reply must not silence the ask (2026-09-19, dp's 03:51Z turn)
+        for t in (_conv.awaiting(instance, cid, member)
+                  or _conv.unanswered(instance, cid, member))[-PENDING_TURNS:]:
+            pend.append((cid, t))
+    # ORDER BY WHEN IT WAS SAID, not by list construction. `listing()` is newest-
+    # conversation FIRST, so `pend[-1]` used to pick the LEAST recent conversation and the
+    # truncation below kept the oldest turns (GPT on #147: an old dp "keep going!" was
+    # frozen as the selection while a newer seat question waited). ts is ISO-8601 Z,
+    # so it sorts as text; seq breaks ties within one conversation.
+    pend.sort(key=lambda ct: (str(ct[1].get("ts") or ""), int(ct[1].get("seq") or 0)))
+    return ids, pend[-PENDING_TURNS:]
+
+
 def pending_selection(instance: Path, member: str, woke: Optional[list] = None) -> tuple:
     """(say_line, pending_block, say_first, target, selected) for the reflect turn: what is
     waiting on the being, the instruction naming who to answer, and the ONE turn selected to be
@@ -3330,25 +3353,12 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
       * conversations exist, nothing waiting -> the generic form, ids listed.
       * something waiting -> the person's name, the real id, and WHAT THEY SAID.
     """
-    global LAST_SELECTION_ERROR
+    global LAST_SELECTION_ERROR, LAST_PENDING_SCAN
     LAST_SELECTION_ERROR = None     # describes THIS selection, the one whose result the beat records
+    LAST_PENDING_SCAN = None
     try:
-        from sage.gateway import conversations as _conv
-        ids = [m["id"] for m in _conv.listing(instance) if member in (m.get("participants") or [])]
-        pend = []
-        for cid in ids:
-            # unseen first; failing that, the recent UNANSWERED tail — a turn marked seen
-            # without a reply must not silence the ask (2026-09-19, dp's 03:51Z turn)
-            for t in (_conv.awaiting(instance, cid, member)
-                      or _conv.unanswered(instance, cid, member))[-PENDING_TURNS:]:
-                pend.append((cid, t))
-        # ORDER BY WHEN IT WAS SAID, not by list construction. `listing()` is newest-
-        # conversation FIRST, so `pend[-1]` used to pick the LEAST recent conversation and the
-        # truncation below kept the oldest turns (GPT on #147: an old dp "keep going!" was
-        # frozen as the selection while a newer seat question waited). ts is ISO-8601 Z,
-        # so it sorts as text; seq breaks ties within one conversation.
-        pend.sort(key=lambda ct: (str(ct[1].get("ts") or ""), int(ct[1].get("seq") or 0)))
-        pend = pend[-PENDING_TURNS:]
+        ids, pend = pending_turns(instance, member)
+        LAST_PENDING_SCAN = [[cid, t.get("seq")] for cid, t in pend if t.get("from") != member]
         if pend:
             lines = []
             for cid, t in pend:
@@ -3434,6 +3444,61 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
 
 
 LAST_SELECTION_ERROR: Optional[str] = None
+LAST_PENDING_SCAN: Optional[list] = None    # [[cid, seq]] the last selection saw, not the member's own
+
+
+def reconcile_recall(record: dict, scan: Optional[list], selected) -> dict:
+    """Witness between beat-start recall and the selection made later in the beat (nova on
+    SAGE#650). Recall is keyed on the turns pending when the beat began; the reflect or
+    preempt selection scans again. `selected_keyed` says whether the turn being answered is
+    one the recall was keyed on; `added` and `removed` are the pending turns that changed in
+    between (None when the selection could not scan). Recorded, never acted on."""
+    out = dict(record or {})
+    keyed = {(c, s) for c, s in out.get("turns") or []}
+    sel = [selected.cid, selected.seq] if selected is not None else None
+    now = None if scan is None else {(c, s) for c, s in scan}
+    order = lambda cs: (str(cs[0]), int(cs[1] or 0))
+    out["reconcile"] = {
+        "selected": sel,
+        "selected_keyed": sel is not None and (sel[0], sel[1]) in keyed,
+        "added": None if now is None else [list(x) for x in sorted(now - keyed, key=order)],
+        "removed": None if now is None else [list(x) for x in sorted(keyed - now, key=order)],
+    }
+    return out
+
+
+def recall_uptake(record: dict, results: list) -> dict:
+    """SG1 uptake rungs for beat-start recall (PRD P5, §8), added to its record.
+
+    listed: what the recall block showed (already in the record).
+    opened: a memory_read in this beat whose path is one of the listed sources.
+    recalled: recall calls the being made itself this beat.
+    lexical_reuse: says whose text holds a word from the recall's word directory. Word reuse
+    only: it is not evidence the being used the recall (the word may be the asker's own), and
+    zero opened is not evidence it chose not to look.
+    Measured, never acted on: nothing here changes what the being sees or may do."""
+    out = dict(record or {})
+    listed = {str(s[0]) for s in (out.get("listed") or [])}
+    terms = {str(d[0]).lower() for d in (out.get("directory") or [])}
+    opened, recalled, reuse = [], 0, 0
+    for res in results:
+        if res is None:
+            continue
+        for it, env in getattr(res, "trace", None) or []:
+            eff = getattr(it, "effector", "")
+            args = getattr(it, "args", None) or {}
+            if eff == "memory_read":
+                path = str(args.get("path") or "")
+                if path in listed:
+                    opened.append(path)
+            elif eff == "recall":
+                recalled += 1
+            elif eff == "say" and getattr(env, "ok", False) and terms:
+                text = str(args.get("text") or "").lower()
+                if any(t in text for t in terms):
+                    reuse += 1
+    out["uptake"] = {"opened": opened, "recalled": recalled, "lexical_reuse": reuse}
+    return out
 
 
 def mark_conversations_after_beat(instance: Path, member: str, shown_upto: dict,
@@ -4342,18 +4407,43 @@ def main(argv=None) -> int:
     appeals_text, appeals_record = appeals_block(disp, last)
     # what it starts oriented by: its own recent writing (searched, not just the tail) and
     # long-term memory. The home search is the S5 answer to "34 KB written, 900 chars seen".
-    from sage.gateway.home_recall import search_home, render as _render_home
+    from sage.gateway.home_recall import search_home, render as _render_home, question_recall
     q0 = "what I was doing, what I want next, what I learned, what was refused"
-    try:
-        recall = _render_home(search_home(instance, q0, top_k=4, snippet=260)) or "(nothing in your home matched)"
-    except Exception as e:
-        recall = f"(home search failed: {type(e).__name__})"
+    # SG1 (paged-context PRD §9a): THE QUESTION IS THE PAGE FAULT. When someone's turn is
+    # waiting on the being, recall is keyed on the words of that turn, not on q0. Measured
+    # 2026-11-07 on nomad-being: dp asked for "details on textstats project", recall ran q0,
+    # and the being said it had no details while its journal held 105 textstats entries and
+    # the conversation held its own 10-31 diagnosis. With nothing pending, q0 runs as before.
+    _q_turns, _pending_error = [], None
+    if args.member:
+        try:
+            _q_turns = [dict(t, cid=cid) for cid, t in pending_turns(instance, args.member)[1]
+                        if t.get("from") != args.member]
+        except Exception as e:
+            _pending_error = type(e).__name__
+    if _q_turns:
+        _qr = question_recall(instance, _q_turns, top_k=4, snippet=260)
+        home_text, recall_query, mem_query = _qr["text"], _qr["record"], _qr["query"][:600]
+    else:
+        recall_query = {"source": "default", **({"pending_error": _pending_error} if _pending_error else {})}
+        mem_query = q0
+        try:
+            home_text = _render_home(search_home(instance, q0, top_k=4, snippet=260)) or "(nothing in your home matched)"
+        except Exception as e:
+            home_text = f"(home search failed: {type(e).__name__})"
+    lt_text = ""
     if disp is not None and hasattr(disp, "_membot_call"):
         try:
-            lt = disp._membot_call("memory_search", {"query": q0, "top_k": 4})[:1200]
-            recall += "\n\nFrom long-term memory:\n" + lt
+            lt = disp._membot_call("memory_search", {"query": mem_query, "top_k": 4})[:1200]
+            lt_text = "From long-term memory:\n" + lt
         except Exception as e:
-            recall += f"\n\n(long-term memory unreachable: {type(e).__name__})"
+            lt_text = f"(long-term memory unreachable: {type(e).__name__})"
+    # Question-keyed: long-term memory first, the home block last, so the window fit (which
+    # keeps recall's TAIL) cuts snippets before the word directory and the coverage line.
+    if _q_turns:
+        recall = (lt_text + "\n\n" + home_text) if lt_text else home_text
+    else:
+        recall = home_text + ("\n\n" + lt_text if lt_text else "")
 
     now = datetime.now(timezone.utc)
     t0 = time.time()
@@ -4995,6 +5085,8 @@ def main(argv=None) -> int:
         "host_session_id": host_session_id, "gate_only": args.gate_only, "act_first": act_first,
         "drive_source": "entrusted" if entrusted else "curiosity",
         "conversations_marked": conversations_marked,
+        "recall_query": recall_uptake(reconcile_recall(recall_query, LAST_PENDING_SCAN, selected),
+                                      [explore, after, reflect, answer]),
         # the window and budget actually sent, so a beat is verifiable from this file alone
         # (beat 46's 8192 wall was reconstructed from stderr; Sprout's review of SAGE #40)
         # num_predict is what OllamaIRP resolves and sends (the config's num_predict_think
