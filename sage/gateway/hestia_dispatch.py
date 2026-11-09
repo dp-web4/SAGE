@@ -55,6 +55,14 @@ _RUN_MARKER = "[request_run]"
 _SEAT_RUN_LINE = re.compile(r"\[request_run\] I (ran|did not run) (\S+)")
 # How many seat-conversation turns request_run reads for earlier asks and their answers.
 _PENDING_SCAN = 80
+#: How far back an ANSWER to these bytes is looked for (the request scan). Wider than _PENDING_SCAN, which
+#: stays the window for the seat-quiet fact. Measured on sprout-being 11-09: the seat declined
+#: scratch/restart-sprout-claude-with-sudo.py (sha 48684f53f84a) at seq 2677, with its reasons; 91 turns
+#: later every receipt for those bytes said "SAME AS the request at seq 2714, not answered in the last 80
+#: turns (asked 10 times now)", and repeats of an unchanged file wake no one by design. The being read the
+#: silence and "not answered" as a dead seat ("sprout-claude is dead (PID 2002 killed at 06:39Z)"), five
+#: minutes after telling the seat "Understood. The seat is a Claude session".
+_ANSWER_SCAN = 1000
 #: How long the seat may say nothing, while the being keeps asking, before a request_run receipt says so.
 SEAT_QUIET_S = 3 * 3600
 
@@ -4514,13 +4522,14 @@ class HestiaF1aDispatcher:
         # answer to an EARLIER ask for these bytes answers this one (below), and that answer can sit
         # before the window while a later ask is inside it. "Not answered yet" was then false. When the
         # conversation is longer than the window, the notes name the window instead of claiming "yet".
-        window = conv.recent(self.memory_root, seat_conv, limit=_PENDING_SCAN + 1)
-        scan_truncated = len(window) > _PENDING_SCAN
+        window = conv.recent(self.memory_root, seat_conv, limit=_ANSWER_SCAN + 1)
+        scan_truncated = len(window) > _ANSWER_SCAN
         try:
-            seat_quiet = _seat_quiet(window[-_PENDING_SCAN:], self.member, seat_conv, scan_truncated)
+            seat_quiet = _seat_quiet(window[-_PENDING_SCAN:], self.member, seat_conv,
+                                     len(window) > _PENDING_SCAN)
         except Exception:
             seat_quiet = None
-        for t in window[-_PENDING_SCAN:]:
+        for t in window[-_ANSWER_SCAN:]:
             text = str(t.get("text", ""))
             if t.get("from") == self.member and text.startswith(f"[request_run] {rel}\n"):
                 # The prior request counts only if it asked for these bytes WITH THESE
@@ -4600,7 +4609,7 @@ class HestiaF1aDispatcher:
         # so nothing told it the first one was still in the queue. Say so, and mark the turn for the
         # seat, so neither side reads a repeat as a new request.
         pending = [a for a in asked_seqs if a is not None] if not unchanged else []
-        unanswered = (f"not answered in the last {_PENDING_SCAN} turns" if scan_truncated
+        unanswered = (f"not answered in the last {_ANSWER_SCAN} turns" if scan_truncated
                       else "not yet answered")
         if pending:
             lines.append(f"SAME AS the request at seq {pending[0]}, {unanswered}"
@@ -4700,7 +4709,7 @@ class HestiaF1aDispatcher:
             result["already_asked"] = (
                 f"You already asked for this exact file, with these arguments, at seq {first}{ago}"
                 + (f", and {len(pending) - 1} more time{'s' if len(pending) > 2 else ''} since" if len(pending) > 1 else "")
-                + (f". The seat has not answered it in the last {_PENDING_SCAN} turns of '{seat_conv}' "
+                + (f". The seat has not answered it in the last {_ANSWER_SCAN} turns of '{seat_conv}' "
                    f"(older turns were not checked)" if scan_truncated
                    else ". The seat has not answered it yet")
                 + f". This request is recorded too, marked as the "
