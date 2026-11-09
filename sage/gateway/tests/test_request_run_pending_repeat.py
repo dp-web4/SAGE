@@ -190,7 +190,7 @@ def test_the_note_says_whether_a_wake_left_on_a_default_instance():
     notes = []
     for why in ("third", "fourth"):
         r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": why}), _ALLOW)
-        notes.append((r.result.get("woke_now"), r.result["note"]))
-    for _, n in notes:
-        assert "either way it answers" not in n or "asked and woken" in n, n
-    assert any("NOT woken" in n and "already declined" in n for _, n in notes), notes
+        notes.append(r.result["note"])
+    # the first ask after the decline opens a new run and wakes the seat (pub on #665); the next one does not
+    assert "asked and woken" in notes[0], notes[0]
+    assert "NOT woken" in notes[1] and "already declined" in notes[1], notes[1]
