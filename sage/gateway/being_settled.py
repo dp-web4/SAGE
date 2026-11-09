@@ -188,15 +188,19 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
     if target is not None and a.get("answer") and not _truthy(a.get("reopen", "")):
         given = a.get("question", "")
         if not given:
-            return False, (f"{target['id']} holds the question {target['question'][:160]!r}. To change its answer, "
+            return False, (f"{target['id']} holds the question {target['question']!r}. To change its answer, "
                            f"settle id={target['id']} with that question and your new answer, so the answer stays "
                            "with the question it answers. If your answer answers a different question, settle it "
                            "as a new one: question and answer, without id. Nothing was changed.")
         if _norm(given) != _norm(target["question"]) and not _same_question(target, given):
-            return False, (f"{target['id']} holds the question {target['question'][:160]!r}; yours, "
-                           f"{given[:160]!r}, reads as a different question. Settle yours as a new one (question "
-                           f"and answer, without id), or reopen {target['id']} first if it no longer holds. "
-                           "Nothing was changed.")
+            # THE ROUTE FOR A TRUE REWORDING, AND THE QUESTION WHOLE (cbp's replay on #661: about 18 of 26 new refusals
+            # were true rewordings, and this refusal sent them round to the receipt that sent them here). A quote
+            # cut short is not the question: copied, it can end mid-word and be refused too.
+            return False, (f"{target['id']} holds the question {target['question']!r}; yours, "
+                           f"{given[:160]!r}, reads as a different question. If it IS the same question, settle "
+                           f"id={target['id']} with its question exactly as above. If not, settle yours as a new "
+                           f"one (question and answer, without id), or reopen {target['id']} first if it no longer "
+                           "holds. Nothing was changed.")
     answer = a.get("answer", "")
     if not answer:
         return False, ("give the answer too: what you have concluded, in your own words (what works, what does "
@@ -230,7 +234,7 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                        "different question: every beat reads a settled answer as the answer to its question."
                        # "THE ANSWER THAT HOLDS", AS IN THE RECEIPT (legion on #661): followed literally at the cap,
                        # "your newest answer" replaced s30's true answer with the false one on the s100/s101 shape
-                       + (f" This reads close to {close['id']} ({close['question'][:120]!r}), which says "
+                       + (f" This reads close to {close['id']} ({close['question']!r}), which says "
                           f"{_flat(close.get('answer', ''))[:200]!r} (settled {str(close.get('at', ''))[:10]}): if "
                           f"they are the same question, settle id={close['id']} with that question and the answer "
                           "that holds." if close else ""))
@@ -249,8 +253,8 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
         # s100/s101 shape, "settle id=s1 with your newest answer" replaced the true entry with the false one
         msg += (f" It reads close to {close['id']} ({close['question'][:120]!r}). Your earlier "
                 f"answer{'s' if len(near) > 1 else ''}: {said}. If they are the same question, keep one: reopen "
-                f"{new['id']}, then settle id={close['id']} with the answer that holds. If they differ, both stay, "
-                "and each beat marks them with \u2248.")
+                f"{new['id']}, then settle id={close['id']}, question {close['question']!r} word for word, with the "
+                "answer that holds. If they differ, both stay, and each beat marks them with \u2248.")
     return ok, msg
 
 
@@ -390,7 +394,11 @@ def _same_question(target: dict, given: str) -> bool:
     lamp ... be reached?" for "Is the lamp accessible ...?"), which the being restates or settles anew. And
     saying less cannot tell a dropped qualifier from a dropped filler word: "Is the seat running?" is admitted
     under "Is the seat running on legion?" (a hub-fired sprout session on #661), the price of letting the
-    s100/s101 respelling through."""
+    s100/s101 respelling through. Nor does it read negation ("Is the seat not running?" and "Is the seat running?"
+    admit each other; cbp's replay found it differing in 1 real pair).
+
+    A DIFFERENT NAME OR NUMBER MAKES TWO QUESTIONS (cbp's re-review): /dev/video1 under /dev/video0, k=1 under k=2
+    (a real settle, cbp s319). Saying less stays allowed: "Does it exist?" under "Does /dev/video0 exist?"."""
     ka, kb = _asks(target["question"]), _asks(given)
     if ka and kb and ka != kb:
         return False   # how vs whether, when vs which: the question word is the question
@@ -400,7 +408,13 @@ def _same_question(target: dict, given: str) -> bool:
     # THE NEW WORDING MAY SAY LESS, NOT MORE. A question that brings a word of its own narrows or changes it
     # ("Is the seat running on legion?" under "Is the seat running?", "Did the build pass yesterday?" under
     # "Does the build pass?": pub's re-review of #661), and admitting it takes the old answer out of the beat.
-    return b <= a and len(b) >= min(2, len(a))
+    return b <= a and len(b) >= min(2, len(a)) and _named(given) <= _named(target["question"])
+
+
+def _named(q: str) -> set:
+    """The device nodes, scope ids, file names and numbers a question names, which its terms leave out or reduce."""
+    from sage.gateway.relevance import _IDS
+    return {m.group(0).lower() for m in _IDS.finditer(q or "")} | set(re.findall(r"\d+", q or ""))
 
 
 def _neighbours(entries: List[dict]) -> Dict[str, List[str]]:

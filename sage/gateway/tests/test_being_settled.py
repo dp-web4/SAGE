@@ -460,3 +460,54 @@ def test_the_full_list_refusal_quotes_the_close_answer_and_asks_for_the_one_that
     ok, msg, _ = _s(tmp_path, question="Is test-gizmo running?", answer="no, pgrep returns nothing")
     assert not ok and "reads close to s1" in msg, msg
     assert "'it wakes per message'" in msg and "the answer that holds" in msg and "newest" not in msg, msg
+
+
+def test_a_true_rewording_refused_by_the_guard_has_a_route_that_works(tmp_path):
+    # cbp's re-review of #661: receipt -> reopen -> id= with its own wording -> refused -> settle new -> receipt,
+    # and nothing on the way said that the exact question is what goes through
+    held = "Is the test gizmo running? How do I check if it's alive?"
+    _s(tmp_path, question=held, answer="it wakes per message")
+    _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    _s(tmp_path, question="where does the lamp file live?", answer="notes/")
+    ours = "Is test-gizmo running on the lamp host today?"
+    ok, msg, _ = _s(tmp_path, question=ours, answer="it wakes per message, on the lamp host too")
+    assert ok and f"settle id=s1, question {held!r} word for word" in msg, msg
+    assert _s(tmp_path, id="s4", reopen="true")[0]
+    ok, msg, _ = _s(tmp_path, id="s1", question=ours, answer="it wakes per message, on the lamp host too")
+    assert not ok and "If it IS the same question, settle id=s1 with its question exactly as above" in msg, msg
+    assert repr(held) in msg, msg
+    ok, msg, _ = _s(tmp_path, id="s1", question=held, answer="it wakes per message, on the lamp host too")
+    assert ok, msg
+    kept = {e["id"]: e for e in st.read(tmp_path)[0]}
+    assert kept["s1"]["question"] == held and kept["s1"]["answer"].endswith("lamp host too") and "s4" not in kept
+
+
+def test_a_question_at_its_longest_is_quoted_whole_where_it_is_to_be_copied(tmp_path):
+    # the question holds 200 characters; quotes cut at 120 and 160 could not be copied back word for word
+    held = ("Is the test gizmo running? " + "How do I check that the gizmo daemon is alive on this host? " * 4)[:st.QUESTION_MAX_CHARS]
+    _s(tmp_path, question=held, answer="it wakes per message")
+    _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    _s(tmp_path, question="where does the lamp file live?", answer="notes/")
+    ok, msg, _ = _s(tmp_path, id="s1", answer="still")
+    assert not ok and repr(held) in msg, msg
+    ok, msg, _ = _s(tmp_path, id="s1", question="Why is the sky lamp blue?", answer="still")
+    assert not ok and repr(held) in msg, msg
+    ok, msg, _ = _s(tmp_path, question="Is the test gizmo daemon alive on this host?", answer="yes")
+    assert ok and f"question {held!r} word for word" in msg, msg
+    assert _s(tmp_path, id="s4", reopen="true")[0]
+    for i in range(st.MAX_ENTRIES - 3):
+        assert _s(tmp_path, question=f"filler {i} about lamps", answer="a")[0]
+    ok, msg, _ = _s(tmp_path, question="Is the test gizmo daemon alive on this host?", answer="yes")
+    assert not ok and f"({held!r})" in msg, msg
+
+
+def test_the_id_guard_refuses_a_different_name_or_number_and_admits_saying_less(tmp_path):
+    # cbp's re-review of #661. The k=1/k=2 row is the shape of a real settle (cbp s319, 11-06)
+    for target, given in (("Does /dev/video0 exist?", "Does /dev/video1 exist?"),
+                          ("Did check-a.py pass?", "Did check-b.py pass?"),
+                          ("What is the k=2 test error?", "What is the k=1 test error?")):
+        assert not st._same_question({"question": target}, given), (target, given)
+    for target, given in (("Does /dev/video0 exist?", "Does it exist?"),
+                          ("Does /dev/video0 respond on the lamp host?", "Does /dev/video0 respond on the host?"),
+                          ("Is the test gizmo running? How do I check if it's alive?", "Is test-gizmo running?")):
+        assert st._same_question({"question": target}, given), (target, given)
