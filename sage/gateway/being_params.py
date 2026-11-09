@@ -113,6 +113,9 @@ PARAMS: Dict[str, Param] = {p.name: p for p in (
     Param("run_census", "bool", False, self_tunable=False,
           doc="seat-run trial: whether your state shows your run box as measured (what imports, what is "
               "on PATH, network) and quotes open todo items beside it (run_census.py)"),
+    Param("beat_health", "bool", False, self_tunable=False,
+          doc="seat-run trial: whether your state shows your last beats as read from your own record "
+              "(what each one did, and whether your model answered) (beat_health.py)"),
     Param("entrustment_mode", "choice", "full", choices=("full", "daily"),
           doc="'full' shows your entrustment whole every beat; 'daily' shows it whole on the first "
               "beat of each day and whenever it changes, and its opening plus a pointer otherwise"),

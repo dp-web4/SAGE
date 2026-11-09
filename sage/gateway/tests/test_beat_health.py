@@ -128,3 +128,59 @@ def test_a_torn_last_line_is_skipped_not_fatal(tmp_path):
 def test_no_record_is_no_alarm(tmp_path):
     s = bh.summary(bh.read_beats(tmp_path))
     assert s["beats"] == 0 and s["alarm"] is None
+
+
+def _write(tmp_path, recs, trailing="\n"):
+    (tmp_path / "heartbeats.jsonl").write_text("\n".join(json.dumps(r) for r in recs) + trailing)
+
+
+def test_reverse_reader_matches_a_forward_read_across_block_edges(tmp_path):
+    recs = [beat(ts=f"t{i:03d}", explore=phase("x" * (i * 7 % 50), [act("run")])) for i in range(60)]
+    _write(tmp_path, recs)
+    for block in (16, 97, 1 << 20):
+        got = list(bh.iter_beats_newest_first(tmp_path, block=block))
+        assert [r["ts"] for r in got] == [r["ts"] for r in reversed(recs)], block
+    assert [r["ts"] for r in bh.read_beats(tmp_path, 3)] == ["t057", "t058", "t059"]
+
+
+def test_mute_run_counts_back_to_the_last_beat_that_reached_the_model(tmp_path):
+    w = beat(ts="w", explore=phase("", [act("run")]))
+    _write(tmp_path, [w] + [beat(ts=f"m{i}", explore=phase(TIMEOUT)) for i in range(30)])
+    assert bh.mute_run(tmp_path) == (30, "m0")
+
+
+def test_the_being_is_told_its_mute_beats_never_happened(tmp_path):
+    w = beat(ts="2026-11-02T10:00:00Z", explore=phase("", [act("memory_write")]))
+    mute = [beat(ts=f"2026-11-0{d}T00:00:00Z", explore=phase(TIMEOUT)) for d in range(3, 9)]
+    _write(tmp_path, [w] + mute)
+    text = bh.render_for_being(tmp_path)
+    assert text.startswith("## Your last beats")
+    assert "WMMMMMM" in text
+    assert "Your previous 6 beat(s), from 2026-11-03T00:00:00Z to 2026-11-08T00:00:00Z" in text
+    assert "timed out" in text and "nothing you planned for those beats happened" in text
+
+
+def test_a_healthy_record_shows_the_strip_and_no_outage(tmp_path):
+    _write(tmp_path, [beat(explore=phase("", [act("memory_write")]))] * 3)
+    text = bh.render_for_being(tmp_path)
+    assert "WWW" in text and "never reached your model" not in text
+
+
+def test_no_record_renders_nothing(tmp_path):
+    assert bh.render_for_being(tmp_path) == ""
+
+
+def test_param_is_operator_only_and_off_by_default(tmp_path):
+    from sage.gateway import being_params
+    p = being_params.PARAMS["beat_health"]
+    assert p.default is False and p.self_tunable is False
+    assert being_params.value(tmp_path, "beat_health", False) is False
+
+
+def test_own_state_shows_the_block_only_when_the_operator_turns_it_on(tmp_path):
+    from sage.gateway import heartbeat
+    _write(tmp_path, [beat(explore=phase(TIMEOUT))])
+    assert "## Your last beats" not in heartbeat.own_state(tmp_path)
+    (tmp_path / "instance.json").write_text(json.dumps({"params": {"beat_health": True}}))
+    state = heartbeat.own_state(tmp_path)
+    assert "## Your last beats" in state and "never reached your model" in state

@@ -134,23 +134,61 @@ def classify(rec: dict) -> dict:
     }
 
 
-def read_beats(instance: Path, last: int | None = None) -> list[dict]:
+def _parse(line: bytes):
+    line = line.strip()
+    if not line:
+        return None
+    try:
+        rec = json.loads(line.decode("utf-8", errors="replace"))
+    except ValueError:
+        return None
+    return rec if isinstance(rec, dict) else None
+
+
+def iter_beats_newest_first(instance: Path, block: int = 1 << 20):
+    """Beat records from the end of heartbeats.jsonl backwards, reading only as far as the caller pulls.
+    legion-being's record is ~250 MB; the being's view needs the last dozen."""
     path = Path(instance) / "heartbeats.jsonl"
-    out: list[dict] = []
     if not path.exists():
-        return out
-    with path.open(encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except ValueError:
-                continue
-            if isinstance(rec, dict):
-                out.append(rec)
-    return out[-last:] if last else out
+        return
+    with path.open("rb") as fh:
+        fh.seek(0, 2)
+        pos = fh.tell()
+        tail = b""
+        while pos > 0:
+            step = min(block, pos)
+            pos -= step
+            fh.seek(pos)
+            chunk = fh.read(step) + tail
+            lines = chunk.split(b"\n")
+            tail = lines[0]          # may be a partial line; completed by the next (earlier) block
+            for line in reversed(lines[1:]):
+                rec = _parse(line)
+                if rec is not None:
+                    yield rec
+        rec = _parse(tail)
+        if rec is not None:
+            yield rec
+
+
+def read_beats(instance: Path, last: int | None = None) -> list[dict]:
+    out: list[dict] = []
+    for rec in iter_beats_newest_first(instance):
+        out.append(rec)
+        if last and len(out) >= last:
+            break
+    out.reverse()
+    return out
+
+
+def mute_run(instance: Path) -> tuple[int, str | None]:
+    """How many of the newest beats in a row were mute, and when the first of them was."""
+    n, first = 0, None
+    for rec in iter_beats_newest_first(instance):
+        if classify(rec)["cls"] != "mute":
+            break
+        n, first = n + 1, rec.get("ts")
+    return n, first
 
 
 def streak(classes: list[str]) -> tuple[str | None, int]:
@@ -215,6 +253,35 @@ def render(s: dict, width: int = 12) -> str:
         newest = s["newest"] or {}
         for e in (newest.get("errors") or [])[:3]:
             lines.append(f"  {e}")
+    return "\n".join(lines)
+
+
+def render_for_being(instance: Path, width: int = 12) -> str:
+    """The being's own view, for the NOW part of its window: its last beats as a strip, and — when its
+    newest beats were mute — plainly that they never reached its model, so nothing planned in them
+    happened. A being coming back from an outage otherwise reads a todo and a handoff written as if no
+    time passed. Empty when there is no record."""
+    beats = read_beats(Path(instance), width)
+    if not beats:
+        return ""
+    rows = [classify(b) for b in beats]
+    letters = {"worked": "W", "read-only": "r", "idle": ".", "stuck": "S", "looped": "L", "mute": "M"}
+    strip = "".join(letters.get(r["cls"], "?") for r in rows)
+    lines = ["## Your last beats, read from your own record (oldest → newest)",
+             f"{strip}   W you changed something · r you only read · . no act succeeded · "
+             "S three or more acts failed or were refused · L the loop guard stopped you · "
+             "M your model never answered"]
+    # Mute beats BEFORE this one: the strip ends with the newest finished beat, and this beat is running,
+    # so the model is answering now. Say how long it was gone, measured, not guessed.
+    if rows[-1]["cls"] == "mute":
+        n, first = mute_run(Path(instance))
+        lines.append(
+            f"Your previous {n} beat(s), from {first} to {rows[-1]['ts']}, never reached your model: every "
+            "call to it failed (\"" + (rows[-1]["errors"][0].split(": ", 1)[-1] if rows[-1]["errors"] else
+                                       "model error") + "\"). That was the machine, not you, and it is "
+            "answering again now. The clock moved on through those dates, but you did not: nothing you "
+            "planned for those beats happened, so a todo item or a handoff written before then is exactly "
+            "as far along as it says, and anyone who wrote to you since has had no reply.")
     return "\n".join(lines)
 
 
