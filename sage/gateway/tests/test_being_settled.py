@@ -360,8 +360,12 @@ def test_plurals_meet_and_running_stays_apart_from_run(tmp_path):
     ok, msg, _ = _s(tmp_path, question="Which gizmo services are up here?", answer="one")
     assert ok and "reads close to s1" in msg, msg
     # running stays apart from run: on the seat, "is it running" and "did the script run" are two questions
-    assert [st._stem(w) for w in ("running", "runs", "services", "processes", "process", "killed", "tries")] == \
-        ["runn", "run", "service", "process", "process", "kill", "try"]
+    stems = {w: st._stem(w) for w in ("running", "run", "runs", "service", "services", "process", "processes",
+                                      "escalate", "escalated", "restore", "restored", "tries")}
+    assert stems["running"] != stems["run"] == stems["runs"]
+    for a, b in (("service", "services"), ("process", "processes"), ("escalate", "escalated"), ("restore", "restored")):
+        assert stems[a] == stems[b], (a, b, stems)
+    assert stems["tries"] == "try"
 
 
 def test_the_id_guard_is_mains_predicate_and_never_admits_a_question_on_the_same_subject_only(tmp_path):
@@ -374,6 +378,23 @@ def test_the_id_guard_is_mains_predicate_and_never_admits_a_question_on_the_same
     assert not ok and "reads as a different question" in msg, msg
     ok, msg, _ = _s(tmp_path, id="s2", question="Is sprout-seat running right now?", answer="yes")
     assert ok, msg
+
+
+def test_the_id_guard_refuses_a_question_on_the_same_words_that_asks_something_else(tmp_path):
+    # a hub-fired sprout session's table on #661: on main, "When does a scope request expire?" was ADMITTED as
+    # cbp-being's s10 (only the plural was refused, for want of stemming); both spellings are pinned here
+    _s(tmp_path, question="When should I escalate a scope request?", answer="when it is still open")
+    for other in ("When does a scope request expire?", "When do scope requests expire?",
+                  "When should a scope request expire?", "Which scope requests were escalated last week?"):
+        ok, msg, _ = _s(tmp_path, id="s1", question=other, answer="x")
+        assert not ok and "reads as a different question" in msg, (other, msg)
+    ok, msg, _ = _s(tmp_path, id="s1", question="When should scope requests be escalated?", answer="while open")
+    assert ok, msg
+    # how vs whether
+    _s(tmp_path, question="Does the gizmo daemon need to be restarted?", answer="no")
+    ok, msg, _ = _s(tmp_path, id="s2", question="How to restart the gizmo daemon?", answer="run the script")
+    assert not ok and "reads as a different question" in msg, msg
+    assert [e["answer"] for e in st.read(tmp_path)[0]] == ["while open", "no"], "no answer moved"
 
 
 def test_an_id_copied_from_the_block_with_its_mark_names_the_entry(tmp_path):

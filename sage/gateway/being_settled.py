@@ -272,16 +272,19 @@ def _stem(t: str) -> str:
     script execute) to "Is sprout-seat running?" (is a seat alive), 7 -> 19 such links, nothing gained on the
     live list. On this subject they are two questions (pub withdrew the suggestion)."""
     if len(t) > 4 and t.endswith("ies"):
-        return t[:-3] + "y"
-    if len(t) > 4 and t.endswith("es") and t[:-2].endswith(("s", "x", "z", "ch", "sh")):
-        return t[:-2]
-    if len(t) > 3 and t.endswith("s") and not t.endswith(("ss", "us", "is")):
-        return t[:-1]
-    for suf in ("ing", "ed"):
-        if t.endswith(suf) and len(t) - len(suf) >= 3:
-            return t[:-len(suf)]
-    return t
-
+        t = t[:-3] + "y"
+    elif len(t) > 4 and t.endswith("es") and t[:-2].endswith(("s", "x", "z", "ch", "sh")):
+        t = t[:-2]
+    elif len(t) > 3 and t.endswith("s") and not t.endswith(("ss", "us", "is")):
+        t = t[:-1]
+    else:
+        for suf in ("ing", "ed"):
+            if t.endswith(suf) and len(t) - len(suf) >= 3:
+                t = t[:-len(suf)]
+                break
+    # then a final -e, on every path, so escalate/escalated/escalates and service/services all meet (a
+    # hub-fired sprout session on #661: escalated -> escalat, escalate whole, counted as two words)
+    return t[:-1] if len(t) > 4 and t.endswith("e") else t
 
 def _subject_terms(text: str) -> Dict[str, str]:
     """{term: the word it came from}. A hyphenated name gives its parts, so 'sprout-seat' meets 'sprout seat',
@@ -299,7 +302,7 @@ def _subject_terms(text: str) -> Dict[str, str]:
     for t in _terms(_unnamed(text)):
         parts = [x for x in t.split("-") if x]
         for x in (parts if len(parts) > 1 else [t]):
-            x = _stem(x.strip("'"))
+            x = _stem(x.split("'")[0])
             if len(x) > 1 and x not in ("it", "its"):
                 out.setdefault(x, t)
     return out
@@ -355,22 +358,40 @@ def _close_to(entries: List[dict], question: str) -> Optional[dict]:
     return hits[0] if hits else None
 
 
-def _same_question(target: dict, given: str) -> bool:
-    """Whether `given` restates `target`'s question, so `id=` may put an answer under it: exactly the predicate
-    CLOSE_AT was calibrated for (relevance's terms; same-question pairs 0.58, distinct <= 0.30), as on main.
+#: What a question opens with, by kind: each wh-word its own, every yes/no auxiliary one kind.
+_WH = ("how", "why", "when", "which", "what", "where", "who")
+_YESNO = frozenset("is are was were does do did can could should would will has have may must".split())
 
-    NOT THE NAMING SCORE, AND NOT LOOSENED (cbp's and legion's reviews of #661). Naming may take two questions on
-    one subject; this may not, because a false admit takes the old answer out of the beat. Measured over the
-    12,210 ordered pairs of sprout's 111 settled questions: main's predicate admits 789; the naming score's
-    terms with a both-sides divisor admitted 662, 244 of them new, and those included "How to restart
-    sprout-claude?" for "Does sprout-claude need to be restarted?" (how vs whether); folding hyphens alone
-    admitted 1,986, including "How can sprout seat be restarted?" for "Is sprout-seat running?". So a respelled
-    name ("sprout-seat" for "sprout seat") is NAMED by the mark and the receipt, not admitted here."""
-    try:
-        from sage.gateway.relevance import Ranker
-        return bool(Ranker([_unnamed(target["question"])]).related(_unnamed(given), CLOSE_AT))
-    except Exception:
+
+def _asks(q: str) -> str:
+    """The kind of question `q` opens with ('how', 'when', ... or 'yes/no'), or '' when it opens with neither."""
+    w = (re.findall(r"[a-z]+", (q or "").lower()) or [""])[0]
+    return w if w in _WH else "yes/no" if w in _YESNO else ""
+
+
+def _same_question(target: dict, given: str) -> bool:
+    """Whether `given` restates `target`'s question, so `id=` may put an answer under it. Two tests, both by
+    the question's own words: the kind of question it opens with (how, when, which, yes/no ...) must not differ,
+    and one side's terms must hold the other's (a rewording may say less, or more, but not both).
+
+    NOT THE NAMING SCORE, AND STRICTER THAN MAIN (reviews of #661 by cbp, legion and McNugget, and a hub-fired
+    sprout session's table). A false admit takes the old answer out of the beat; a false refusal costs one
+    retry, and the refusal says how. On main, against cbp-being's s10 "When should I escalate a scope
+    request?", "When does a scope request expire?" was ADMITTED (only the plural was refused, for want of
+    stemming), and no threshold on a one-entry corpus separates it from a true rewording (both 0.51). Over the
+    506 ordered pairs of sprout's live list this admits 2 (s100/s101, one name spelled two ways); main's
+    predicate admitted 9. It still refuses some true rewordings ("scope request escalation timing?", "Can the
+    lamp ... be reached?" for "Is the lamp accessible ...?"), which the being restates or settles anew."""
+    ka, kb = _asks(target["question"]), _asks(given)
+    if ka and kb and ka != kb:
+        return False   # how vs whether, when vs which: the question word is the question
+    a, b = set(_subject_terms(target["question"])), set(_subject_terms(given))
+    if not a or not b:
         return False
+    small, big = (a, b) if len(a) <= len(b) else (b, a)
+    # ONE SIDE HOLDS THE OTHER: a rewording may say less, or say more, but not both. A question that drops
+    # one of the old words AND brings its own is a new question.
+    return small <= big and len(small) >= min(2, len(big))
 
 
 def _neighbours(entries: List[dict]) -> Dict[str, List[str]]:
