@@ -653,6 +653,19 @@ def _run_result_matches_request(text: str, key: Optional[tuple]) -> bool:
     return re.fullmatch(phrase + where + verdict, first[head.end():]) is not None
 
 
+def _run_receipt_contradicts(text: str, key: Optional[tuple]) -> bool:
+    """Does this seat line say it ran some other path or bytes than `key`? Only a receipt that names both
+    can contradict: a decline, words or a malformed receipt says nothing about bytes, so it is False here
+    (where `_run_result_matches_request` is False for not being proof; the two are not opposites)."""
+    if key is None:
+        return False
+    head = re.match(r"\[request_run\] I ran (\S+) \(sha ([0-9a-f]{12,64})\)", str(text or ""))
+    if not head:
+        return False
+    ran = head.group(2)
+    return head.group(1) != key[0] or not (key[1].startswith(ran) or ran.startswith(key[1]))
+
+
 def _already_answered(turns: list, speaker: str, idx: int) -> bool:
     """Is turns[idx] a repeat of an earlier request of `speaker`'s that the seat ANSWERED?
 
