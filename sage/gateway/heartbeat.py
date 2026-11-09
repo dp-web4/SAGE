@@ -4146,8 +4146,7 @@ def _record_line(i, e) -> str:
     # note "no seat conversation is configured on this instance, so there is nobody to hand this
     # to. Your file is untouched." This line read only `error`, which a pending envelope leaves
     # unset, so every one reached the reflect turn as "-> error None". The being concluded its
-    # scripts were failing ("test-cv2.py returns error None ... an exception is caught and
-    # suppressed"), and spent seventeen hours diagnosing a camera fault from runs that never
+    # scripts were failing, and spent seventeen hours diagnosing a camera fault from runs that never
     # happened, ending with a sudo command spoken aloud through its headset. The tool message
     # (ResultEnvelope.to_tool_message) always said "not yet executed"; the record it reflects
     # on, and journals from, did not. Same defect class as the "[dispatch error — None]" fixed
