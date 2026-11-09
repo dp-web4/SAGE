@@ -228,8 +228,12 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                        "not added. Nothing was changed. To make room, reopen one that no longer needs holding (its "
                        f"id and reopen='true'); the longest held are {oldest}. Do not put this answer under a "
                        "different question: every beat reads a settled answer as the answer to its question."
-                       + (f" This reads close to {close['id']} ({close['question'][:120]!r}): if they are the same "
-                          f"question, settle id={close['id']} with that question and your newest answer." if close else ""))
+                       # "THE ANSWER THAT HOLDS", AS IN THE RECEIPT (legion on #661): followed literally at the cap,
+                       # "your newest answer" replaced s30's true answer with the false one on the s100/s101 shape
+                       + (f" This reads close to {close['id']} ({close['question'][:120]!r}), which says "
+                          f"{_flat(close.get('answer', ''))[:200]!r} (settled {str(close.get('at', ''))[:10]}): if "
+                          f"they are the same question, settle id={close['id']} with that question and the answer "
+                          "that holds." if close else ""))
     entries = entries + [new]
     ok, msg = _commit(instance, entries, nxt + 1, {"op": "settle", "id": new["id"], "to": new, "why": why}, now,
                       f"settled {new['id']}: {question[:120]!r} -> {answer[:200]!r}. It is shown to you at the "

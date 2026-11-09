@@ -449,3 +449,14 @@ def test_a_short_line_keeps_its_question_readable_and_the_block_stays_in_budget(
             q = ln.split("] ", 1)[1].rsplit(" (settled", 1)[0]
             assert len(q) >= min(st.SHORT_QUESTION_FLOOR, 20) or q.endswith("…") and len(q) >= 8, ln
 
+
+
+def test_the_full_list_refusal_quotes_the_close_answer_and_asks_for_the_one_that_holds(tmp_path):
+    # legion on #661: at the cap the refusal still said "your newest answer"; following it on the s100/s101
+    # shape replaced the true answer with the false one
+    _s(tmp_path, question="Is the test gizmo running? How do I check if it's alive?", answer="it wakes per message")
+    for i in range(st.MAX_ENTRIES - 1):
+        assert _s(tmp_path, question=f"filler {i} about lamps", answer="a")[0]
+    ok, msg, _ = _s(tmp_path, question="Is test-gizmo running?", answer="no, pgrep returns nothing")
+    assert not ok and "reads close to s1" in msg, msg
+    assert "'it wakes per message'" in msg and "the answer that holds" in msg and "newest" not in msg, msg
