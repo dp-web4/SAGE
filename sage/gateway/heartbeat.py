@@ -2984,6 +2984,17 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
             census_block, census_todo = "", ""
     if census_block:
         parts.append(census_block)
+    # ITS LAST BEATS, MEASURED (beat_health, operator switch `beat_health`): what each beat did, read from
+    # heartbeats.jsonl — and after an outage, that the beats in it never reached the model, so a plan
+    # from before is exactly as far along as it says. Fail-open: an error adds nothing.
+    if _bp.value(instance, "beat_health", False):
+        try:
+            from sage.gateway import beat_health as _bh
+            _health = _bh.render_for_being(instance)
+        except Exception:
+            _health = ""
+        if _health:
+            parts.append(_health)
     # Conversations first among the channels: a turn addressed to the being and unanswered
     # is the one thing in its state that is waiting on IT, and it should never have to infer
     # that from a wall of notes. Both directions live in one ordered record.
