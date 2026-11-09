@@ -53,7 +53,7 @@ from sage.gateway.reference_f1a import ReferenceF1aDispatcher
 _RUN_MARKER = "[request_run]"
 # The first line of a seat run/decline receipt (seat_run_requests.py): the verb and the path.
 _SEAT_RUN_LINE = re.compile(r"\[request_run\] I (ran|did not run) (\S+)")
-# How many seat-conversation turns request_run reads for earlier asks and their answers.
+# The window for the seat-quiet fact (_seat_quiet): how many recent seat-conversation turns it reads.
 _PENDING_SCAN = 80
 #: How far back an ANSWER to these bytes is looked for (the request scan). Wider than _PENDING_SCAN, which
 #: stays the window for the seat-quiet fact. Measured on sprout-being 11-09: the seat declined
@@ -62,7 +62,10 @@ _PENDING_SCAN = 80
 #: turns (asked 10 times now)", and repeats of an unchanged file wake no one by design. The being read the
 #: silence and "not answered" as a dead seat ("sprout-claude is dead (PID 2002 killed at 06:39Z)"), five
 #: minutes after telling the seat "Understood. The seat is a Claude session".
-_ANSWER_SCAN = 1000
+#: 1000 TURNS IS NOT A WEEK ON A BUSY BEING (cbp's review of #664): 1000-turn windows on cbp-being spanned a
+#: median 4.5 days, 90 of 265 reaching 7. Reading is not the cost (conv.recent parses the whole log at any
+#: limit; cbp's 14,213 turns took 122 ms), so the reach covers any conversation the fleet has.
+_ANSWER_SCAN = 20000
 #: How long the seat may say nothing, while the being keeps asking, before a request_run receipt says so.
 SEAT_QUIET_S = 3 * 3600
 
@@ -4489,6 +4492,7 @@ class HestiaF1aDispatcher:
         digest = hashlib.sha256(p.read_bytes()).hexdigest()[:12]
         unchanged = None  # (seq it asked at, seq the seat answered at)
         answer_text = ""   # what that answer SAID, to hand back rather than point at
+        answer_ts = ""     # when it was said, so the being can judge how old the answer is
         asked_at = None
         asked_seqs = []    # every earlier request for these bytes and arguments, oldest first
         asked_ts = {}      # seq -> when it was asked
@@ -4499,7 +4503,9 @@ class HestiaF1aDispatcher:
         # and whose relative imports and data are not new.py's. A prior run is evidence for
         # this request only when it ran this path, these bytes, and these arguments.
         # rerun="false" is the default spelled out, not a request to rerun: now that the spec lists
-        # rerun, a being may pass it on every call, and any `rerun:` line wakes the seat.
+        # rerun, a being may pass it on every call. A `rerun:` line makes the request new work for
+        # wake_is_owed only while its run is still un-woken (under answered_run_wake "skip"); on a
+        # default instance a run woken once is not woken again for the same bytes (cbp on #665).
         arg_lines = [f"{k}: {str(v).strip()}" for k, v in intent.args.items()
                      if k not in ("path", "why", "reason", "to") and str(v).strip()
                      and not (k == "rerun" and str(v).strip().lower() in ("false", "no", "0", "none"))]
@@ -4518,7 +4524,7 @@ class HestiaF1aDispatcher:
                 return None
             return m.group(1), m.group(2).rstrip("."), first
 
-        # THE SCAN SEES THE LAST _PENDING_SCAN TURNS, AND A PENDING NOTE SAYS SO (#567, cbp on #566). An
+        # THE SCAN SEES THE LAST _ANSWER_SCAN TURNS, AND A PENDING NOTE SAYS SO (#567, cbp on #566). An
         # answer to an EARLIER ask for these bytes answers this one (below), and that answer can sit
         # before the window while a later ask is inside it. "Not answered yet" was then false. When the
         # conversation is longer than the window, the notes name the window instead of claiming "yet".
@@ -4558,6 +4564,7 @@ class HestiaF1aDispatcher:
                 # no argument clause means unknown, not default arguments.
                 unchanged = (asked_at, t.get("seq"))
                 answer_text = text
+                answer_ts = str(t.get("ts") or "")
             elif asked_seqs:
                 # ONLY A TURN BOUND TO THIS REQUEST ANSWERS IT. GPT re-review of #276 at
                 # fef135b7b: any later seat turn counted, so request new.py -> an unrelated
@@ -4593,6 +4600,7 @@ class HestiaF1aDispatcher:
                     continue
                 unchanged = (max(_hit), t.get("seq"))
                 answer_text = text
+                answer_ts = str(t.get("ts") or "")
         # EVERY ARGUMENT THE BEING GAVE REACHES THE SEAT. Measured 2026-09-22 08:3xZ: cbp-being
         # put its flags in 'body' ("Run ... with --input-dim 10 --output-dim 1 ...") and the
         # seat was shown "why: (none given)" and no flags. Across its first 66 request_runs,
@@ -4647,6 +4655,14 @@ class HestiaF1aDispatcher:
         _verdict = _SEAT_RUN_LINE.match(answer_text.split("\n", 1)[0]) if unchanged else None
         declined = bool(_verdict and _verdict.group(1) == "did not run" and unchanged[0] is not None)
         executed = bool(unchanged and conv._run_result_matches_request(answer_text, request_key))
+        answer_age = ""
+        if unchanged and answer_ts:
+            try:
+                from datetime import datetime, timezone
+                _a = datetime.fromisoformat(answer_ts.replace("Z", "+00:00"))
+                answer_age = f" ({_ago((datetime.now(timezone.utc) - _a).total_seconds())} ago)"
+            except (ValueError, TypeError):
+                answer_age = ""
         if unchanged:
             # CARRY THE ANSWER, DO NOT POINT AT IT. Measured 2026-09-22 over cbp-being's 556
             # beats: an edit receipt that names the defect in its own return value ("Python
@@ -4663,18 +4679,18 @@ class HestiaF1aDispatcher:
                 # again "with rerun=true to force execution". Nothing had run to be evidence.
                 result["unchanged"] = (
                     f"This file is byte-for-byte the one you asked about at seq {unchanged[0]}, and "
-                    f"the seat answered that at seq {unchanged[1]}: it did not run it. Nothing ran. "
+                    f"the seat answered that at seq {unchanged[1]}{answer_age}: it did not run it. Nothing ran. "
                     f"Its reason:\n"
                     f"--- seq {unchanged[1]} ---\n{carried}\n--- end ---\n"
                     f"The same file will most likely get the same answer, unless what that reason "
                     f"rests on has changed. To change what you ask for: memory_edit the lines, or "
                     f"retire_note the file and then memory_write it anew.")
             elif unchanged[0] is None:
-                since = (f"This file is byte-for-byte the one the seat ran at seq {unchanged[1]}, "
+                since = (f"This file is byte-for-byte the one the seat ran at seq {unchanged[1]}{answer_age}, "
                          f"on its own, before you asked. ")
             else:
                 since = (f"This file is byte-for-byte the one you asked about at seq {unchanged[0]}, and "
-                         f"the seat answered that at seq {unchanged[1]}. ")
+                         f"the seat answered that at seq {unchanged[1]}{answer_age}. ")
             if not declined and not executed:
                 # Answered, but not by a run receipt for these bytes: say what is known (the seat
                 # answered) and what is not (whether anything ran), and carry the answer itself.
@@ -4718,29 +4734,54 @@ class HestiaF1aDispatcher:
         result.update(subject)
         if seat_quiet:
             result["seat_quiet"] = seat_quiet
+        _said = said.result or {}
+        woke_now = bool(_said.get("woke"))
         note = ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
                 "a result. The seat may run it or decline, and either way it answers in "
                 f"'{seat_conv}'. Nothing is owed by you in the meantime.")
-        if seat_quiet:
+        if seat_quiet and woke_now:
             note = ("The seat was asked and a wake was sent. NOTHING HAS RUN YET and this is not "
                     "a result. seat_quiet says how long the seat has been silent; it can answer in "
                     f"'{seat_conv}' when it is back. Nothing is owed by you in the meantime.")
-        if unchanged and not (said.result or {}).get("woke") and self._skips_answered_run_wake():
-            # THE RECEIPT SAYS WHAT HAPPENED. Under answered_run_wake "skip" (per-instance,
-            # recut of #154) an already-answered request is sent but wakes nobody; "asked and
-            # woken" would be false. Only this instance's receipts change.
-            note = ("The request was recorded in "
-                    f"'{seat_conv}', but the seat was NOT woken for it: it already answered this "
-                    "same file, unchanged, and that answer is above. NOTHING HAS RUN. To have it "
-                    "run again anyway, call request_run again with its argument rerun set to "
-                    "'true', next to path and why. It is not a line in your file.")
-            if declined:
-                note = ("The request was recorded in "
-                        f"'{seat_conv}', but the seat was NOT woken for it: it already declined this "
-                        "same file, unchanged, and its reason is above. NOTHING HAS RUN. Calling "
-                        "request_run again with its argument rerun set to 'true', next to path and "
-                        "why, asks the seat again; it does not make the file run, and the seat "
-                        "still decides. It is not a line in your file.")
+        why_not = str(_said.get("not_woken") or "").split(" Your message was recorded")[0].strip().rstrip(".")
+        # THE NOTE IS CHOSEN BY WHY NO WAKE LEFT, NOT BY THE INSTANCE (reviews of #665 by cbp, legion and
+        # McNugget, and two hub-fired sprout sessions' wake-spy probes). `_wake_why` names the cause:
+        # - "no wake was owed": answered_run_wake "skip" and an answered, unchanged file. The run stays
+        #   un-woken, so rerun="true" (new arguments) wakes the seat once; this is the only case where
+        #   that advice is true. Legion: on skip, rearm_owed_wakes() then returns [] -- "already
+        #   answered" really is why no wake follows.
+        # - "no new wake": this run was already woken; asking again in it, rerun or not, sends none.
+        # - a pause, a refused mesh, no listener: a wake may still follow (a refused wake is tried again;
+        #   a pause's owed wake is rearmed when it ends, except under "skip" for an answered, unchanged
+        #   request, where rearm_owed_wakes() returns [] -- legion on #665), so no sentence may say
+        #   whether one is coming. These get the reason and the facts only.
+        # The reason text for each already says what happens next; the note adds only what is true here.
+        answered_skip = (unchanged and not woke_now and why_not.startswith("no wake was owed")
+                         and self._skips_answered_run_wake())
+        if not woke_now and not answered_skip:
+            what = ""
+            if unchanged:
+                what = ("The seat already declined this same file, unchanged; its reason is above. " if declined
+                        else "The seat already answered this same file, unchanged; that answer is above. ")
+            note = (f"The request was recorded in '{seat_conv}', but no wake was sent for it"
+                    + (f" ({why_not})" if why_not else "") + ". NOTHING HAS RUN YET and this is not a result. "
+                    + what
+                    + (f"It repeats the request at seq {pending[0]}; an answer in '{seat_conv}' covers every "
+                       f"copy. " if pending else "")
+                    + (f"seat_quiet says how long the seat has been silent; it can answer in '{seat_conv}' "
+                       f"when it is back. " if seat_quiet else "")
+                    + "Nothing is owed by you in the meantime.")
+        if answered_skip:
+            # THE RECEIPT SAYS WHAT HAPPENED (recut of #154): under "skip" an already-answered request is
+            # sent but wakes nobody, and rerun="true" asks once more.
+            what = "declined this same file, unchanged, and its reason is above" if declined else \
+                "answered this same file, unchanged, and that answer is above"
+            note = (f"The request was recorded in '{seat_conv}', but the seat was NOT woken for it: it "
+                    f"already {what}. NOTHING HAS RUN. Calling request_run again with its argument rerun set "
+                    "to 'true', next to path and why, asks the seat once more: it wakes the seat if no wake "
+                    "has gone out for this run yet"
+                    + ("; it does not make the file run, and the seat still decides" if declined else "")
+                    + ". It is not a line in your file.")
         return ResultEnvelope(ok=True, witness_id=said.witness_id, result={
             **result,
             "requested": rel,
@@ -4867,10 +4908,20 @@ class HestiaF1aDispatcher:
                                       skip_answered=self._skips_answered_run_wake())
         if run_start is None:
             start = conv.unanswered_run_start(self.memory_root, to, self.member)
-            self._wake_why = (f"no new wake: a wake was already sent for your messages since seq "
-                              f"{start}, with no answer recorded since, and further messages in the "
-                              f"same run do not send another. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it" if start else
-                              "no wake was owed for this message. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
+            tail = (" Your message was recorded in the conversation; no wake was sent. This does not confirm "
+                    "anyone has read or accepted it")
+            # "ALREADY SENT" ONLY WHEN IT WAS (found while fixing #665): under answered_run_wake "skip" an
+            # answered, unchanged request opens a run that is never woken, and this said "a wake was
+            # already sent for your messages since seq N" for a run no wake went out for.
+            if start and conv.run_was_woken(self.memory_root, to, self.member, start):
+                self._wake_why = (f"no new wake: a wake was already sent for your messages since seq "
+                                  f"{start}, with no answer recorded since, and further messages in the "
+                                  f"same run do not send another." + tail)
+            elif start:
+                self._wake_why = ("no wake was owed for this message: the seat already answered this same "
+                                  "request, unchanged." + tail)
+            else:
+                self._wake_why = "no wake was owed for this message." + tail
             return None            # already woke them about this run; saying more is not new mail
         pointer = f"sage://conversation/{to}#seq={run_start}-{turn['seq']}"
         woke = []
