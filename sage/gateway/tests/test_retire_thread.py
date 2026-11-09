@@ -317,7 +317,8 @@ def test_a_closed_line_keeps_its_reason_in_every_beat_and_its_items_stay_retired
     h = _home(tmp_path)
     assert bt.render_closed(h) == "", "nothing closed, no block"
     ok, msg, _ = _go(h, {"words": "widget, daemon", "reason": "The daemon is fine; it was never down."}, now=0)
-    assert ok and "shown at the start of every beat among the lines of work you closed" in msg, msg
+    # legion on #662: not "at the start of every beat" -- it follows the settled block and rotates out
+    assert ok and f"until {bt.CLOSED_SHOWN} newer closings replace it" in msg, msg
     shown = bt.render_closed(h)
     assert shown.startswith("## Lines of work you closed")
     assert "widget, daemon: The daemon is fine; it was never down." in shown
@@ -348,3 +349,13 @@ def test_a_long_reason_is_cut_and_an_unreadable_retired_file_is_skipped(tmp_path
     (h / "todo.retired-thread-0123456789ab.md").write_text("not a retire header\n")
     shown = bt.render_closed(h)
     assert len(shown.splitlines()) == 2 and shown.endswith("…")
+
+
+def test_long_topic_words_are_cut_like_the_reason(tmp_path):
+    # legion on #662: cbp-being's longest topic words ran 598 chars, a whole todo sentence over its reason
+    h = _home(tmp_path)
+    words = "widget, " + ", ".join(f"topicword{i}" for i in range(30))
+    ok, msg, _ = _go(h, {"words": words, "reason": "short reason"}, now=0)
+    assert ok, msg
+    line = bt.render_closed(h).splitlines()[1]
+    assert "…: short reason" in line and len(line.split(": short reason")[0]) == len("- 1970-01-01 00:00Z, ") + bt.CLOSED_WORDS_CHARS, line

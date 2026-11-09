@@ -301,13 +301,15 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
     said = (f"Retired the thread ({topic}): {len(moved)} open todo item(s) and {len(gone)} settled "
             f"entr{'y' if len(gone) == 1 else 'ies'} moved to {name}, where recall still finds them. "
             f"Still open: {len(kept)} todo item(s); still settled: {len(entries) - len(gone)}. Your reason is "
-            f"shown at the start of every beat among the lines of work you closed.")
+            f"shown in every beat among the lines of work you closed, until {CLOSED_SHOWN} newer closings "
+            f"replace it.")
     return True, said, True
 
 
 #: The beat's block of closed lines: the newest few, each reason cut to fit.
 CLOSED_SHOWN = 4
 CLOSED_REASON_CHARS = 240
+CLOSED_WORDS_CHARS = 80   # topic words can be a whole todo sentence (598 chars on cbp; legion on #662)
 _HEAD = re.compile(r"^> RETIRED (\d{4}-\d{2}-\d{2} \d{2}:\d{2})Z with retire_thread[^.]*\. Topic words: (.*)\.\s*$")
 _WHY = re.compile(r"^> No longer current: (.*)$")
 
@@ -325,7 +327,8 @@ def closed(instance) -> List[Dict[str, str]]:
         mh, mw = _HEAD.match(h), _WHY.match(w)
         if mh and mw:
             out.append({"at": mh.group(1), "words": mh.group(2), "reason": mw.group(1).strip(), "file": f.name})
-    return sorted(out, key=lambda c: c["at"], reverse=True)
+    # (at, file): `at` has minute resolution and two closes can share a minute (legion on #662)
+    return sorted(out, key=lambda c: (c["at"], c["file"]), reverse=True)
 
 
 def render_closed(instance) -> str:
@@ -353,7 +356,10 @@ def render_closed(instance) -> str:
         why = c["reason"]
         if len(why) > CLOSED_REASON_CHARS:
             why = why[:CLOSED_REASON_CHARS - 1].rstrip() + "…"
-        lines.append(f"- {c['at']}Z, {c['words']}: {why}")
+        words = c["words"]
+        if len(words) > CLOSED_WORDS_CHARS:
+            words = words[:CLOSED_WORDS_CHARS - 1].rstrip() + "…"
+        lines.append(f"- {c['at']}Z, {words}: {why}")
     if len(cs) > CLOSED_SHOWN:
         lines.append(f"- … {len(cs) - CLOSED_SHOWN} earlier (todo.retired-thread-*.md)")
     return head + "\n" + "\n".join(lines)
