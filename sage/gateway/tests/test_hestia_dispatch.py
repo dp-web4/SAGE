@@ -1118,8 +1118,8 @@ def test_a_cut_say_receipt_says_it_is_the_beings_own_words():
     home = Path(root)
     conv.create(home, "dp", title="dp", participants=["dp", "sprout-being"],
                 writable_by=["dp", "sprout-being"])
-    long = ("The seat confirmed the file hasn't changed since 11:43Z and that a run would "
-            "stop at line 321 before reaching the matmul. ") * 3
+    long = ("The gizmo on the bench has not moved since morning and the lamp beside it "
+            "stayed lit through the whole of the afternoon. ") * 3
     long = long.strip()
     r = d(BeingIntent("say", {"to": "dp", "text": long}), _ALLOW)
     assert r.ok, r.error
