@@ -25,6 +25,7 @@ The beat shows when each was settled, so the being can see what is old enough to
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import time
@@ -86,8 +87,16 @@ def _flat(s) -> str:
     return re.sub(r"\s+", " ", str(s or "")).strip()
 
 
-def _line(e: dict, cap: int = 0) -> str:
-    s = f"[{e['id']}] {_flat(e['question'])} -> {_flat(e.get('answer', ''))}"
+def _near(e: dict, near: Optional[Dict[str, List[str]]]) -> str:
+    ids = (near or {}).get(e["id"])
+    if not ids:
+        return ""
+    more = f"+{len(ids) - 3}" if len(ids) > 3 else ""
+    return f" ≈{','.join(ids[-3:][::-1])}{more}"  # the newest three: the latest word on it
+
+
+def _line(e: dict, cap: int = 0, near: Optional[Dict[str, List[str]]] = None) -> str:
+    s = f"[{e['id']}{_near(e, near)}] {_flat(e['question'])} -> {_flat(e.get('answer', ''))}"
     if e.get("evidence"):
         s += f" (evidence: {_flat(e['evidence'])})"
     s += f" (settled {str(e.get('at', ''))[:10]})"
@@ -105,7 +114,7 @@ def listing(instance) -> str:
                 "(and optionally evidence: a seq, a file, a frame). It is then shown to you every beat.")
     return (f"What you have settled ({len(entries)}, newest first). To change one, settle the same "
             "question again (or its id with that question); to take one back, give its id and reopen='true'.\n"
-            + "\n".join("- " + _line(e) for e in reversed(entries)))
+            + "\n".join("- " + _line(e, near=_neighbours(entries)) for e in reversed(entries)))
 
 
 def settle(instance, args: Dict, now: Optional[float] = None) -> Tuple[bool, str, bool]:
@@ -221,8 +230,14 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                       f"settled {new['id']}: {question[:120]!r} -> {answer[:200]!r}. It is shown to you at the "
                       "start of every beat. To change it later, settle the same question again (with its id, if you like).")
     if ok and close:
-        msg += (f" It reads close to {close['id']} ({close['question'][:120]!r}). If they are the same question, "
-                f"keep one: reopen {new['id']}, then settle id={close['id']} with your newest answer.")
+        # WHAT THE EARLIER ONE SAYS, NOT ONLY ITS QUESTION. sprout-being 11-07: s101 ("No — pgrep returns
+        # nothing") was settled 2.5 h after s100 ("NOT a long-running service"), on one subject; a receipt naming
+        # s100's question would not have shown that the two answers disagree.
+        said = "; ".join(f"{c['id']} (settled {str(c.get('at', ''))[:10]}) says {_flat(c.get('answer', ''))[:200]!r}"
+                         for c in _close_all(entries[:-1], question))
+        msg += (f" It reads close to {close['id']} ({close['question'][:120]!r}). Your earlier answer there: {said}. "
+                f"If they are the same question, keep one: reopen {new['id']}, then settle id={close['id']} with "
+                "your newest answer. If they differ, both stay, and each beat marks them with \u2248.")
     return ok, msg
 
 
@@ -239,18 +254,95 @@ def _unnamed(text: str) -> str:
     return _IDS.sub(" ", text or "")
 
 
-def _close_to(entries: List[dict], question: str) -> Optional[dict]:
-    """The existing entry whose question reads most like this one, at or over CLOSE_AT; None otherwise.
-    It names, never merges: whether two questions are one is the being's to say."""
+def _stem(t: str) -> str:
+    for suf in ("ing", "ed", "es", "s"):
+        if len(t) > len(suf) + 3 and t.endswith(suf):
+            return t[:-len(suf)]
+    return t
+
+
+def _subject_terms(text: str) -> Dict[str, str]:
+    """{term: the word it came from}. A hyphenated name gives its parts, so 'sprout-seat' meets 'sprout seat',
+    and a word loses a plain ending, so 'restarted' meets 'restart'.
+
+    MEASURED ON SPROUT, 2026-11-09. It settled s100 "Is the sprout seat running? How do I check if it's alive?"
+    -> "NOT a long-running service ... each message triggers a fresh session" at 20:10Z on 11-07, and s101 "Is
+    sprout-seat running?" -> "No — pgrep returns nothing" at 22:46Z. relevance's terms scored that pair 0.0:
+    'sprout-seat' was one word, so the receipt for s101 named nothing, and both were shown as unrelated every
+    beat after. Over the next two days it settled the seat dead or restartable in 5 more entries, worded 5 ways.
+    With these terms, 9 of its 10 seat entries are linked at CLOSE_AT and nothing else is; across all 111
+    questions in its settled log, 4 of 404 links joined two subjects."""
+    from sage.gateway.home_recall import _terms
+    out: Dict[str, str] = {}
+    for t in _terms(_unnamed(text)):
+        parts = [x for x in re.split(r"[-_/.]", t) if x]
+        for x in (parts if len(parts) > 1 else [t]):
+            x = _stem(x.strip("'"))
+            if len(x) > 1 and x not in ("it", "its"):
+                out.setdefault(x, t)
+    return out
+
+
+def _closeness(questions: List[str]):
+    """score(query_terms, i): relevance's idf overlap over these questions, where the parts of one name count
+    as one shared word (two parts of 'sprout-claude' are not two things in common)."""
+    groups = [_subject_terms(q) for q in questions]
+    df: Dict[str, int] = {}
+    for g in groups:
+        for t in g:
+            df[t] = df.get(t, 0) + 1
+    n = len(groups)
+
+    def idf(t: str) -> float:
+        return math.log((n + 1) / (df[t] + 0.5)) if t in df else math.log(n + 1.5)
+
+    def score(q: Dict[str, str], i: int) -> float:
+        d = groups[i]
+        shared = set(q) & set(d)
+        words = len({q[t] for t in shared})
+        if not shared or words < min(2, len(set(q.values())), len(set(d.values()))):
+            return 0.0
+        den = min(sum(idf(t) for t in q), sum(idf(t) for t in d)) or 1.0
+        return sum(idf(t) for t in shared) / den
+
+    return groups, score
+
+
+def _close_all(entries: List[dict], question: str, limit: int = 3) -> List[dict]:
+    """Existing entries whose question reads like this one, at or over CLOSE_AT, closest first (newer first on
+    a tie). It names, never merges: whether two questions are one is the being's to say."""
     if not entries:
-        return None
+        return []
     try:
-        from sage.gateway.relevance import Ranker
-        rk = Ranker([_unnamed(e["question"]) for e in entries])
-        hits = rk.related(_unnamed(question), CLOSE_AT)
+        _, score = _closeness([e["question"] for e in entries])
+        q = _subject_terms(question)
+        hits = [(score(q, i), i) for i in range(len(entries))]
     except Exception:
-        return None
-    return entries[hits[0][1]] if hits else None
+        return []
+    hits = sorted((h for h in hits if h[0] >= CLOSE_AT), key=lambda h: (-h[0], -h[1]))
+    return [entries[i] for _, i in hits[:limit]]
+
+
+def _close_to(entries: List[dict], question: str) -> Optional[dict]:
+    """The existing entry whose question reads most like this one, at or over CLOSE_AT; None otherwise."""
+    hits = _close_all(entries, question, 1)
+    return hits[0] if hits else None
+
+
+def _neighbours(entries: List[dict]) -> Dict[str, List[str]]:
+    """{id: ids of the other entries whose question reads close to its own}, for the beat's block."""
+    if len(entries) < 2:
+        return {}
+    try:
+        groups, score = _closeness([e["question"] for e in entries])
+    except Exception:
+        return {}
+    out: Dict[str, List[str]] = {}
+    for i, e in enumerate(entries):
+        near = [entries[j]["id"] for j in range(len(entries)) if j != i and score(groups[i], j) >= CLOSE_AT]
+        if near:
+            out[e["id"]] = near
+    return out
 
 
 def _commit(instance, entries: List[dict], nxt: int, log: dict, now, ok_msg: str) -> Tuple[bool, str]:
@@ -288,9 +380,9 @@ def _commit(instance, entries: List[dict], nxt: int, log: dict, now, ok_msg: str
     return True, ok_msg
 
 
-def _short(e: dict, cap: int) -> str:
+def _short(e: dict, cap: int, near: Optional[Dict[str, List[str]]] = None) -> str:
     """An entry as its id, question and day only, the question cut to fit `cap`."""
-    pre, tail = f"[{e['id']}] ", f" (settled {str(e.get('at', ''))[:10]})"
+    pre, tail = f"[{e['id']}{_near(e, near)}] ", f" (settled {str(e.get('at', ''))[:10]})"
     q, room = _flat(e["question"]), max(cap - len(pre) - len(tail), 8)
     return pre + (q if len(q) <= room else q[:room - 1].rstrip() + "…") + tail
 
@@ -306,19 +398,26 @@ def render(instance) -> str:
         return f"## What you have settled\n({err})"
     if not entries:
         return ""
+    near = _neighbours(entries)
     head = ("## What you have settled (your own conclusions, newest first, each with the day you settled "
             "it. Settle a question again to change its answer; reopen one with its id and reopen='true')")
+    if near:
+        # THE BLOCK SHOWED TWO ANSWERS TO ONE SUBJECT AS UNRELATED (sprout-being, 11-07..09: 11 entries on
+        # whether its seat was alive, 2 of them true). It says which read alike; which holds stays the being's.
+        head += ("\n(\u2248 after an id names the newest other entries whose question reads like this one's: "
+                 "[s7 \u2248s9,s4] reads close to s9 and s4, and +N counts the rest. Their answers may agree or "
+                 "not; the day on each says which came later.)")
     foot = "- (entries shown without an answer: settle with no arguments shows them whole)"
     newest = list(reversed(entries))
     # room for the newest whole, then an equal share for each of the rest
-    rest = RENDER_CHARS - len(head) - len(foot) - 2 - (len(_line(newest[0], RENDER_ENTRY_CHARS)) + 3)
+    rest = RENDER_CHARS - len(head) - len(foot) - 2 - (len(_line(newest[0], RENDER_ENTRY_CHARS, near)) + 3)
     short_cap = rest // max(len(newest) - 1, 1) - 3
-    shorts = ["- " + _short(e, min(short_cap, RENDER_ENTRY_CHARS)) for e in newest]
+    shorts = ["- " + _short(e, min(short_cap, RENDER_ENTRY_CHARS), near) for e in newest]
     reserve = sum(len(x) + 1 for x in shorts)
     lines, used, cut = [], len(head), 0
     for e, short in zip(newest, shorts):
         reserve -= len(short) + 1
-        full = "- " + _line(e, RENDER_ENTRY_CHARS)
+        full = "- " + _line(e, RENDER_ENTRY_CHARS, near)
         room = RENDER_CHARS - (len(foot) + 1 if cut or reserve else 0)
         if not lines or (not cut and used + len(full) + 1 + reserve <= room):
             ln = full

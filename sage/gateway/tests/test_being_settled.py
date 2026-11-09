@@ -292,3 +292,61 @@ def test_a_full_list_names_what_to_reopen_and_never_advises_folding(tmp_path):
     ok, msg, _ = _s(tmp_path, question="What colour is the sky at dusk?", answer="b")
     assert not ok and "fold" not in msg and "settling that id with a new answer" not in msg
     assert "reopen" in msg and "s1 (" in msg and "different question" in msg, msg
+
+
+def test_a_hyphenated_name_and_its_spaced_spelling_read_close_and_the_receipt_quotes_the_earlier_answer(tmp_path):
+    # sprout-being 11-07: s100 "Is the sprout seat running? How do I check if it's alive?" -> "NOT a long-running
+    # service", then s101 "Is sprout-seat running?" -> "No — pgrep returns nothing", 2.5 h later. 'sprout-seat'
+    # was one word, so they scored 0.0 and the receipt for s101 named nothing.
+    _s(tmp_path, question="Is the test gizmo running? How do I check if it's alive?",
+       answer="it is not a long-running service; each message wakes a fresh one")
+    _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    ok, msg, _ = _s(tmp_path, question="Is test-gizmo running?", answer="no, pgrep returns nothing")
+    assert ok and "reads close to s1" in msg
+    assert "s1 (settled 1970-01-01) says 'it is not a long-running service" in msg, msg
+    assert "reopen s3, then settle id=s1" in msg
+    assert len(st.read(tmp_path)[0]) == 3, "named, never merged"
+
+
+def test_a_word_and_its_plain_ending_read_close(tmp_path):
+    _s(tmp_path, question="How to restart the gizmo daemon without sudo?", answer="there is no way")
+    ok, msg, _ = _s(tmp_path, question="Can the gizmo daemon be restarted without sudo privileges?", answer="yes")
+    assert ok and "reads close to s1" in msg
+
+
+def test_the_two_parts_of_one_name_are_one_shared_word(tmp_path):
+    # in sprout's settled log, 'sprout-claude' split into two shared words linked "Did sprout-claude run
+    # check-video.py?" to "How can sprout-claude be restarted?"
+    _s(tmp_path, question="How can gizmo-daemon be restarted?", answer="it cannot")
+    ok, msg, _ = _s(tmp_path, question="Did gizmo-daemon read the lamp file?", answer="yes")
+    assert ok and "reads close" not in msg, msg
+
+
+def test_every_beat_marks_entries_that_read_close_and_leaves_the_rest_unmarked(tmp_path):
+    _s(tmp_path, question="Is the test gizmo running? How do I check if it's alive?", answer="yes, it wakes per message")
+    _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    _s(tmp_path, question="Is test-gizmo running?", answer="no")
+    shown = st.render(tmp_path)
+    assert "[s3 ≈s1] Is test-gizmo running?" in shown, shown
+    assert "[s1 ≈s3] Is the test gizmo running?" in shown
+    assert "[s2] what colour" in shown
+    assert "≈ after an id" in shown, "the block says once what the mark means"
+    assert "[s3 ≈s1]" in st.listing(tmp_path)
+    # nothing reads close: no mark, no explanation
+    other = tmp_path / "other"
+    other.mkdir()
+    _s(other, question="what colour is the test sky?", answer="blue")
+    _s(other, question="how loud is the test fan?", answer="quiet")
+    assert "≈" not in st.render(other)
+
+
+def test_the_mark_names_the_newest_three_and_counts_the_rest(tmp_path):
+    # among other subjects, as on sprout (10 of 23 entries on its seat): rarity weighting fades a subject that
+    # is the whole list
+    for q in ("what colour is the test sky?", "how loud is the test fan?", "where is the lamp file kept?",
+              "what does listening mean here?", "which port does the hub use?"):
+        _s(tmp_path, question=q, answer="x")
+    for w in ("now", "without sudo", "when it dies", "from a script", "after the guard"):
+        _s(tmp_path, question=f"how to restart the gizmo daemon {w}?", answer="no")
+    shown = st.render(tmp_path)
+    assert "[s6 ≈s10,s9,s8+1]" in shown, shown
