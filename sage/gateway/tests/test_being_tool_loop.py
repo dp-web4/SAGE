@@ -1347,7 +1347,23 @@ def test_one_utterance_per_conversation_per_turn():
     assert [a["text"][:12] for _, a in c.calls] == ["Hi dp. I wan"], "only the first reaches the dispatcher"
     held = [env for _, env in r.trace[1:]]
     assert all(not e.ok and e.note == "one_per_conversation" and "already spoke in 'dp'" in e.error for e in held)
+    # the scope comes first, inside the reflect record's 200-char cut (cbp on #668)
+    assert all(e.error.startswith("not sent: one say or speak per conversation per turn (request_run and other acts do "
+                                  "not count)") for e in held)
     assert [d["rule"] for d in r.duplicates] == ["one_per_conversation_per_turn"] * 2, "recorded, never silent"
+
+
+def test_a_second_speak_in_a_turn_gets_the_same_scoped_refusal():
+    # cbp's and McNugget's reviews of #673: speak counts for the room conversation, and the refusal says so
+    c = _Recorder()
+    outs = [{"content": "", "intents": [BeingIntent("speak", {"text": "first words aloud"})]},
+            {"content": "", "intents": [BeingIntent("speak", {"text": "second words aloud"})]},
+            {"content": "done", "intents": []}]
+    r = run_tool_turn(c, lambda convo: outs.pop(0), [], max_steps=3)
+    assert [e for e, _ in c.calls] == ["speak"]
+    held = [env for _, env in r.trace[1:]]
+    assert held and all(e.error.startswith("not sent: one say or speak per conversation per turn") and
+                        "already spoke in 'room'" in e.error for e in held), held
 
 
 def test_other_conversations_and_other_acts_are_untouched():

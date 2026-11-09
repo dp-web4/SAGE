@@ -330,3 +330,7 @@ sage/instances/*/journal.md
 # being records are private). This line lived only as an uncommitted edit in the live tree until
 # 2026-09-26, when the tree was cleaned back to main; landed here so it is not lost.
 sage/instances/*/journal/
+
+# CBP's legacy home remains live pending its move to cbp-being/. Ignore new files
+# here too; this does not untrack existing historical files or their modifications.
+sage/instances/cbp-qwen3.8-distill-4b/

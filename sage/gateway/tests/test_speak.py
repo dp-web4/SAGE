@@ -86,16 +86,17 @@ def test_an_overlong_utterance_is_refused_whole_not_truncated(monkeypatch):
 
 
 def test_a_shell_command_is_not_played_and_the_refusal_says_speaking_runs_nothing(monkeypatch):
-    # sprout-being 2026-10-14 spoke these seven times through its headset, and then treated the
-    # sudo line as applied. Nothing opens, nothing plays, and the receipt names the real door.
+    # sprout-being 2026-10-14 spoke commands of these shapes seven times through its headset, and
+    # then treated a root command as applied. Nothing opens, nothing plays, and the receipt names the real door.
     played = []
     d, home, calls = _dispatcher(monkeypatch, played)
-    for cmd in ("sudo usermod -aG video $USER && sudo systemctl restart systemd-udisks2.service",
-                "python3 scratch/test-cv2-video1.py 2>&1 | tee /tmp/cv2-output.txt",
+    for cmd in ("sudo usermod -aG dialout $USER && sudo systemctl restart gizmo.service",
+                "python3 scratch/lamp.py 2>&1 | tee /tmp/lamp-output.txt",
                 "Done; sudo reboot"):
         env = d._do_speak(BeingIntent("speak", {"text": cmd}))
         assert not env.ok and env.error.startswith("Not said aloud: this reads as a shell command")
         assert "runs nothing" in env.error and "request_run" in env.error
+        assert "decides and answers" not in env.error, "no promise of an answer (#673 reviews)"
     assert played == [] and calls == [] and not os.path.exists(os.path.join(home, "spoken.jsonl"))
 
 

@@ -677,8 +677,8 @@ def test_a_run_that_reports_on_this_machine_is_told_the_sandbox_cannot_see_it():
     said = "describes the sandbox"
     for out in ("Failed to connect to bus: No medium found",
                 "System has not been booted with systemd as init system (PID 1). Can't operate.",
-                "port 7711 is closed", "ConnectionRefusedError: [Errno 111] Connection refused",
-                "The Hestia daemon is not running", "hestia.service: inactive (dead)"):
+                "port 8080 is closed", "ConnectionRefusedError: [Errno 111] Connection refused",
+                "the example service is not running", "hestia.service: inactive (dead)"):
         note = _run_note(1, "", ["t.py"], out)
         assert said in note and "not evidence that a service on this machine is down, or that it is up" in note, out
         # NOVA's review of #609: a false negative is never corrected with an unproven positive.
@@ -693,8 +693,8 @@ def test_a_run_that_reports_on_this_machine_is_told_the_sandbox_cannot_see_it():
 
 
 def test_the_daemon_answered_note_is_evidence_only_and_names_the_action():
-    """cbp-being 2026-11-01: _host_note alone ("not evidence either way") lost to its own script's
-    "The Hestia daemon is NOT running". The run's action id is a real answer from the daemon, issued
+    """cbp-being 2026-11-01: _host_note alone, which says a probe is evidence neither way, lost to a line
+    its own script printed saying the daemon was down. The run's action id is a real answer from the daemon, issued
     before the run executed; the note says that and claims nothing later or wider (NOVA on #609)."""
     from sage.gateway.hestia_dispatch import _daemon_answered_note
     note = _daemon_answered_note("652a0df6-9f71-4b57-948a-fecc6d456929")
@@ -706,7 +706,7 @@ def test_the_daemon_answered_note_is_evidence_only_and_names_the_action():
 @needs_sandbox
 def test_a_run_that_reports_on_the_host_carries_the_daemons_answer(tmp_path):
     d, home = _run_dispatcher(tmp_path)
-    (home / "scratch" / "probe.py").write_text("print('Port 7711 is CLOSED. The Hestia daemon is NOT running.')\n")
+    (home / "scratch" / "probe.py").write_text("print('Port 8080 is closed. The example service is not running.')\n")
     r = d._do_run(BeingIntent("run", {"path": "scratch/probe.py"}))
     assert r.ok, r.error
     assert "not evidence that a service on this machine is down" in r.result["note"]
@@ -870,14 +870,14 @@ def _seat_home(home, last_ts="2026-11-08T21:32:38Z"):
 
 
 def test_a_run_that_reports_on_the_seat_is_told_when_the_seat_last_wrote(tmp_path):
-    """sprout-being 11-08: its own probe printed "sprout-claude is NOT running. Try: systemctl restart
-    sprout-seat" five times, each receipt said only "not evidence either way", and it held the seat dead for a
-    day while the seat answered it every few hours. The receipt now carries when the seat last wrote."""
+    """sprout-being 11-08: a probe of its own printed five times that its seat was not running, each receipt carried
+    only _host_note, and it held the seat dead for a day while the seat answered it every few
+    hours. The receipt now carries when the seat last wrote."""
     from datetime import datetime, timezone
     from sage.gateway.hestia_dispatch import _seat_wrote_note
     _seat_home(tmp_path)
     at = datetime(2026, 11, 8, 22, 30, 57, tzinfo=timezone.utc).timestamp()
-    probe = "check-sprout-running.py\n✗ test-seat is NOT running.\n  Try: systemctl restart sprout-seat"
+    probe = "check-gizmo.py\ntest-seat: no such process"
     note = _seat_wrote_note(tmp_path, "test-seat", probe, at)
     assert note.startswith("One fact from your own records: test-seat last wrote to you at 2026-11-08T21:32Z")
     assert "(seq 2)" in note and "58 min before this run began" in note, note
@@ -886,13 +886,13 @@ def test_a_run_that_reports_on_the_seat_is_told_when_the_seat_last_wrote(tmp_pat
     # a turn written while the run was going is after it began, and the note says so
     during = datetime(2026, 11, 8, 21, 22, 38, tzinfo=timezone.utc).timestamp()
     assert "10 min after this run began" in _seat_wrote_note(tmp_path, "test-seat", probe, during)
-    # the word seat is enough (sprout-seat), and a run that does not name the seat gets nothing
-    assert _seat_wrote_note(tmp_path, "test-seat", "pgrep -f sprout-seat: nothing", at)
+    # the word seat is enough (lamp-seat), and a run that does not name the seat gets nothing
+    assert _seat_wrote_note(tmp_path, "test-seat", "pgrep -f lamp-seat: nothing", at)
     assert _seat_wrote_note(tmp_path, "test-seat", "Failed to connect to bus: hestia.service", at) == ""
     assert _seat_wrote_note(tmp_path, "test-seat", "the seated reader", at) == ""
     # no seat, or a seat that never wrote: nothing
     assert _seat_wrote_note(tmp_path, "", probe, at) == ""
-    assert _seat_wrote_note(tmp_path, "other-seat", "other-seat is NOT running", at) == ""
+    assert _seat_wrote_note(tmp_path, "other-seat", "other-seat: no such process", at) == ""
 
 
 def test_the_seat_note_counts_days_hours_and_seconds():
@@ -906,23 +906,24 @@ def test_a_run_reporting_on_the_seat_carries_its_last_turn_and_a_plain_run_does_
     d, home = _run_dispatcher(tmp_path)
     _seat_home(home)
     d._seat_conversation = lambda: "test-seat"
-    (home / "scratch" / "probe.py").write_text("print('test-seat is NOT running. Try: systemctl restart it')\n")
+    (home / "scratch" / "probe.py").write_text("print('test-seat: no such process')\n")
     r = d._do_run(BeingIntent("run", {"path": "scratch/probe.py"}))
     assert r.ok, r.error
     assert "test-seat last wrote to you at 2026-11-08T21:32Z (seq 2)" in r.result["note"], r.result["note"]
-    (home / "scratch" / "plain.py").write_text("print('Port 7711 is CLOSED.')\n")
+    (home / "scratch" / "plain.py").write_text("print('Port 8080 is closed.')\n")
     r = d._do_run(BeingIntent("run", {"path": "scratch/plain.py"}))
     assert r.ok and "last wrote to you" not in r.result["note"], r.result["note"]
 
 
 def test_a_long_gap_says_the_seat_may_be_away_not_that_the_probe_is_right(tmp_path):
-    """legion's review of #663: "46 h before this run began" beside "NOT running. Try: systemctl restart" reads
-    as agreement. Past SEAT_QUIET_S the note says a quiet seat may be away, with nothing to restart."""
+    """legion's review of #663: "46 h before this run began" beside a probe's own line telling the being to
+    restart the seat reads as agreement. Past SEAT_QUIET_S the note says a quiet seat may be away, with nothing
+    to restart."""
     from datetime import datetime, timezone
     from sage.gateway.hestia_dispatch import SEAT_QUIET_S, _seat_wrote_note
     _seat_home(tmp_path)
     t = datetime(2026, 11, 8, 21, 32, 38, tzinfo=timezone.utc).timestamp()
-    probe = "test-seat is NOT running. Try: systemctl restart"
+    probe = "test-seat: no such process"
     short = _seat_wrote_note(tmp_path, "test-seat", probe, t + SEAT_QUIET_S - 60)
     long_ = _seat_wrote_note(tmp_path, "test-seat", probe, t + 46 * 3600)
     assert "away, not stuck" not in short and short.endswith('"test-seat".')

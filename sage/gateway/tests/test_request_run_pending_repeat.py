@@ -22,15 +22,15 @@ def _seat_home():
 def test_a_repeat_while_waiting_names_the_first_ask_and_is_marked_for_the_seat():
     d, home = _seat_home()
     r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
-    assert r.ok and "already_asked" not in r.result
+    assert r.ok and "same_request_note" not in r.result
     first = conv.recent(home, "seat", limit=1)[-1]["seq"]
     r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
-    assert r.ok and f"seq {first}" in r.result["already_asked"] and "not answered" in r.result["already_asked"]
-    assert "minute" in r.result["already_asked"] and "unchanged" not in r.result
+    assert r.ok and f"seq {first}" in r.result["same_request_note"] and "not answered" in r.result["same_request_note"]
+    assert "minute" in r.result["same_request_note"] and "unchanged" not in r.result
     assert f"SAME AS the request at seq {first}" in conv.recent(home, "seat", limit=1)[-1]["text"]
     # a third ask still points at the first one, and counts
     r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "and again"}), _ALLOW)
-    assert f"seq {first}" in r.result["already_asked"] and "1 more time" in r.result["already_asked"]
+    assert f"seq {first}" in r.result["same_request_note"] and "1 more time" in r.result["same_request_note"]
     assert "asked 3 times" in conv.recent(home, "seat", limit=1)[-1]["text"]
 
 
@@ -47,7 +47,7 @@ def test_after_the_seat_answers_it_is_unchanged_not_pending():
     conv.append(home, "seat", speaker="seat", via="seat",
                 text=f"[request_run] Ran notes/probe.py: prints a.\n\nAnswers your request seq {asked}.")
     r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "third"}), _ALLOW)
-    assert "unchanged" in r.result and "already_asked" not in r.result
+    assert "unchanged" in r.result and "same_request_note" not in r.result
 
 
 def test_an_answer_older_than_the_quiet_window_still_answers_the_repeat(monkeypatch):
@@ -64,7 +64,7 @@ def test_an_answer_older_than_the_quiet_window_still_answers_the_repeat(monkeypa
     for i in range(6):
         conv.append(home, "seat", speaker="seat", via="seat", text=f"unrelated {i}")
     r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
-    assert "already_asked" not in r.result, r.result
+    assert "same_request_note" not in r.result, r.result
     assert f"the seat answered that at seq {asked + 1} (" in r.result["unchanged"]
     assert " ago): it did not run it" in r.result["unchanged"], "the answer's age is shown"
     assert "It restarts things." in r.result["unchanged"], "the reason is carried, not pointed at"
@@ -87,7 +87,7 @@ def test_an_answer_before_the_answer_scan_is_not_reported_as_not_answered_yet(mo
     d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
     second = conv.recent(home, "seat", limit=1)[-1]["seq"]
     r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "and again"}), _ALLOW)
-    said = r.result["already_asked"]
+    said = r.result["same_request_note"]
     assert f"seq {second}" in said and "not answered it yet" not in said
     assert "in the last 6 turns of 'seat'" in said and "older turns were not checked" in said
     assert "not answered in the last 6 turns" in conv.recent(home, "seat", limit=1)[-1]["text"]
@@ -98,7 +98,7 @@ def test_a_short_conversation_still_says_not_yet():
     d, home = _seat_home()
     d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
     r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
-    assert "has not answered it yet" in r.result["already_asked"] and "last 80" not in r.result["already_asked"]
+    assert "has not answered it yet" in r.result["same_request_note"] and "last 80" not in r.result["same_request_note"]
 
 
 def test_a_different_file_or_an_edit_is_a_new_request():
@@ -106,7 +106,7 @@ def test_a_different_file_or_an_edit_is_a_new_request():
     d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
     (home / "notes" / "probe.py").write_text("print('b')\n")
     r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "edited"}), _ALLOW)
-    assert "already_asked" not in r.result
+    assert "same_request_note" not in r.result
 
 
 def test_a_seat_quiet_through_the_beings_asks_is_named_on_the_receipt(monkeypatch):
@@ -284,3 +284,53 @@ def test_under_a_pause_or_a_refused_mesh_no_note_says_no_wake_is_coming():
             FakeMcp.fail = {}
         n = r.result["note"]
         assert "tried again on your next message" in n and "rerun" not in n, (cfg, n)
+
+
+def test_the_same_request_note_is_a_note_not_a_limit_and_its_count_decides_nothing():
+    # cbp and legion on #668: the note leads with its scope, says its count decides nothing, and promises no answer
+    d, home = _seat_home()
+    d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
+    said = r.result["same_request_note"]
+    assert said.startswith("A note, not a limit, and its count decides nothing:") and "answers once" not in said, said
+    assert "covers every copy of this request" in said and "Nothing about this request is decided" in said, said
+    # the seat-conversation line carries the same count, and says the same
+    d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "a third time"}), _ALLOW)
+    assert "(asked 3 times now; the count decides nothing)." in conv.recent(home, "seat", limit=1)[-1]["text"]
+    assert "nothing stops you" not in said, "no encouragement to ask again (cbp on #668)"
+    # and it survives the reflect record's 240-char cut of an ok result (cbp on #668)
+    from sage.gateway.heartbeat import _record_line
+    from sage.gateway.being_gate_client import BeingIntent as _BI
+    line = _record_line(_BI("request_run", {"path": "notes/probe.py", "why": "again"}), r)
+    assert "A note, not a limit" in line, line
+
+
+def test_a_woken_receipt_promises_no_answer():
+    # legion on #668: "either way it answers" promised a reply the wake does not guarantee
+    d, home = _seat_home()
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+    n = r.result["note"]
+    assert "asked and woken" in n and "either way it answers" not in n, n
+    assert "an answer, when one comes, is in 'seat'" in n, n
+
+
+def test_the_request_run_tool_and_its_hints_promise_no_answer():
+    # legion and cbp on #673: the tool description every being is offered said the seat "answers with the real
+    # output", next to receipts that no longer promise one
+    from sage.gateway import being_gate_client as bgc
+    desc = bgc._TOOL_SCHEMAS["request_run"][0]
+    assert "answers with the real output" not in desc and "it will say why" not in desc, desc
+    assert "the seat decides whether to run it" in desc and "when the seat is there to give them" in desc
+    src = open(bgc.__file__).read()
+    assert "the seat runs it and answers" not in src
+
+
+def test_the_request_line_promises_no_answer_and_keeps_its_identity():
+    # the words after the digest changed; _REQUEST_SOURCE_HEADER pins only "(N bytes, sha256:HEX; ...)"
+    d, home = _seat_home()
+    d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+    sent = conv.recent(home, "seat", limit=1)[-1]["text"]
+    assert "its answer, if any, comes here)" in sent and "answers here" not in sent, sent
+    assert conv._request_key(sent) is not None, "the request still has its identity"
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
+    assert "same_request_note" in r.result, "a repeat is still recognised as the same request"

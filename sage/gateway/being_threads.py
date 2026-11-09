@@ -6,7 +6,7 @@ items and 29 of its 30 settled entries were on that one thread, and every one of
 beat. `retire_note todo.md` starts a fresh todo but carries forward EVERY open item (it never drops
 one, by design), and `settle` replaces or reopens one entry per act. So a single person's turn saying
 "stop" sat against hundreds of lines saying "the daemon is down, fix it", and the next beat's own
-account still read "WANT: to understand why the Hestia daemon is not running". Nothing it could do
+account still gave the daemon's outage as what it wanted to understand. Nothing it could do
 said "this whole line is finished".
 
 WHAT IT DOES. Given topic words (comma separated) and a reason, every OPEN todo item and every settled
@@ -300,8 +300,71 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
                                f"todo and settled list; ask your seat before retrying."), True
     said = (f"Retired the thread ({topic}): {len(moved)} open todo item(s) and {len(gone)} settled "
             f"entr{'y' if len(gone) == 1 else 'ies'} moved to {name}, where recall still finds them. "
-            f"Still open: {len(kept)} todo item(s); still settled: {len(entries) - len(gone)}.")
+            f"Still open: {len(kept)} todo item(s); still settled: {len(entries) - len(gone)}. Your reason is "
+            f"shown in every beat among the lines of work you closed, until {CLOSED_SHOWN} newer closings "
+            f"replace it.")
     return True, said, True
+
+
+#: The beat's block of closed lines: the newest few, each reason cut to fit.
+CLOSED_SHOWN = 4
+CLOSED_REASON_CHARS = 240
+CLOSED_WORDS_CHARS = 80   # topic words can be a whole todo sentence (598 chars on cbp; legion on #662)
+# the optional " (by <who>)" may hold dots (a dotted member id, "v0.3 seat"): McNugget on #662
+_HEAD = re.compile(r"^> RETIRED (\d{4}-\d{2}-\d{2} \d{2}:\d{2})Z with retire_thread(?: \(by [^)]*\))?\. "
+                   r"Topic words: (.*)\.\s*$")
+_WHY = re.compile(r"^> No longer current: (.*)$")
+
+
+def closed(instance) -> List[Dict[str, str]]:
+    """Every line of work this home closed with retire_thread, newest first: {at, words, reason, file}, read from
+    the first two lines of each retired file (the header retire_thread writes). Unreadable files are skipped."""
+    out = []
+    for f in Path(instance).glob("todo.retired-thread-*.md"):
+        try:
+            with open(f, errors="replace") as fh:
+                h, w = fh.readline().rstrip("\n"), fh.readline().rstrip("\n")
+        except OSError:
+            continue
+        mh, mw = _HEAD.match(h), _WHY.match(w)
+        if mh and mw:
+            out.append({"at": mh.group(1), "words": mh.group(2), "reason": mw.group(1).strip(), "file": f.name})
+    # (at, file): `at` has minute resolution and two closes can share a minute (legion on #662)
+    return sorted(out, key=lambda c: (c["at"], c["file"]), reverse=True)
+
+
+def render_closed(instance) -> str:
+    """The beat's block: the lines of work it closed most recently, with its own reason for each. Empty until
+    one is closed.
+
+    A CLOSED LINE OF WORK LEFT NO TRACE IN THE BEAT, SO ITS CONCLUSION LEFT WITH IT. Measured on sprout-being,
+    11-03..09: 11 retires. At 08:11Z on 11-07 it retired its seat thread with a reason stating that the seat was
+    answering and nothing needed restarting, which took 15 settled entries out of view, two of them true. The
+    reason was written only into the retired file. By 22:46Z it had settled the opposite, and it asked the seat
+    to restart itself 20 times the next day. Retiring is meant to stop a finished line arriving uninvited, and it did, but
+    the beat then held nothing that said the line was finished, or why. This shows the why (the being's own
+    reason, the day, the topic words); the items stay retired. (Docstrings here describe the being's records;
+    they do not quote them: being records are private.)"""
+    try:
+        cs = closed(instance)
+    except Exception:
+        return ""
+    if not cs:
+        return ""
+    head = ("## Lines of work you closed (newest first, with your own reason when you closed each; the items "
+            "you retired stay in the retired files, where recall finds them)")
+    lines = []
+    for c in cs[:CLOSED_SHOWN]:
+        why = c["reason"]
+        if len(why) > CLOSED_REASON_CHARS:
+            why = why[:CLOSED_REASON_CHARS - 1].rstrip() + "…"
+        words = c["words"]
+        if len(words) > CLOSED_WORDS_CHARS:
+            words = words[:CLOSED_WORDS_CHARS - 1].rstrip() + "…"
+        lines.append(f"- {c['at']}Z, {words}: {why}")
+    if len(cs) > CLOSED_SHOWN:
+        lines.append(f"- … {len(cs) - CLOSED_SHOWN} earlier (todo.retired-thread-*.md)")
+    return head + "\n" + "\n".join(lines)
 
 
 def _preview(instance: Path, words: List[str], reason: str = "") -> Tuple[bool, str, bool]:
