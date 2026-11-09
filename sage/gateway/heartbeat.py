@@ -2949,6 +2949,15 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
         _known = ""
     if _known:
         parts.append(_known)
+    # What it has closed (being_threads.render_closed), beside what it has settled: a retired line of work
+    # takes its settled entries out of view, so its closing reason is the conclusion left standing. Fail-open.
+    try:
+        from sage.gateway import being_threads as _threads
+        _closed = _threads.render_closed(instance)
+    except Exception:
+        _closed = ""
+    if _closed:
+        parts.append(_closed)
     # Its files and runs, measured: also NOW, so beside the body and before every record that
     # narrates them (see files_and_runs). Fail-open: a measurement that errors adds nothing.
     try:

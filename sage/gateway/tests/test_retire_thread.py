@@ -309,3 +309,61 @@ def test_a_todo_write_failure_is_reported_as_possibly_partial(tmp_path, monkeypa
     assert not ok and changed and "may be partial" in msg and bt.archive_name(args) in msg
     assert (h / bt.archive_name(args)).exists() and (h / "todo.md").read_text() == TODO
 
+
+
+def test_a_closed_line_keeps_its_reason_in_every_beat_and_its_items_stay_retired(tmp_path):
+    # sprout-being 11-07 08:11Z: it retired its seat thread with "The seat is alive and answering ... No restart
+    # needed"; 15 settled entries left the beat, and so did that reason. By 22:46Z it had settled the opposite.
+    h = _home(tmp_path)
+    assert bt.render_closed(h) == "", "nothing closed, no block"
+    ok, msg, _ = _go(h, {"words": "widget, daemon", "reason": "The daemon is fine; it was never down."}, now=0)
+    # legion on #662: not "at the start of every beat" -- it follows the settled block and rotates out
+    assert ok and f"until {bt.CLOSED_SHOWN} newer closings replace it" in msg, msg
+    shown = bt.render_closed(h)
+    assert shown.startswith("## Lines of work you closed")
+    assert "widget, daemon: The daemon is fine; it was never down." in shown
+    assert "Is the widget daemon running?" not in shown, "the retired entries stay retired"
+    from sage.gateway.heartbeat import own_state
+    state = own_state(h, "sprout-being", body_reading={})
+    assert "The daemon is fine; it was never down." in state
+    assert state.index("## Lines of work you closed") > state.index("## What you have settled")
+
+
+def test_the_closed_block_shows_the_newest_few_and_counts_the_rest(tmp_path):
+    h = _home(tmp_path)
+    reasons = []
+    for i, w in enumerate(("lantern", "kettle", "compass", "teapot", "harbour")):
+        assert st.settle(h, {"question": f"Where is the {w}?", "answer": "here"}, now=0)[0]
+        reasons.append(f"closed number {i}")
+        ok, msg, _ = _go(h, {"words": w, "reason": reasons[-1]}, now=86400 * i)
+        assert ok and "1 settled entry" in msg, msg
+    shown = bt.render_closed(h)
+    lines = shown.splitlines()[1:]
+    assert len(lines) == bt.CLOSED_SHOWN + 1 and lines[-1].startswith("- … 1 earlier")
+    assert "closed number 4" in lines[0] and "closed number 0" not in shown, "newest first"
+
+
+def test_a_long_reason_is_cut_and_an_unreadable_retired_file_is_skipped(tmp_path):
+    h = _home(tmp_path)
+    _go(h, {"words": "widget", "reason": "x" * 500}, now=0)
+    (h / "todo.retired-thread-0123456789ab.md").write_text("not a retire header\n")
+    shown = bt.render_closed(h)
+    assert len(shown.splitlines()) == 2 and shown.endswith("…")
+
+
+def test_long_topic_words_are_cut_like_the_reason(tmp_path):
+    # legion on #662: cbp-being's longest topic words ran 598 chars, a whole todo sentence over its reason
+    h = _home(tmp_path)
+    words = "widget, " + ", ".join(f"topicword{i}" for i in range(30))
+    ok, msg, _ = _go(h, {"words": words, "reason": "short reason"}, now=0)
+    assert ok, msg
+    line = bt.render_closed(h).splitlines()[1]
+    assert "…: short reason" in line and len(line.split(": short reason")[0]) == len("- 1970-01-01 00:00Z, ") + bt.CLOSED_WORDS_CHARS, line
+
+
+def test_a_closing_by_a_dotted_name_is_still_shown(tmp_path):
+    # McNugget on #662: "[^.]*" before ". Topic words" hid any closing whose `by` held a dot
+    h = _home(tmp_path)
+    ok, msg, _ = bt.retire_thread(h, {"words": "installer", "reason": "done with it"}, by="seat.v0.3")
+    assert ok, msg
+    assert "installer: done with it" in bt.render_closed(h)
