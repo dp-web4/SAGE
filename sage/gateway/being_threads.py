@@ -6,7 +6,7 @@ items and 29 of its 30 settled entries were on that one thread, and every one of
 beat. `retire_note todo.md` starts a fresh todo but carries forward EVERY open item (it never drops
 one, by design), and `settle` replaces or reopens one entry per act. So a single person's turn saying
 "stop" sat against hundreds of lines saying "the daemon is down, fix it", and the next beat's own
-account still read "WANT: to understand why the Hestia daemon is not running". Nothing it could do
+account still gave the daemon's outage as what it wanted to understand. Nothing it could do
 said "this whole line is finished".
 
 WHAT IT DOES. Given topic words (comma separated) and a reason, every OPEN todo item and every settled

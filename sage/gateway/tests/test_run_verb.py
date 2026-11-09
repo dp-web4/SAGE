@@ -677,8 +677,8 @@ def test_a_run_that_reports_on_this_machine_is_told_the_sandbox_cannot_see_it():
     said = "describes the sandbox"
     for out in ("Failed to connect to bus: No medium found",
                 "System has not been booted with systemd as init system (PID 1). Can't operate.",
-                "port 7711 is closed", "ConnectionRefusedError: [Errno 111] Connection refused",
-                "The Hestia daemon is not running", "hestia.service: inactive (dead)"):
+                "port 8080 is closed", "ConnectionRefusedError: [Errno 111] Connection refused",
+                "the example service is not running", "hestia.service: inactive (dead)"):
         note = _run_note(1, "", ["t.py"], out)
         assert said in note and "not evidence that a service on this machine is down, or that it is up" in note, out
         # NOVA's review of #609: a false negative is never corrected with an unproven positive.
@@ -693,8 +693,8 @@ def test_a_run_that_reports_on_this_machine_is_told_the_sandbox_cannot_see_it():
 
 
 def test_the_daemon_answered_note_is_evidence_only_and_names_the_action():
-    """cbp-being 2026-11-01: _host_note alone ("not evidence either way") lost to its own script's
-    "The Hestia daemon is NOT running". The run's action id is a real answer from the daemon, issued
+    """cbp-being 2026-11-01: _host_note alone, which says a probe is evidence neither way, lost to a line
+    its own script printed saying the daemon was down. The run's action id is a real answer from the daemon, issued
     before the run executed; the note says that and claims nothing later or wider (NOVA on #609)."""
     from sage.gateway.hestia_dispatch import _daemon_answered_note
     note = _daemon_answered_note("652a0df6-9f71-4b57-948a-fecc6d456929")
@@ -706,7 +706,7 @@ def test_the_daemon_answered_note_is_evidence_only_and_names_the_action():
 @needs_sandbox
 def test_a_run_that_reports_on_the_host_carries_the_daemons_answer(tmp_path):
     d, home = _run_dispatcher(tmp_path)
-    (home / "scratch" / "probe.py").write_text("print('Port 7711 is CLOSED. The Hestia daemon is NOT running.')\n")
+    (home / "scratch" / "probe.py").write_text("print('Port 8080 is closed. The example service is not running.')\n")
     r = d._do_run(BeingIntent("run", {"path": "scratch/probe.py"}))
     assert r.ok, r.error
     assert "not evidence that a service on this machine is down" in r.result["note"]
@@ -910,7 +910,7 @@ def test_a_run_reporting_on_the_seat_carries_its_last_turn_and_a_plain_run_does_
     r = d._do_run(BeingIntent("run", {"path": "scratch/probe.py"}))
     assert r.ok, r.error
     assert "test-seat last wrote to you at 2026-11-08T21:32Z (seq 2)" in r.result["note"], r.result["note"]
-    (home / "scratch" / "plain.py").write_text("print('Port 7711 is CLOSED.')\n")
+    (home / "scratch" / "plain.py").write_text("print('Port 8080 is closed.')\n")
     r = d._do_run(BeingIntent("run", {"path": "scratch/plain.py"}))
     assert r.ok and "last wrote to you" not in r.result["note"], r.result["note"]
 
