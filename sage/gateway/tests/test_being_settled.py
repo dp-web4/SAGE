@@ -471,11 +471,11 @@ def test_a_true_rewording_refused_by_the_guard_has_a_route_that_works(tmp_path):
     _s(tmp_path, question="where does the lamp file live?", answer="notes/")
     ours = "Is test-gizmo running on the lamp host today?"
     ok, msg, _ = _s(tmp_path, question=ours, answer="it wakes per message, on the lamp host too")
-    assert ok and f"settle id=s1, question {held!r} word for word" in msg, msg
+    assert ok and f"settle id=s1, question \u00ab{held}\u00bb word for word" in msg, msg
     assert _s(tmp_path, id="s4", reopen="true")[0]
     ok, msg, _ = _s(tmp_path, id="s1", question=ours, answer="it wakes per message, on the lamp host too")
     assert not ok and "If it IS the same question, settle id=s1 with its question exactly as above" in msg, msg
-    assert repr(held) in msg, msg
+    assert f"\u00ab{held}\u00bb" in msg, msg
     ok, msg, _ = _s(tmp_path, id="s1", question=held, answer="it wakes per message, on the lamp host too")
     assert ok, msg
     kept = {e["id"]: e for e in st.read(tmp_path)[0]}
@@ -489,16 +489,16 @@ def test_a_question_at_its_longest_is_quoted_whole_where_it_is_to_be_copied(tmp_
     _s(tmp_path, question="what colour is the test sky?", answer="blue")
     _s(tmp_path, question="where does the lamp file live?", answer="notes/")
     ok, msg, _ = _s(tmp_path, id="s1", answer="still")
-    assert not ok and repr(held) in msg, msg
+    assert not ok and f"\u00ab{held}\u00bb" in msg, msg
     ok, msg, _ = _s(tmp_path, id="s1", question="Why is the sky lamp blue?", answer="still")
-    assert not ok and repr(held) in msg, msg
+    assert not ok and f"\u00ab{held}\u00bb" in msg, msg
     ok, msg, _ = _s(tmp_path, question="Is the test gizmo daemon alive on this host?", answer="yes")
-    assert ok and f"question {held!r} word for word" in msg, msg
+    assert ok and f"question \u00ab{held}\u00bb word for word" in msg, msg
     assert _s(tmp_path, id="s4", reopen="true")[0]
     for i in range(st.MAX_ENTRIES - 3):
         assert _s(tmp_path, question=f"filler {i} about lamps", answer="a")[0]
     ok, msg, _ = _s(tmp_path, question="Is the test gizmo daemon alive on this host?", answer="yes")
-    assert not ok and f"({held!r})" in msg, msg
+    assert not ok and f"(\u00ab{held}\u00bb)" in msg, msg
 
 
 def test_the_id_guard_refuses_a_different_name_or_number_and_admits_saying_less(tmp_path):
@@ -511,3 +511,17 @@ def test_the_id_guard_refuses_a_different_name_or_number_and_admits_saying_less(
                           ("Does /dev/video0 respond on the lamp host?", "Does /dev/video0 respond on the host?"),
                           ("Is the test gizmo running? How do I check if it's alive?", "Is test-gizmo running?")):
         assert st._same_question({"question": target}, given), (target, given)
+
+
+def test_a_question_with_quote_marks_or_a_backslash_is_copied_back_as_written(tmp_path):
+    # cbp's re-check of #661: repr() escaped the question to copy, and the copy was stored with backslashes
+    held = 'Does the "test" gizmo\'s path C:\\lamp work?'
+    _s(tmp_path, question=held, answer="yes")
+    ok, msg, _ = _s(tmp_path, id="s1", answer="still")
+    shown = msg.split("\u00ab", 1)[1].split("\u00bb", 1)[0]
+    assert shown == held, (shown, held)
+    ok, msg, _ = _s(tmp_path, id="s1", question=shown, answer="still yes")
+    assert ok and st.read(tmp_path)[0][0]["question"] == held, msg
+    # a copy that keeps the delimiters is the same question
+    ok, msg, _ = _s(tmp_path, id="s1", question="\u00ab" + held + "\u00bb", answer="yes again")
+    assert ok and st.read(tmp_path)[0][0]["question"] == held, msg

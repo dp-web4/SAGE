@@ -141,11 +141,26 @@ def _truthy(v: str) -> bool:
     return v.lower() in ("true", "yes", "1")
 
 
+def _copyable(q: str) -> str:
+    """A question shown to be copied back: between « and », as written. repr() escaped it, so a question
+    holding both quote marks or a backslash was copied back with backslashes and stored that way (cbp's re-check
+    of #661; a hub-fired sprout session's probe: 12 of 24 routes failed, 0 with this)."""
+    return f"«{q}»"
+
+
+def _uncopied(q: str) -> str:
+    """A question as the being sends it, without the « » a copy from a receipt may carry along."""
+    q = q.strip()
+    return q[1:-1].strip() if len(q) >= 2 and q[0] == "«" and q[-1] == "»" else q
+
+
 def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
     entries, nxt, err = read(instance)
     if err:
         return False, f"cannot change it: {err}. Your seat can look at it. Nothing was changed."
     why = a.get("why", "")[:WHY_MAX_CHARS]
+    if a.get("question"):
+        a = dict(a, question=_uncopied(a["question"]))
     target = None
     if a.get("id"):
         # the first token: an id copied from the block reads "[s3 ≈s1]" (cbp's review of #661)
@@ -188,7 +203,7 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
     if target is not None and a.get("answer") and not _truthy(a.get("reopen", "")):
         given = a.get("question", "")
         if not given:
-            return False, (f"{target['id']} holds the question {target['question']!r}. To change its answer, "
+            return False, (f"{target['id']} holds the question {_copyable(target['question'])}. To change its answer, "
                            f"settle id={target['id']} with that question and your new answer, so the answer stays "
                            "with the question it answers. If your answer answers a different question, settle it "
                            "as a new one: question and answer, without id. Nothing was changed.")
@@ -196,7 +211,7 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
             # THE ROUTE FOR A TRUE REWORDING, AND THE QUESTION WHOLE (cbp's replay on #661: about 18 of 26 new refusals
             # were true rewordings, and this refusal sent them round to the receipt that sent them here). A quote
             # cut short is not the question: copied, it can end mid-word and be refused too.
-            return False, (f"{target['id']} holds the question {target['question']!r}; yours, "
+            return False, (f"{target['id']} holds the question {_copyable(target['question'])}; yours, "
                            f"{given[:160]!r}, reads as a different question. If it IS the same question, settle "
                            f"id={target['id']} with its question exactly as above. If not, settle yours as a new "
                            f"one (question and answer, without id), or reopen {target['id']} first if it no longer "
@@ -234,7 +249,7 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                        "different question: every beat reads a settled answer as the answer to its question."
                        # "THE ANSWER THAT HOLDS", AS IN THE RECEIPT (legion on #661): followed literally at the cap,
                        # "your newest answer" replaced s30's true answer with the false one on the s100/s101 shape
-                       + (f" This reads close to {close['id']} ({close['question']!r}), which says "
+                       + (f" This reads close to {close['id']} ({_copyable(close['question'])}), which says "
                           f"{_flat(close.get('answer', ''))[:200]!r} (settled {str(close.get('at', ''))[:10]}): if "
                           f"they are the same question, settle id={close['id']} with that question and the answer "
                           "that holds." if close else ""))
@@ -253,7 +268,7 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
         # s100/s101 shape, "settle id=s1 with your newest answer" replaced the true entry with the false one
         msg += (f" It reads close to {close['id']} ({close['question'][:120]!r}). Your earlier "
                 f"answer{'s' if len(near) > 1 else ''}: {said}. If they are the same question, keep one: reopen "
-                f"{new['id']}, then settle id={close['id']}, question {close['question']!r} word for word, with the "
+                f"{new['id']}, then settle id={close['id']}, question {_copyable(close['question'])} word for word, with the "
                 "answer that holds. If they differ, both stay, and each beat marks them with \u2248.")
     return ok, msg
 
