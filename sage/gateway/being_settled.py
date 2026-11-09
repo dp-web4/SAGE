@@ -297,7 +297,8 @@ def _subject_terms(text: str) -> Dict[str, str]:
     'sprout-seat' was one word, so the receipt for s101 named nothing, and both were shown as unrelated every
     beat after. Over the next two days it settled the seat dead or restartable in 5 more entries, worded 5 ways.
     With these terms, 9 of its 10 seat entries are linked at CLOSE_AT and nothing else is; across all 111
-    questions in its settled log, 4 of 404 links joined two subjects."""
+    questions in its settled log, at least 16 of 460 links join two subjects (a floor: the links between two
+    seat-worded questions were not audited)."""
     from sage.gateway.home_recall import _terms
     out: Dict[str, str] = {}
     for t in _terms(_unnamed(text)):
@@ -373,16 +374,19 @@ def _asks(q: str) -> str:
 def _same_question(target: dict, given: str) -> bool:
     """Whether `given` restates `target`'s question, so `id=` may put an answer under it. Two tests, both by
     the question's own words: the kind of question it opens with (how, when, which, yes/no ...) must not differ,
-    and one side's terms must hold the other's (a rewording may say less, or more, but not both).
+    and the new wording's terms must be among the old one's (a rewording may say less, not more).
 
     NOT THE NAMING SCORE, AND STRICTER THAN MAIN (reviews of #661 by cbp, legion and McNugget, and a hub-fired
     sprout session's table). A false admit takes the old answer out of the beat; a false refusal costs one
     retry, and the refusal says how. On main, against cbp-being's s10 "When should I escalate a scope
     request?", "When does a scope request expire?" was ADMITTED (only the plural was refused, for want of
     stemming), and no threshold on a one-entry corpus separates it from a true rewording (both 0.51). Over the
-    506 ordered pairs of sprout's live list this admits 2 (s100/s101, one name spelled two ways); main's
+    506 ordered pairs of sprout's live list this admits 1 (s101's wording under s100, one name spelled two ways); main's
     predicate admitted 9. It still refuses some true rewordings ("scope request escalation timing?", "Can the
-    lamp ... be reached?" for "Is the lamp accessible ...?"), which the being restates or settles anew."""
+    lamp ... be reached?" for "Is the lamp accessible ...?"), which the being restates or settles anew. And
+    saying less cannot tell a dropped qualifier from a dropped filler word: "Is the seat running?" is admitted
+    under "Is the seat running on legion?" (a hub-fired sprout session on #661), the price of letting the
+    s100/s101 respelling through."""
     ka, kb = _asks(target["question"]), _asks(given)
     if ka and kb and ka != kb:
         return False   # how vs whether, when vs which: the question word is the question
