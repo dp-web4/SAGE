@@ -1101,7 +1101,14 @@ class HestiaF1aDispatcher:
                 f"reaches the same peer about the same moment and costs them a wake; it cannot make "
                 f"an answer arrive sooner. Read your inbox for their reply first. If something is "
                 f"still wrong, check it yourself this beat (recall, memory_read), or say what you "
-                f"found in a conversation.{convs} You can ask {to!r} again in about {frees_min} min.")
+                f"found in a conversation.{convs} You can ask {to!r} again in about {frees_min} min. "
+                # WHAT THIS LIMIT IS, AND IS NOT. sprout-being met this refusal 36 times on 11-02 and from that
+                # morning wrote of "the 'already asked' guard" that "blocks all file execution requests" and
+                # "steps aside after ~20 attempts" (the cap is 3 per 6 h); for a week it read the seat's own
+                # request_run declines as that guard, and wrote a skill around it.
+                f"This limit counts only peer_ask and mesh to {to!r}, {self.ASK_CAP_PER_PEER} per "
+                f"{self.ASK_WINDOW_S // 3600} hours. say in a conversation and request_run are not counted by "
+                f"it, and what the seat does with a request_run is the seat's own answer, not this limit.")
 
     def _record_ask(self, to: str, via: str, text: str, queued_id: Any) -> None:
         row = {"t": self._now(), "peer": self._peer_key(to), "to": to, "via": via,
@@ -4729,8 +4736,9 @@ class HestiaF1aDispatcher:
                    f"(older turns were not checked)" if scan_truncated
                    else ". The seat has not answered it yet")
                 + f". This request is recorded too, marked as the "
-                f"same one; it does not move it up or start anything. The seat answers once, in "
-                f"'{seat_conv}', and that answer covers every copy of this request.")
+                f"same one; it does not move it up or start anything. An answer in '{seat_conv}' covers "
+                f"every copy of this request. This is a note, not a limit: nothing stops you asking "
+                f"again, and nothing about this request is decided by how many times it was asked.")
         result.update(subject)
         if seat_quiet:
             result["seat_quiet"] = seat_quiet

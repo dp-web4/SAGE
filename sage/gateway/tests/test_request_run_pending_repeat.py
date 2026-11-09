@@ -284,3 +284,12 @@ def test_under_a_pause_or_a_refused_mesh_no_note_says_no_wake_is_coming():
             FakeMcp.fail = {}
         n = r.result["note"]
         assert "tried again on your next message" in n and "rerun" not in n, (cfg, n)
+
+
+def test_the_already_asked_note_is_a_note_not_a_limit():
+    # sprout-being read the repeat note as a guard with a threshold; it says it decides nothing, and promises no answer
+    d, home = _seat_home()
+    d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
+    said = r.result["already_asked"]
+    assert "This is a note, not a limit" in said and "answers once" not in said, said
