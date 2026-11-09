@@ -376,8 +376,11 @@ def test_the_id_guard_is_mains_predicate_and_never_admits_a_question_on_the_same
     _s(tmp_path, question="Is sprout-seat running?", answer="yes, it wakes per message")
     ok, msg, _ = _s(tmp_path, id="s2", question="How can sprout seat be restarted?", answer="run the script")
     assert not ok and "reads as a different question" in msg, msg
-    ok, msg, _ = _s(tmp_path, id="s2", question="Is sprout-seat running right now?", answer="yes")
+    ok, msg, _ = _s(tmp_path, id="s2", question="sprout-seat running?", answer="yes")
     assert ok, msg
+    # saying MORE narrows the question (pub's re-review of #661): refused
+    ok, msg, _ = _s(tmp_path, id="s2", question="Is sprout-seat running on legion?", answer="no")
+    assert not ok and "reads as a different question" in msg, msg
 
 
 def test_the_id_guard_refuses_a_question_on_the_same_words_that_asks_something_else(tmp_path):

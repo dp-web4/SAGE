@@ -279,7 +279,8 @@ def _stem(t: str) -> str:
         t = t[:-1]
     else:
         for suf in ("ing", "ed"):
-            if t.endswith(suf) and len(t) - len(suf) >= 3:
+            # a stem of 4+ letters: string and speed are words, not str+ing and spe+ed (pub on #661)
+            if t.endswith(suf) and len(t) - len(suf) >= 4:
                 t = t[:-len(suf)]
                 break
     # then a final -e, on every path, so escalate/escalated/escalates and service/services all meet (a
@@ -388,10 +389,10 @@ def _same_question(target: dict, given: str) -> bool:
     a, b = set(_subject_terms(target["question"])), set(_subject_terms(given))
     if not a or not b:
         return False
-    small, big = (a, b) if len(a) <= len(b) else (b, a)
-    # ONE SIDE HOLDS THE OTHER: a rewording may say less, or say more, but not both. A question that drops
-    # one of the old words AND brings its own is a new question.
-    return small <= big and len(small) >= min(2, len(big))
+    # THE NEW WORDING MAY SAY LESS, NOT MORE. A question that brings a word of its own narrows or changes it
+    # ("Is the seat running on legion?" under "Is the seat running?", "Did the build pass yesterday?" under
+    # "Does the build pass?": pub's re-review of #661), and admitting it takes the old answer out of the beat.
+    return b <= a and len(b) >= min(2, len(a))
 
 
 def _neighbours(entries: List[dict]) -> Dict[str, List[str]]:
