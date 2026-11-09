@@ -5463,7 +5463,7 @@ def _daemon_answered_note(action_id: str) -> str:
     """THE ONE FACT ABOUT THE HOST THAT A RUN DOES CARRY. cbp-being, 2026-11-01 18:27Z: dp told it the
     daemon is running and is the gate; in the same beat it ran three port checks seven times, each
     receipt carried _host_note ("not evidence that a service on this machine is down, or that it is
-    up"), and its own scripts printed "The Hestia daemon is NOT running". It replied that the daemon
+    up"), and its own scripts printed that the daemon was not running. It replied that the daemon
     was down. A note that only says "this proves nothing" loses to a sentence the being wrote itself.
 
     NOVA's review of #609 refused "the daemon that decides your acts is running" because nothing in a
@@ -5540,7 +5540,7 @@ _HOST_VIEW = re.compile(
 def _host_note() -> str:
     """THE SANDBOX CANNOT SEE THIS MACHINE, SO WHAT A RUN SAYS ABOUT IT IS ABOUT THE SANDBOX. cbp-being,
     2026-10-28..31: its runs reported "Failed to connect to bus", "System has not been booted with systemd",
-    port 7711 closed and "the Hestia daemon is not running", and it concluded the daemon was down and asked
+    port 7711 closed and that the daemon was not running, and it concluded the daemon was down and asked
     for systemd, D-Bus and Docker installers, over and over, while the daemon decided every one of its acts.
     The run is --unshare-pid --unshare-net: PID 1 is the run itself and there is no network. The note said
     "no network"; it never said that this also hides every other process, service and port. That is the
