@@ -150,8 +150,10 @@ def _copyable(q: str) -> str:
 
 def _uncopied(q: str) -> str:
     """A question as the being sends it, without the « » a copy from a receipt may carry along."""
-    q = q.strip()
-    return q[1:-1].strip() if len(q) >= 2 and q[0] == "«" and q[-1] == "»" else q
+    # with the sentence's period, or outer quote marks, carried along too (cbp's re-check of #661): otherwise the
+    # « » are stored, and nest one level deeper on every copy
+    m = re.fullmatch(r'[\s"\'`]*«(.*)»[\s"\'`.,;:]*', q, re.S)
+    return m.group(1).strip() if m else q.strip()
 
 
 def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
@@ -255,7 +257,7 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                           "that holds." if close else ""))
     entries = entries + [new]
     ok, msg = _commit(instance, entries, nxt + 1, {"op": "settle", "id": new["id"], "to": new, "why": why}, now,
-                      f"settled {new['id']}: {question[:120]!r} -> {answer[:200]!r}. It is shown to you at the "
+                      f"settled {new['id']}: {_copyable(question)} -> {answer[:200]!r}. It is shown to you at the "
                       "start of every beat. To change it later, settle the same question again (with its id, if you like).")
     if ok and close:
         # WHAT THE EARLIER ONE SAYS, NOT ONLY ITS QUESTION. sprout-being 11-07: s101 was settled 2.5 h after s100,
@@ -266,7 +268,7 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                          for c in near)
         # "WITH THE ANSWER THAT HOLDS", NOT "YOUR NEWEST" (legion's review of #661): followed literally on the
         # s100/s101 shape, "settle id=s1 with your newest answer" replaced the true entry with the false one
-        msg += (f" It reads close to {close['id']} ({close['question'][:120]!r}). Your earlier "
+        msg += (f" It reads close to {close['id']}. Your earlier "
                 f"answer{'s' if len(near) > 1 else ''}: {said}. If they are the same question, keep one: reopen "
                 f"{new['id']}, then settle id={close['id']}, question {_copyable(close['question'])} word for word, with the "
                 "answer that holds. If they differ, both stay, and each beat marks them with \u2248.")
