@@ -173,6 +173,16 @@ def test_a_rerun_answered_once_does_not_answer_the_next_rerun():
     assert by[3]["answer_seq"] is None and "repeat_of" not in by[3], by[3]
 
 
+def test_a_later_remark_about_the_seq_does_not_displace_its_answer():
+    # cbp's review of #666: an aside naming the seq is not the answer, and must not be quoted as one
+    turns = [{"seq": 1, "from": "b", "text": _DECLINED},
+             {"seq": 2, "from": "seat", "text": "[request_run] I ran notes/x.py.\n\nAnswers your request seq 1."},
+             {"seq": 3, "from": "seat", "text": "A note about seq 1: odd that it took so long."},
+             {"seq": 4, "from": "b", "text": _DECLINED}]
+    by = {f["seq"]: f for f in rv.earlier_requests(turns, "b", "notes/y.py /dev/gadget7")}
+    assert by[4]["answer_seq"] == 2 and by[4]["repeat_of"] == 1, by[4]
+
+
 def test_the_dispatchers_own_annotation_does_not_make_a_repeat_different_work():
     # the other direction: the line the dispatcher adds to a real repeat is not the being's argument
     by = _after_a_decline_of(_DECLINED, _DECLINED + "\nUNCHANGED since the request at seq 1; the seat answered at seq 2.")

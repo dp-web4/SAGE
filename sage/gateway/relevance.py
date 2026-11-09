@@ -154,7 +154,8 @@ def earlier_requests(turns: Sequence[dict], member: str, query: str,
             prior = [x for x in by_file.get(r["file"], ())
                      if isinstance(x[0], int) and x[0] < r["seq"] and x[2] == r["key"]]
             if prior:
-                a = prior[-1]
+                # the seat's answer, not a later remark about it (hestia_dispatch keeps its answer the same way)
+                a = ([x for x in prior if x[1].startswith("[request_run] ")] or prior)[-1]
                 repeat_of = a[3]
         out.append({"seq": r["seq"], "ts": r["ts"], "file": r["file"],
                     "answer_seq": a[0] if a else None, "answer": a[1] if a else "",
