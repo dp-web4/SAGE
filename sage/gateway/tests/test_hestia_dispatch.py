@@ -1717,6 +1717,9 @@ def test_asking_one_peer_is_capped_per_window_and_a_refused_ask_leaves_nothing_b
     # sprout-being 11-02..09: the refusal read as a "guard" over every request; it says what it counts
     assert "counts only peer_ask and mesh to 'legion', 3 per 6 hours" in env.error, env.error
     assert "request_run are not counted" in env.error and "the seat's own answer" in env.error
+    # the cap is keyed on the peer, not the spelling of `to`: the sentence names what is actually counted
+    env = d(BeingIntent("peer_ask", {"to": "Legion/foo", "body": "another address, same peer"}), _ALLOW)
+    assert not env.ok and "counts only peer_ask and mesh to 'legion', 3 per 6 hours" in env.error, env.error
     assert len(published) == 3, "a refused ask must not publish a forum file"
     assert len(_mb_calls("hestia_member_notify")) == notices_before, "and must not notify"
     env = d(BeingIntent("mesh", {"to": "legion", "kind": "coordination", "pointer": "p"}), _ALLOW)

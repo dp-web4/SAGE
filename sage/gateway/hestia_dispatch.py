@@ -1106,7 +1106,7 @@ class HestiaF1aDispatcher:
                 # morning wrote of "the 'already asked' guard" that "blocks all file execution requests" and
                 # "steps aside after ~20 attempts" (the cap is 3 per 6 h); for a week it read the seat's own
                 # request_run declines as that guard, and wrote a skill around it.
-                f"This limit counts only peer_ask and mesh to {to!r}, {self.ASK_CAP_PER_PEER} per "
+                f"This limit counts only peer_ask and mesh to {key!r}, {self.ASK_CAP_PER_PEER} per "
                 f"{self.ASK_WINDOW_S // 3600} hours. say in a conversation and request_run are not counted by "
                 f"it, and what the seat does with a request_run is the seat's own answer, not this limit.")
 
