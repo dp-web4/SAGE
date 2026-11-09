@@ -350,3 +350,29 @@ def test_the_mark_names_the_newest_three_and_counts_the_rest(tmp_path):
         _s(tmp_path, question=f"how to restart the gizmo daemon {w}?", answer="no")
     shown = st.render(tmp_path)
     assert "[s6 ≈s10,s9,s8+1]" in shown, shown
+
+
+def test_run_runs_and_running_and_service_and_services_meet(tmp_path):
+    # pub's review of #661: running->runn, services->servic, process->proces kept the seat's own words apart
+    _s(tmp_path, question="Is the gizmo service running?", answer="yes")
+    _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    ok, msg, _ = _s(tmp_path, question="Which gizmo services run here?", answer="one")
+    assert ok and "reads close to s1" in msg, msg
+    assert [st._stem(w) for w in ("running", "runs", "services", "processes", "process", "killed", "stopped")] == \
+        ["run", "run", "service", "process", "process", "kill", "stop"]
+
+
+def test_a_reworded_question_is_accepted_as_the_same_only_when_it_reads_close_both_ways(tmp_path):
+    # pub's review of #661: the id re-settle guard uses this scoring too; naming may take a short question with
+    # two generic words, but an answer must not land under a different question (cbp-being's s10)
+    _s(tmp_path, question="Is the test gizmo running? How do I check if it's alive?", answer="yes")
+    _s(tmp_path, question="Is the lamp accessible on this physical machine?", answer="yes")
+    ok, msg, _ = _s(tmp_path, id="s1", question="Is test-gizmo running?", answer="yes, it wakes per message")
+    assert ok, msg
+    ok, msg, _ = _s(tmp_path, id="s2", question="Can the lamp on the physical machine be reached?", answer="yes, read-only")
+    assert ok, msg
+    # two generic words: close enough to NAME (0.5 by the shorter side), not to be the same question (0.26)
+    other = "How to restart the gizmo on the physical machine when the guard blocks it?"
+    assert st._close_to(st.read(tmp_path)[0][-1:], other) is not None
+    ok, msg, _ = _s(tmp_path, id="s2", question=other, answer="it cannot be")
+    assert not ok and "reads as a different question" in msg, msg

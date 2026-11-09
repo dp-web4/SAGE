@@ -112,9 +112,10 @@ def listing(instance) -> str:
     if not entries:
         return ("You have not settled anything yet. To settle something, give question and answer "
                 "(and optionally evidence: a seq, a file, a frame). It is then shown to you every beat.")
+    near = _neighbours(entries)   # once, not per entry (pub's review of #661)
     return (f"What you have settled ({len(entries)}, newest first). To change one, settle the same "
             "question again (or its id with that question); to take one back, give its id and reopen='true'.\n"
-            + "\n".join("- " + _line(e, near=_neighbours(entries)) for e in reversed(entries)))
+            + "\n".join("- " + _line(e, near=near) for e in reversed(entries)))
 
 
 def settle(instance, args: Dict, now: Optional[float] = None) -> Tuple[bool, str, bool]:
@@ -187,7 +188,7 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                            f"settle id={target['id']} with that question and your new answer, so the answer stays "
                            "with the question it answers. If your answer answers a different question, settle it "
                            "as a new one: question and answer, without id. Nothing was changed.")
-        if _norm(given) != _norm(target["question"]) and _close_to([target], given) is None:
+        if _norm(given) != _norm(target["question"]) and _close_to([target], given, strict=True) is None:
             return False, (f"{target['id']} holds the question {target['question'][:160]!r}; yours, "
                            f"{given[:160]!r}, reads as a different question. Settle yours as a new one (question "
                            f"and answer, without id), or reopen {target['id']} first if it no longer holds. "
@@ -255,9 +256,19 @@ def _unnamed(text: str) -> str:
 
 
 def _stem(t: str) -> str:
-    for suf in ("ing", "ed", "es", "s"):
-        if len(t) > len(suf) + 3 and t.endswith(suf):
-            return t[:-len(suf)]
+    """A plain English ending off, so run/runs/running, service/services and process/processes meet (pub's
+    review of #661: the first cut made running->runn, services->servic and process->proces)."""
+    if len(t) > 4 and t.endswith("ies"):
+        return t[:-3] + "y"
+    if len(t) > 4 and t.endswith("es") and t[:-2].endswith(("s", "x", "z", "ch", "sh")):
+        return t[:-2]
+    if len(t) > 3 and t.endswith("s") and not t.endswith(("ss", "us", "is")):
+        return t[:-1]
+    for suf in ("ing", "ed"):
+        if t.endswith(suf) and len(t) - len(suf) >= 3:
+            b = t[:-len(suf)]
+            # a doubled final consonant is the ending's (running, stopped), not the word's (killed, called)
+            return b[:-1] if len(b) > 3 and b[-1] == b[-2] and b[-1] in "bdgmnprt" else b
     return t
 
 
@@ -283,9 +294,16 @@ def _subject_terms(text: str) -> Dict[str, str]:
     return out
 
 
-def _closeness(questions: List[str]):
+def _closeness(questions: List[str], strict: bool = False):
     """score(query_terms, i): relevance's idf overlap over these questions, where the parts of one name count
-    as one shared word (two parts of 'sprout-claude' are not two things in common)."""
+    as one shared word (two parts of 'sprout-claude' are not two things in common).
+
+    NAMING DIVIDES BY THE SHORTER SIDE; STRICT BY BOTH (their geometric mean). Measured on sprout's settled log
+    (111 questions) at CLOSE_AT: the shorter side links 9 of its 10 live seat entries and lets 12 of 453 links
+    cross subjects, most of them two generic words ("physical machine") filling a short question; the geometric
+    mean links 7 of 10 and 3 of 234. A name costs the being one quoted line, so naming takes recall. Accepting a
+    reworded question as the SAME one puts an answer under it (cbp-being's s10, 10-28..30), so that takes
+    precision (pub's review of #661)."""
     groups = [_subject_terms(q) for q in questions]
     df: Dict[str, int] = {}
     for g in groups:
@@ -302,19 +320,20 @@ def _closeness(questions: List[str]):
         words = len({q[t] for t in shared})
         if not shared or words < min(2, len(set(q.values())), len(set(d.values()))):
             return 0.0
-        den = min(sum(idf(t) for t in q), sum(idf(t) for t in d)) or 1.0
+        a, b = sum(idf(t) for t in q), sum(idf(t) for t in d)
+        den = (math.sqrt(a * b) if strict else min(a, b)) or 1.0
         return sum(idf(t) for t in shared) / den
 
     return groups, score
 
 
-def _close_all(entries: List[dict], question: str, limit: int = 3) -> List[dict]:
+def _close_all(entries: List[dict], question: str, limit: int = 3, strict: bool = False) -> List[dict]:
     """Existing entries whose question reads like this one, at or over CLOSE_AT, closest first (newer first on
     a tie). It names, never merges: whether two questions are one is the being's to say."""
     if not entries:
         return []
     try:
-        _, score = _closeness([e["question"] for e in entries])
+        _, score = _closeness([e["question"] for e in entries], strict)
         q = _subject_terms(question)
         hits = [(score(q, i), i) for i in range(len(entries))]
     except Exception:
@@ -323,9 +342,9 @@ def _close_all(entries: List[dict], question: str, limit: int = 3) -> List[dict]
     return [entries[i] for _, i in hits[:limit]]
 
 
-def _close_to(entries: List[dict], question: str) -> Optional[dict]:
+def _close_to(entries: List[dict], question: str, strict: bool = False) -> Optional[dict]:
     """The existing entry whose question reads most like this one, at or over CLOSE_AT; None otherwise."""
-    hits = _close_all(entries, question, 1)
+    hits = _close_all(entries, question, 1, strict)
     return hits[0] if hits else None
 
 
