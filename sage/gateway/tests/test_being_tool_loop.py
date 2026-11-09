@@ -1347,6 +1347,9 @@ def test_one_utterance_per_conversation_per_turn():
     assert [a["text"][:12] for _, a in c.calls] == ["Hi dp. I wan"], "only the first reaches the dispatcher"
     held = [env for _, env in r.trace[1:]]
     assert all(not e.ok and e.note == "one_per_conversation" and "already spoke in 'dp'" in e.error for e in held)
+    # the scope comes first, inside the reflect record's 200-char cut (cbp on #668)
+    assert all(e.error.startswith("not sent: one say per conversation per turn (request_run and other acts do "
+                                  "not count)") for e in held)
     assert [d["rule"] for d in r.duplicates] == ["one_per_conversation_per_turn"] * 2, "recorded, never silent"
 
 

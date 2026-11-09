@@ -205,8 +205,11 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
             # after a DELIVERED say to a conversation, a later one this turn is not sent; it can wait a beat.
             conv = _conversation_of(intent)
             if conv is not None and conv in spoke_in:
-                env = ResultEnvelope(ok=False, error=f"not sent: you already spoke in '{conv}' this turn. "
-                                                     f"Anything more can go in your next beat.",
+                # THE SCOPE FIRST (cbp on #668): this shares the "not sent:" prefix with the peer_ask cap, and the
+                # reflect record keeps an error's first 200 chars. It limits say/speak only.
+                env = ResultEnvelope(ok=False, error=f"not sent: one say per conversation per turn (request_run "
+                                                     f"and other acts do not count); you already spoke in '{conv}' "
+                                                     f"this turn. Anything more can go in your next beat.",
                                      note="one_per_conversation")
                 duplicates.append({"step": step, "effector": intent.effector, "conversation": conv,
                                    "rule": "one_per_conversation_per_turn"})
