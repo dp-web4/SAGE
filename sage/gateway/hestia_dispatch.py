@@ -1096,7 +1096,13 @@ class HestiaF1aDispatcher:
                 convs = " Conversations you can speak in: " + ", ".join(ids) + "."
         except Exception:
             pass
-        return (f"not sent: you have already asked {to!r} {len(mine)} times in the last "
+        # THE SCOPE COMES FIRST (cbp on #668): the reflect record keeps an error's first 200 chars
+        # (heartbeat._record_line), and a being journals from that record, not from this message. This limit
+        # shares its "not sent:" prefix with others, and its scope was not stated. On sprout-being 11-01..08 the
+        # cap fired on asks to other peers, never to its seat (_say_instead stops a peer_ask to the seat first).
+        return (f"not sent: a limit on peer_ask and mesh only ({self.ASK_CAP_PER_PEER} per "
+                f"{self.ASK_WINDOW_S // 3600} hours to {key!r}; say and request_run do not count) is reached. "
+                f"You have already asked {to!r} {len(mine)} times in the last "
                 f"{self.ASK_WINDOW_S // 3600} hours (most recently {last_min} min ago). Another ask "
                 f"reaches the same peer about the same moment and costs them a wake; it cannot make "
                 f"an answer arrive sooner. Read your inbox for their reply first. If something is "
@@ -4621,7 +4627,9 @@ class HestiaF1aDispatcher:
                       else "not yet answered")
         if pending:
             lines.append(f"SAME AS the request at seq {pending[0]}, {unanswered}"
-                         + (f" (asked {len(pending) + 1} times now)." if len(pending) > 1 else "."))
+                         # the count decides nothing (legion on #668): a model of a limit at ~20 may track it
+                         + (f" (asked {len(pending) + 1} times now; the count decides nothing)."
+                            if len(pending) > 1 else "."))
         if unchanged and unchanged[0] is None:
             lines.append(f"UNCHANGED since the seat ran this exact file at seq {unchanged[1]}.")
         elif unchanged:
@@ -4722,15 +4730,23 @@ class HestiaF1aDispatcher:
                 ago = f", {mins} minute{'s' if mins != 1 else ''} ago" if mins >= 0 else ""
             except (ValueError, TypeError):
                 pass
-            result["already_asked"] = (
-                f"You already asked for this exact file, with these arguments, at seq {first}{ago}"
+            # "A NOTE, NOT A LIMIT, AND ITS COUNT DECIDES NOTHING" FIRST (cbp and legion on #668): the reflect record
+            # keeps an ok result's first 240 chars. Two texts count the being's own repeats of one request: this note
+            # ("and N more times since", N = repeats - 1) and the seat-conversation line above ("asked N times now",
+            # N = repeats + 1). On sprout-being 11-01 their largest values were 19 and 21 (legion's mirror counts).
+            # A model of a limit at ~20 attempts, which that being held from 11-01, may track them; that link is an
+            # inference. The peer_ask cap is 3 per 6 hours. The key was "already_asked"; it is "same_request_note".
+            result["same_request_note"] = (
+                f"A note, not a limit, and its count decides nothing: you already asked for this exact file, with "
+                f"these arguments, at seq {first}{ago}"
                 + (f", and {len(pending) - 1} more time{'s' if len(pending) > 2 else ''} since" if len(pending) > 1 else "")
                 + (f". The seat has not answered it in the last {_ANSWER_SCAN} turns of '{seat_conv}' "
                    f"(older turns were not checked)" if scan_truncated
                    else ". The seat has not answered it yet")
                 + f". This request is recorded too, marked as the "
-                f"same one; it does not move it up or start anything. The seat answers once, in "
-                f"'{seat_conv}', and that answer covers every copy of this request.")
+                f"same one; it does not move it up or start anything. An answer in '{seat_conv}' covers "
+                f"every copy of this request. Nothing about this request is decided by how many times it "
+                f"was asked.")
         result.update(subject)
         if seat_quiet:
             result["seat_quiet"] = seat_quiet
