@@ -41,7 +41,7 @@ def test_a_new_file_on_an_old_subject_is_told_the_history_and_its_answers():
     r = _ask(d, home, "probe_c.py", "a third way to reach it", body="open('/dev/gadget7')\n")
     said = r.result["earlier_on_this"]
     assert "2 times before" in said and "2 different files" in said, said
-    assert "the seat ran 1" in said and "declined 1" in said
+    assert "2 answered by 2 seat replies: ran 1, declined 1" in said, said
     assert "probe_a.py" in said and "exit code 1" in said
 
 
@@ -137,7 +137,8 @@ def test_a_repeat_of_answered_bytes_filed_after_the_answer_is_answered_by_it():
     assert by[4]["answer_seq"] is None, "changed bytes are not answered by the old answer"
     said = rv.earlier_requests_said(found)
     assert "seq 3 (notes/x.py): the same bytes as seq 1, answered at seq 2: [request_run] I did not run" in said, said
-    assert "declined 2" in said and "1 not answered" in said, said
+    # the seat's answers are counted once each: one decline covers the request and its repeat
+    assert "2 answered by 1 seat reply: declined 1; 1 not answered" in said, said
 
 
 def _after_a_decline_of(line, *later):
@@ -187,3 +188,31 @@ def test_the_dispatchers_own_annotation_does_not_make_a_repeat_different_work():
     # the other direction: the line the dispatcher adds to a real repeat is not the being's argument
     by = _after_a_decline_of(_DECLINED, _DECLINED + "\nUNCHANGED since the request at seq 1; the seat answered at seq 2.")
     assert by[3]["answer_seq"] == 2 and by[3]["repeat_of"] == 1, by[3]
+
+
+def test_a_repeat_already_answered_is_not_rebound_to_a_later_run_of_other_bytes():
+    # legion's review of #666, item 3: seq 1 (bytes A), declined at 2, seq 3 (A again), seq 4 (bytes B), the seat
+    # runs B at 5 naming seq 4. The forward binding ignored bytes and reported A's repeat as "I ran ... (sha B)".
+    a = "[request_run] notes/x.py\nwhy: /dev/gadget7\n(10 bytes, sha256:aaaaaaaaaaaa; the seat decides)"
+    b = a.replace("aaaaaaaaaaaa", "bbbbbbbbbbbb")
+    turns = [{"seq": 1, "from": "b", "text": a},
+             {"seq": 2, "from": "seat", "text": "[request_run] I did not run notes/x.py. No.\n\nAnswers your request seq 1."},
+             {"seq": 3, "from": "b", "text": a},
+             {"seq": 4, "from": "b", "text": b},
+             {"seq": 5, "from": "seat", "text": "[request_run] I ran notes/x.py (sha bbbbbbbbbbbb). exit code 0.\n\nAnswers your request seq 4."}]
+    by = {f["seq"]: f for f in rv.earlier_requests(turns, "b", "notes/y.py /dev/gadget7")}
+    assert by[3]["answer_seq"] == 2 and by[3].get("repeat_of") == 1, by[3]
+    assert by[4]["answer_seq"] == 5
+    said = rv.earlier_requests_said(list(by.values()))
+    assert "3 answered by 2 seat replies: ran 1, declined 1" in said, said
+
+
+def test_a_keyed_request_is_not_credited_with_a_rerun_of_other_bytes():
+    # a hub-fired session on #666: bytes A at seq 1, a rerun of bytes B at seq 2 (no key), the seat runs B naming 2
+    a = "[request_run] notes/x.py\nwhy: /dev/gadget7\n(10 bytes, sha256:aaaaaaaaaaaa; the seat decides)"
+    b = "[request_run] notes/x.py\nwhy: /dev/gadget7 again\n(10 bytes, sha256:bbbbbbbbbbbb; the seat decides)\nrerun: true"
+    turns = [{"seq": 1, "from": "b", "text": a}, {"seq": 2, "from": "b", "text": b},
+             {"seq": 3, "from": "seat", "text": "[request_run] I ran notes/x.py (sha bbbbbbbbbbbb). exit code 0.\n\nAnswers your request seq 2."}]
+    by = {f["seq"]: f for f in rv.earlier_requests(turns, "b", "notes/y.py /dev/gadget7")}
+    assert by[1]["answer_seq"] is None, by[1]
+    assert by[2]["answer_seq"] == 3

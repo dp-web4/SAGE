@@ -107,11 +107,12 @@ def earlier_requests(turns: Sequence[dict], member: str, query: str,
                      threshold: float = WORD_THRESHOLD) -> List[dict]:
     """The being's earlier request_runs on the same subject as `query` (its new request's path, why and
     the named things in its file), oldest first, each with the seat's answer if one names it:
-    [{seq, ts, file, answer_seq, answer}] where answer is the answer's first line ('' if unanswered).
+    [{seq, ts, file, answer_seq, answer[, repeat_of]}] where answer is the answer's first line ('' if
+    unanswered) and repeat_of, when present, is the earlier request with the same key whose answer this is.
 
     `turns` is the seat conversation in order. Only the being's own requests are matched; the seat's
     answers are bound to them by the seq they name (conversations._ANSWER_NAMES), never by position."""
-    from sage.gateway.conversations import _ANSWER_NAMES, _request_key
+    from sage.gateway.conversations import _ANSWER_NAMES, _request_key, _run_result_matches_request
     reqs, answers, by_file = [], {}, {}
     for t in turns:
         text = str(t.get("text", ""))
@@ -140,10 +141,6 @@ def earlier_requests(turns: Sequence[dict], member: str, query: str,
         r = reqs[i]
         a = answers.get(int(r["seq"])) if isinstance(r["seq"], int) else None
         repeat_of = None
-        if a is None and isinstance(r["seq"], int):
-            # THE SEAT ANSWERS A REPEATED REQUEST ONCE, naming one seq of it (seat_run_requests); the
-            # copies are answered by that answer. Bound to the next answer for the same file after it.
-            a = next((x for x in by_file.get(r["file"], ()) if isinstance(x[0], int) and x[0] > r["seq"]), None)
         if a is None and isinstance(r["seq"], int) and r["key"] is not None:
             # A REPEAT FILED AFTER THE ANSWER IS ANSWERED BY IT TOO, when it asks for the work answered: the
             # same path, bytes and arguments, read by conversations._request_key, so a digest quoted in `why`
@@ -151,12 +148,27 @@ def earlier_requests(turns: Sequence[dict], member: str, query: str,
             # Measured on sprout-being 11-09: the seat declined
             # scratch/restart-sprout-claude-with-sudo.py (sha 48684f53f84a) at seq 2677; the ten repeats
             # after it were listed "(not answered yet)" here while the same receipt quoted that decline.
+            # CHECKED FIRST (legion's review of #666): the forward binding below ignored bytes, so a repeat of
+            # A, already answered, was reported as answered by a later run of B.
             prior = [x for x in by_file.get(r["file"], ())
                      if isinstance(x[0], int) and x[0] < r["seq"] and x[2] == r["key"]]
             if prior:
                 # the seat's answer, not a later remark about it (hestia_dispatch keeps its answer the same way)
                 a = ([x for x in prior if x[1].startswith("[request_run] ")] or prior)[-1]
                 repeat_of = a[3]
+        if a is None and isinstance(r["seq"], int):
+            # THE SEAT ANSWERS A REPEATED REQUEST ONCE, naming one seq of it (seat_run_requests); the
+            # copies are answered by that answer. Bound to the next answer for the same file after it, unless
+            # both requests carry a key and the keys differ (other bytes or arguments: other work) and the
+            # answer's own run receipt does not name these bytes. Measured on sprout-being: the seat's seq 739
+            # named request 736 (sha 1ea108eaae21) and ran 738's bytes, "I ran ... (sha 8bdddea6556f)".
+            # A request without a key (a rerun, an old turn) still binds as before. A KEYED request is not bound
+            # through an answered request that has none (a rerun of other bytes) unless the answer's run receipt
+            # names this request's bytes: bytes A were credited with a run of B (a hub-fired session on #666).
+            a = next((x for x in by_file.get(r["file"], ())
+                      if isinstance(x[0], int) and x[0] > r["seq"]
+                      and (r["key"] is None or x[2] == r["key"]
+                           or _run_result_matches_request(x[1], r["key"]))), None)
         out.append({"seq": r["seq"], "ts": r["ts"], "file": r["file"],
                     "answer_seq": a[0] if a else None, "answer": a[1] if a else "",
                     **({"repeat_of": repeat_of} if repeat_of is not None else {})})
@@ -167,14 +179,24 @@ def earlier_requests_said(found: List[dict], shown: int = 3) -> str:
     """One paragraph for the receipt: how many, since when, how they were answered, and the latest few."""
     if not found:
         return ""
-    ran = sum(1 for f in found if f["answer"].startswith("[request_run] I ran"))
-    declined = sum(1 for f in found if f["answer"].startswith("[request_run] I did not run"))
-    other = sum(1 for f in found if f["answer"]) - ran - declined
-    waiting = sum(1 for f in found if not f["answer"])
-    tally = ", ".join(p for p in (f"the seat ran {ran}" if ran else "",
-                                  f"declined {declined}" if declined else "",
-                                  f"answered {other} in words" if other else "",
-                                  f"{waiting} not answered" if waiting else "") if p)
+    # THE SEAT'S ANSWERS, COUNTED ONCE EACH (legion's and cbp's reviews of #666): one answer covers every
+    # copy of a request, so counting asks said "the seat ran 4" for one run and three repeats, a claim of
+    # execution that never happened (Nova's hold on #447: an answer is not proof of a run).
+    replies = {}
+    for f in found:
+        if f["answer"] and f["answer_seq"] is not None:
+            replies.setdefault(f["answer_seq"], f["answer"])
+    ran = sum(1 for a in replies.values() if a.startswith("[request_run] I ran"))
+    declined = sum(1 for a in replies.values() if a.startswith("[request_run] I did not run"))
+    other = len(replies) - ran - declined
+    covered = sum(1 for f in found if f["answer"])
+    waiting = len(found) - covered
+    parts = ", ".join(p for p in (f"ran {ran}" if ran else "", f"declined {declined}" if declined else "",
+                                  f"answered {other} in words" if other else "") if p)
+    tally = "; ".join(p for p in (
+        (f"{covered} answered by {len(replies)} seat repl{'y' if len(replies) == 1 else 'ies'}: {parts}"
+         if replies else ""),
+        f"{waiting} not answered" if waiting else "") if p)
     files = len({f["file"] for f in found})
     lines = [f"You have asked the seat about this same subject {len(found)} time"
              f"{'s' if len(found) != 1 else ''} before, since {found[0]['ts'][:10] or 'earlier'}, "
