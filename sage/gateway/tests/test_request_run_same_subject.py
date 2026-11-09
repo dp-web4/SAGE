@@ -121,3 +121,20 @@ def test_a_file_asked_about_under_many_roots_is_one_subject():
                                            "/z/hestia/governance/hestia_gate_core.py")
     assert [f["seq"] for f in found] == [1, 2, 3, 4, 5]
     assert rv.ids("os.path.join(x); self.run(); v1.2.3; hestia_gate_core.py") == {"hestia_gate_core.py"}
+
+
+def test_a_repeat_of_answered_bytes_filed_after_the_answer_is_answered_by_it():
+    # cbp's review of #665: the seat declined these bytes at seq 2677; the repeats after it were "(not answered
+    # yet)" here while the same receipt quoted the decline
+    line = "[request_run] notes/x.py\nwhy: /dev/gadget7\n(10 bytes, sha256:48684f53f84a; the seat decides)"
+    turns = [{"seq": 1, "from": "b", "text": line},
+             {"seq": 2, "from": "seat", "text": "[request_run] I did not run notes/x.py. No.\n\nAnswers your request seq 1."},
+             {"seq": 3, "from": "b", "text": line},
+             {"seq": 4, "from": "b", "text": line.replace("48684f53f84a", "0123456789ab")}]
+    found = rv.earlier_requests(turns, "b", "notes/y.py /dev/gadget7")
+    by = {f["seq"]: f for f in found}
+    assert by[3]["answer_seq"] == 2 and by[3]["repeat_of"] == 1, by[3]
+    assert by[4]["answer_seq"] is None, "changed bytes are not answered by the old answer"
+    said = rv.earlier_requests_said(found)
+    assert "seq 3 (notes/x.py): the same bytes as seq 1, answered at seq 2: [request_run] I did not run" in said, said
+    assert "declined 2" in said and "1 not answered" in said, said

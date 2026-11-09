@@ -103,6 +103,10 @@ def request_subject(text: str) -> str:
     return f"{first}\n{rest}".strip()
 
 
+#: The 12-hex digest a request_run line carries ("(N bytes, sha256:<12>; ...").
+_SHA = re.compile(r"sha256:([0-9a-f]{12})")
+
+
 def earlier_requests(turns: Sequence[dict], member: str, query: str,
                      threshold: float = WORD_THRESHOLD) -> List[dict]:
     """The being's earlier request_runs on the same subject as `query` (its new request's path, why and
@@ -113,14 +117,18 @@ def earlier_requests(turns: Sequence[dict], member: str, query: str,
     answers are bound to them by the seq they name (conversations._ANSWER_NAMES), never by position."""
     from sage.gateway.conversations import _ANSWER_NAMES
     reqs, answers, by_file = [], {}, {}
+    sha_of = {}   # request seq -> the sha its line carried
     for t in turns:
         text = str(t.get("text", ""))
         if t.get("from") == member:
             if text.startswith("[request_run] "):
                 # the head: path and why, without the dispatcher's own lines (size, sha, annotations)
                 head = text.split("\n(", 1)[0]
+                m = _SHA.search(text)
                 reqs.append({"seq": t.get("seq"), "ts": str(t.get("ts") or ""),
-                             "file": head.split("\n", 1)[0][len("[request_run] "):].strip(), "head": head})
+                             "file": head.split("\n", 1)[0][len("[request_run] "):].strip(), "head": head,
+                             "sha": m.group(1) if m else ""})
+                sha_of[t.get("seq")] = m.group(1) if m else ""
             continue
         first = text.strip().split("\n", 1)[0][:200]
         named = [int(n) for mm in _ANSWER_NAMES.finditer(text) for n in re.findall(r"\d+", mm.group(1))]
@@ -129,7 +137,7 @@ def earlier_requests(turns: Sequence[dict], member: str, query: str,
         if named:
             for r in reqs:
                 if r["seq"] in named:
-                    by_file.setdefault(r["file"], []).append((t.get("seq"), first))
+                    by_file.setdefault(r["file"], []).append((t.get("seq"), first, r["sha"], r["seq"]))
     if not reqs:
         return []
     rk = Ranker([request_subject(r["head"]) for r in reqs])
@@ -138,12 +146,24 @@ def earlier_requests(turns: Sequence[dict], member: str, query: str,
     for i in hit:
         r = reqs[i]
         a = answers.get(int(r["seq"])) if isinstance(r["seq"], int) else None
+        repeat_of = None
         if a is None and isinstance(r["seq"], int):
             # THE SEAT ANSWERS A REPEATED REQUEST ONCE, naming one seq of it (seat_run_requests); the
             # copies are answered by that answer. Bound to the next answer for the same file after it.
             a = next((x for x in by_file.get(r["file"], ()) if isinstance(x[0], int) and x[0] > r["seq"]), None)
+        if a is None and isinstance(r["seq"], int) and r["sha"]:
+            # A REPEAT FILED AFTER THE ANSWER IS ANSWERED BY IT TOO, when its bytes are the ones answered
+            # (cbp's review of #665). Measured on sprout-being 11-09: the seat declined
+            # scratch/restart-sprout-claude-with-sudo.py (sha 48684f53f84a) at seq 2677; the ten repeats
+            # after it were listed "(not answered yet)" here while the same receipt quoted that decline.
+            prior = [x for x in by_file.get(r["file"], ())
+                     if isinstance(x[0], int) and x[0] < r["seq"] and x[2] == r["sha"]]
+            if prior:
+                a = prior[-1]
+                repeat_of = a[3]
         out.append({"seq": r["seq"], "ts": r["ts"], "file": r["file"],
-                    "answer_seq": a[0] if a else None, "answer": a[1] if a else ""})
+                    "answer_seq": a[0] if a else None, "answer": a[1] if a else "",
+                    **({"repeat_of": repeat_of} if repeat_of is not None else {})})
     return out
 
 
@@ -165,6 +185,7 @@ def earlier_requests_said(found: List[dict], shown: int = 3) -> str:
              f"with {files} different file{'s' if files != 1 else ''} ({tally}). The latest:"]
     for f in found[-shown:]:
         said = f["answer"] or "(not answered yet)"
-        lines.append(f"- seq {f['seq']} ({f['file']}): " + (f"seq {f['answer_seq']}: " if f["answer_seq"] else "")
-                     + said)
+        how = (f"the same bytes as seq {f['repeat_of']}, answered at seq {f['answer_seq']}: "
+               if f.get("repeat_of") is not None else f"seq {f['answer_seq']}: " if f["answer_seq"] else "")
+        lines.append(f"- seq {f['seq']} ({f['file']}): " + how + said)
     return "\n".join(lines)
