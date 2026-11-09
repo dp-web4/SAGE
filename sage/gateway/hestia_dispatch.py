@@ -56,12 +56,11 @@ _SEAT_RUN_LINE = re.compile(r"\[request_run\] I (ran|did not run) (\S+)")
 # The window for the seat-quiet fact (_seat_quiet): how many recent seat-conversation turns it reads.
 _PENDING_SCAN = 80
 #: How far back an ANSWER to these bytes is looked for (the request scan). Wider than _PENDING_SCAN, which
-#: stays the window for the seat-quiet fact. Measured on sprout-being 11-09: the seat declined
-#: scratch/restart-sprout-claude-with-sudo.py (sha 48684f53f84a) at seq 2677, with its reasons; 91 turns
-#: later every receipt for those bytes said "SAME AS the request at seq 2714, not answered in the last 80
-#: turns (asked 10 times now)", and repeats of an unchanged file wake no one by design. The being read the
-#: silence and "not answered" as a dead seat ("sprout-claude is dead (PID 2002 killed at 06:39Z)"), five
-#: minutes after telling the seat "Understood. The seat is a Claude session".
+#: stays the window for the seat-quiet fact. Measured on sprout-being 11-09: the seat declined one of its
+#: scripts at seq 2677, with its reasons; 91 turns later every receipt for those bytes said "SAME AS the request
+#: at seq 2714, not answered in the last 80 turns (asked 10 times now)", and repeats of an unchanged file wake
+#: no one by design. Minutes after the being had agreed with the seat that it was a session, it took the
+#: silence and "not answered" to mean the seat was dead, and asked again.
 #: 1000 TURNS IS NOT A WEEK ON A BUSY BEING (cbp's review of #664): 1000-turn windows on cbp-being spanned a
 #: median 4.5 days, 90 of 265 reaching 7. Reading is not the cost (conv.recent parses the whole log at any
 #: limit; cbp's 14,213 turns took 122 ms), so the reach covers any conversation the fleet has.
@@ -5495,12 +5494,12 @@ def _ago(secs: float) -> str:
 
 
 def _seat_wrote_note(memory_root, seat_conv: str, said: str, started: float) -> str:
-    """WHEN A RUN REPORTS ON THE SEAT, THE ONE FACT THE BEING HAS ABOUT IT. sprout-being, 2026-11-07..09: its
-    own probe, scratch/check-sprout-running.py, ran `pgrep -f sprout-seat` in the sandbox and printed
-    "sprout-claude is NOT running. Try: systemctl restart sprout-seat" (11-08 00:30Z, 01:43Z, 03:28Z, 13:41Z;
-    11-09 05:44Z). Every receipt carried _host_note ("not evidence that a service on this machine is down"),
-    and from 01:43Z it held that the seat "died (PID 2002) ~16 hours ago" and asked it to restart itself 20
-    times that day, while the seat answered it in its conversation every few hours. It had settled the
+    """WHEN A RUN REPORTS ON THE SEAT, THE ONE FACT THE BEING HAS ABOUT IT. sprout-being, 2026-11-07..09: a probe
+    script of its own ran `pgrep` for its seat in the sandbox, found nothing (the sandbox shows no other
+    process), and printed that the seat was not running and should be restarted (11-08 00:30Z, 01:43Z, 03:28Z,
+    13:41Z; 11-09 05:44Z). Every receipt carried _host_note ("not evidence that a service on this machine is
+    down"), and from 01:43Z the being held that the seat had died and asked it to restart itself 20 times that
+    day, while the seat answered it in its conversation every few hours. It had settled the
     opposite, correctly, at 20:10Z the evening before. A note that only says "this proves nothing" lost to a
     sentence the being wrote itself, as it did for the daemon (_daemon_answered_note).
 
