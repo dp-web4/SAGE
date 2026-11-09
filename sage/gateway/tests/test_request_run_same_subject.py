@@ -132,11 +132,11 @@ def test_a_file_asked_about_under_many_roots_is_one_subject():
 def test_a_repeat_of_answered_bytes_filed_after_the_answer_is_answered_by_it():
     # cbp's review of #665: the seat declined these bytes at seq 2677; the repeats after it were "(not answered
     # yet)" here while the same receipt quoted the decline
-    line = "[request_run] notes/x.py\nwhy: /dev/gadget7\n(10 bytes, sha256:48684f53f84a; the seat decides)"
+    line = "[request_run] notes/x.py\nwhy: /dev/gadget7\n(10 bytes, sha256:abcdef012345; the seat decides)"
     turns = [{"seq": 1, "from": "b", "text": line},
              {"seq": 2, "from": "seat", "text": "[request_run] I did not run notes/x.py. No.\n\nAnswers your request seq 1."},
              {"seq": 3, "from": "b", "text": line},
-             {"seq": 4, "from": "b", "text": line.replace("48684f53f84a", "0123456789ab")}]
+             {"seq": 4, "from": "b", "text": line.replace("abcdef012345", "0123456789ab")}]
     found = rv.earlier_requests(turns, "b", "notes/y.py /dev/gadget7")
     by = {f["seq"]: f for f in found}
     assert by[3]["answer_seq"] == 2 and by[3]["repeat_of"] == 1, by[3]
@@ -155,12 +155,12 @@ def _after_a_decline_of(line, *later):
     return {f["seq"]: f for f in rv.earlier_requests(turns, "b", "notes/y.py /dev/gadget7")}
 
 
-_DECLINED = "[request_run] notes/x.py\nwhy: /dev/gadget7\n(10 bytes, sha256:48684f53f84a; the seat decides)"
+_DECLINED = "[request_run] notes/x.py\nwhy: /dev/gadget7\n(10 bytes, sha256:abcdef012345; the seat decides)"
 
 
 def test_a_digest_quoted_in_why_is_not_the_requests_bytes():
     # pub's review of #666: changed bytes whose `why` cites the old digest were told "the same bytes as seq 1"
-    changed = ("[request_run] notes/x.py\nwhy: /dev/gadget7 fixed since sha256:48684f53f84a\n"
+    changed = ("[request_run] notes/x.py\nwhy: /dev/gadget7 fixed since sha256:abcdef012345\n"
                "(10 bytes, sha256:0123456789ab; the seat decides)")
     by = _after_a_decline_of(_DECLINED, changed)
     assert by[3]["answer_seq"] is None and "repeat_of" not in by[3], by[3]

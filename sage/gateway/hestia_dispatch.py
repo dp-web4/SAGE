@@ -2604,11 +2604,11 @@ class HestiaF1aDispatcher:
                 f"speak takes one utterance of up to {_body.SPEAK_MAX_CHARS} characters; yours is "
                 f"{len(text)}. Nothing was said. Say the part that matters most, or say it in turns."))
         # A SHELL COMMAND SPOKEN ALOUD RUNS NOTHING, AND IS NOT PLAYED. Measured on sprout-being
-        # 2026-10-14: with its run requests unanswered, it spoke `python3 scratch/... 2>&1 | tee`
-        # four times and `sudo usermod -aG video $USER && sudo systemctl restart ...` three times
-        # through the headset, then asked the seat to verify the result "after adding user to the
-        # video group" -- it took the speaking for the doing. The seat told it, in its own channel,
-        # that speech runs nothing (seq 248); it spoke the sudo line twice more. The correction has
+        # 2026-10-14: with its run requests unanswered, it spoke a script invocation four times and
+        # a root command three times through the headset, then asked the seat to verify the result
+        # as if the command had been applied -- it took the speaking for the doing. The seat told it,
+        # in its own channel, that speech runs nothing (seq 248); it spoke the root command twice
+        # more. The correction has
         # to arrive in the act's own receipt, at the moment of the act. And a root command broadcast
         # into a room is an ask to whoever is listening, which is not a door this body offers.
         # Narrow on purpose: a leading command word or a shell operator, not prose that mentions one.
@@ -2670,10 +2670,9 @@ class HestiaF1aDispatcher:
         except Exception as e:
             room_err = f"{type(e).__name__}: {e}"[:160]
         # SOUND RUNS NOTHING, AND THE RECEIPT SAYS SO. Measured on sprout-being 2026-10-14: with
-        # its run requests going nowhere, it spoke `python3 scratch/test-cv2-video1.py ...` aloud
-        # three times, then `sudo usermod -aG video $USER && sudo systemctl restart ...`, and 40 s
-        # later asked the seat to verify OpenCV "after adding user to the video group and
-        # restarting udisks2" — it took the speaking for the doing. The receipt said only that
+        # its run requests going nowhere, it spoke a script invocation aloud three times, then a
+        # root command, and 40 s later asked the seat to verify the result as if the command had
+        # been applied — it took the speaking for the doing. The receipt said only that
         # the words were played, which is true and left the inference open.
         said = (f"played aloud through {speaker} ({done['seconds']}s): \"{text}\". "
                 f"Speaking is sound only: nothing said aloud is executed.")
@@ -5523,10 +5522,10 @@ def _seat_wrote_note(memory_root, seat_conv: str, said: str, started: float) -> 
     except (ValueError, TypeError):
         return ""
     seq = f" (seq {last['seq']})" if last.get("seq") is not None else ""
-    # A LONG GAP IS NOT THE PROBE'S VERDICT (legion's review of #663): beside "NOT running. Try: systemctl
-    # restart", "46 h before this run began" reads as agreement. Replayed on the mirrored traces, the gap was
-    # 3 h or more on 25 of 80 sprout receipts (14 over a day, inside the seat's real 48 h silence of 11-01..03)
-    # and on 10 of 10 cbp ones. Past SEAT_QUIET_S the note says what _seat_quiet says for a request.
+    # A LONG GAP IS NOT THE PROBE'S VERDICT (legion's review of #663): beside a probe's own line telling the
+    # being to restart the seat, "46 h before this run began" reads as agreement. Replayed on the mirrored
+    # traces, the gap was 3 h or more on 25 of 80 sprout receipts (14 over a day, inside the seat's real 48 h
+    # silence of 11-01..03) and on 10 of 10 cbp ones. Past SEAT_QUIET_S the note says what _seat_quiet says for a request.
     away = (" " + _SEAT_AWAY) if gap >= SEAT_QUIET_S else ""
     return (f"One fact from your own records: {seat_conv} last wrote to you at {str(last['ts'])[:16]}Z{seq}, "
             f"{ago} this run began, in your conversation \"{seat_conv}\".{away}")

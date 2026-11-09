@@ -48,7 +48,7 @@ def test_a_pending_act_is_recorded_as_not_run_with_its_reason_never_as_error_non
     # camera fault for 17 hours. A pending act ran nothing, and the record must say so and why.
     from sage.gateway.being_gate_client import ResultEnvelope
     from sage.gateway.heartbeat import _record_line
-    intent = SimpleNamespace(effector="request_run", args={"path": "scratch/test-cv2.py"})
+    intent = SimpleNamespace(effector="request_run", args={"path": "scratch/lamp.py"})
     note = ("no seat conversation is configured on this instance, so there is nobody to "
             "hand this to. Your file is untouched.")
     line = _record_line(intent, ResultEnvelope(ok=False, pending=True, note=note))
