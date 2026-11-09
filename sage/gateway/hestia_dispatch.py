@@ -4516,7 +4516,9 @@ class HestiaF1aDispatcher:
                      and not (k == "rerun" and str(v).strip().lower() in ("false", "no", "0", "none"))]
         lines = [f"[request_run] {rel}",
                  f"why: {why}" if why else "why: (none given — the being did not say what it expects to learn)",
-                 f"({p.stat().st_size} bytes, sha256:{digest}; the seat decides whether to run it and answers here)"]
+                 # no promise of a reply (legion and cbp on #673); _REQUEST_SOURCE_HEADER pins only
+                 # "(N bytes, sha256:HEX; <anything>)", so these words can change without breaking identity
+                 f"({p.stat().st_size} bytes, sha256:{digest}; the seat decides whether to run it; its answer, if any, comes here)"]
         # Parse the text we will actually send, including multiline explanations.
         # A synthetic short why could hide ambiguous source headers from this reader.
         request_key = conv._request_key("\n".join(lines + arg_lines))

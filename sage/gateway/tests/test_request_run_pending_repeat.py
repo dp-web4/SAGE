@@ -312,3 +312,25 @@ def test_a_woken_receipt_promises_no_answer():
     n = r.result["note"]
     assert "asked and woken" in n and "either way it answers" not in n, n
     assert "an answer, when one comes, is in 'seat'" in n, n
+
+
+def test_the_request_run_tool_and_its_hints_promise_no_answer():
+    # legion and cbp on #673: the tool description every being is offered said the seat "answers with the real
+    # output", next to receipts that no longer promise one
+    from sage.gateway import being_gate_client as bgc
+    desc = bgc._TOOL_SCHEMAS["request_run"][0]
+    assert "answers with the real output" not in desc and "it will say why" not in desc, desc
+    assert "the seat decides whether to run it" in desc and "when the seat is there to give them" in desc
+    src = open(bgc.__file__).read()
+    assert "the seat runs it and answers" not in src
+
+
+def test_the_request_line_promises_no_answer_and_keeps_its_identity():
+    # the words after the digest changed; _REQUEST_SOURCE_HEADER pins only "(N bytes, sha256:HEX; ...)"
+    d, home = _seat_home()
+    d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+    sent = conv.recent(home, "seat", limit=1)[-1]["text"]
+    assert "its answer, if any, comes here)" in sent and "answers here" not in sent, sent
+    assert conv._request_key(sent) is not None, "the request still has its identity"
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
+    assert "same_request_note" in r.result, "a repeat is still recognised as the same request"
