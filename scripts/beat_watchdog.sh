@@ -51,13 +51,58 @@ limit=$(( IDLE_S * GRACE ))
 running="$(systemctl --user is-active "$UNIT" 2>/dev/null)"
 next="$(systemctl --user list-timers "$TIMER" --no-pager 2>/dev/null | sed -n 2p | cut -c1-28)"
 
+# MUTE beats: woken on time, and the model never answered. 2026-11-02 → 11-09 the lid closed mid-inference,
+# the ollama runner resumed wedged, and 163 beats in a row recorded "[OllamaIRP: Error: timed out]" in every
+# phase while this switch said OK every ten minutes — it only asked whether the being was WOKEN. The being
+# cannot repair this (what is broken is what it thinks with), so the switch does: between beats, when the
+# newest beat was mute, ask the model for ten tokens; if it cannot answer, restart ollama through its unit
+# (never by hand), and say so loudly either way.
+REPO="${SAGE_REPO:-/home/dp/ai-workspace/SAGE}"
+MODEL="${SAGE_BEAT_MODEL:-qwen38-heretic:q3km-vl}"
+OLLAMA="${OLLAMA_URL:-http://localhost:11434}"
+PY="${SAGE_PY:-/home/dp/miniforge3/bin/python3}"
+mute_fault=0
+if [ "$running" != "active" ] && [ "$running" != "activating" ]; then
+    health="$(cd "$REPO" && "$PY" -m sage.gateway.beat_health --instance "$INSTANCE" --last 12 --check 2>&1)"
+    hrc=$?
+    if [ "$hrc" -eq 3 ] && printf '%s' "$health" | grep -q '^ALARM: [0-9]* mute'; then
+        say "MUTE: $(printf '%s' "$health" | grep '^ALARM')"
+        probe() {
+            curl -s -m 120 -o /dev/null -w '%{http_code}' "$OLLAMA/api/generate" \
+                -d "{\"model\":\"$MODEL\",\"prompt\":\"ok\",\"stream\":false,\"think\":false,\"keep_alive\":-1,\"options\":{\"num_predict\":10}}"
+        }
+        code="$(probe)"
+        if [ "$code" = "200" ]; then
+            say "MUTE: the model answers now (probe 200) — the outage has cleared; the next beat should speak"
+        elif [ "$DRY" = "1" ]; then
+            say "MUTE: the model does not answer (probe '${code}'); dry run, not restarting ollama"
+            mute_fault=1
+        else
+            say "MUTE: the model does not answer (probe '${code}'); restarting ollama.service"
+            if sudo -n systemctl restart ollama.service 2>/dev/null; then
+                sleep 5
+                code="$(probe)"
+                say "MUTE: after restart the probe reads '${code}'"
+            else
+                say "MUTE: could not restart ollama.service (sudo -n refused) — an operator must"
+            fi
+            mute_fault=1
+            command -v notify-send >/dev/null && notify-send -u critical "legion-being is MUTE" \
+                "Its newest beat never reached the model. Probe after repair: ${code}. $(printf '%s' "$health" | grep '^ALARM')" 2>/dev/null
+        fi
+    elif [ "$hrc" -ne 0 ] && [ "$hrc" -ne 3 ]; then
+        say "MUTE: could not read beat health (rc ${hrc}): $(printf '%s' "$health" | tail -1)"
+    fi
+fi
+
 if [ "$running" = "active" ] || [ "$running" = "activating" ]; then
     say "OK: a beat is running now (quiet ${quiet}s; the being is working)"
     exit 0
 fi
 if [ "$quiet" -lt "$limit" ]; then
     say "OK: quiet ${quiet}s, under the ${limit}s limit; next wake: ${next:-unknown}"
-    exit 0
+    # A mute repair is a fault even when the wake schedule is fine: exiting 0 would make it a diary.
+    exit $(( mute_fault ? 3 : 0 ))
 fi
 
 # Silent too long. Say everything an operator needs before doing anything about it.
