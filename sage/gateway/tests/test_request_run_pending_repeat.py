@@ -50,11 +50,32 @@ def test_after_the_seat_answers_it_is_unchanged_not_pending():
     assert "unchanged" in r.result and "already_asked" not in r.result
 
 
-def test_an_answer_before_the_scan_window_is_not_reported_as_not_answered_yet(monkeypatch):
+def test_an_answer_older_than_the_quiet_window_still_answers_the_repeat(monkeypatch):
+    # sprout-being 11-09: the seat declined these bytes at seq 2677; 91 turns later each repeat said "not
+    # answered in the last 80 turns (asked 10 times now)" and the being concluded the seat was dead. The
+    # answer scan reaches past the seat-quiet window, so the old answer is found and carried.
+    from sage.gateway import hestia_dispatch as hd
+    monkeypatch.setattr(hd, "_PENDING_SCAN", 6)
+    d, home = _seat_home()
+    d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+    asked = conv.recent(home, "seat", limit=1)[-1]["seq"]
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I did not run notes/probe.py. It restarts things.\n\nAnswers your request seq {asked}.")
+    for i in range(6):
+        conv.append(home, "seat", speaker="seat", via="seat", text=f"unrelated {i}")
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
+    assert "already_asked" not in r.result, r.result
+    assert f"the seat answered that at seq {asked + 1}: it did not run it" in r.result["unchanged"]
+    assert "It restarts things." in r.result["unchanged"], "the reason is carried, not pointed at"
+    assert "not answered" not in conv.recent(home, "seat", limit=1)[-1]["text"]
+
+
+def test_an_answer_before_the_answer_scan_is_not_reported_as_not_answered_yet(monkeypatch):
     # #567 (cbp on #566): ask -> the seat answers -> the window scrolls -> the same ask again. The answer
     # is out of view, so "not answered yet" would be false; the notes name the window they checked.
     from sage.gateway import hestia_dispatch as hd
     monkeypatch.setattr(hd, "_PENDING_SCAN", 6)
+    monkeypatch.setattr(hd, "_ANSWER_SCAN", 6)
     d, home = _seat_home()
     d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
     asked = conv.recent(home, "seat", limit=1)[-1]["seq"]
