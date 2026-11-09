@@ -138,3 +138,42 @@ def test_a_repeat_of_answered_bytes_filed_after_the_answer_is_answered_by_it():
     said = rv.earlier_requests_said(found)
     assert "seq 3 (notes/x.py): the same bytes as seq 1, answered at seq 2: [request_run] I did not run" in said, said
     assert "declined 2" in said and "1 not answered" in said, said
+
+
+def _after_a_decline_of(line, *later):
+    """`line` at seq 1, declined at seq 2, then `later` from seq 3: {seq: found}."""
+    turns = [{"seq": 1, "from": "b", "text": line},
+             {"seq": 2, "from": "seat", "text": "[request_run] I did not run notes/x.py. No.\n\nAnswers your request seq 1."}]
+    turns += [{"seq": n, "from": "b", "text": t} for n, t in enumerate(later, 3)]
+    return {f["seq"]: f for f in rv.earlier_requests(turns, "b", "notes/y.py /dev/gadget7")}
+
+
+_DECLINED = "[request_run] notes/x.py\nwhy: /dev/gadget7\n(10 bytes, sha256:48684f53f84a; the seat decides)"
+
+
+def test_a_digest_quoted_in_why_is_not_the_requests_bytes():
+    # pub's review of #666: changed bytes whose `why` cites the old digest were told "the same bytes as seq 1"
+    changed = ("[request_run] notes/x.py\nwhy: /dev/gadget7 fixed since sha256:48684f53f84a\n"
+               "(10 bytes, sha256:0123456789ab; the seat decides)")
+    by = _after_a_decline_of(_DECLINED, changed)
+    assert by[3]["answer_seq"] is None and "repeat_of" not in by[3], by[3]
+
+
+def test_different_arguments_or_a_rerun_are_not_a_repeat_of_the_answered_request():
+    # pub's review of #666: what ran is (path, bytes, arguments), and a rerun asks again on purpose
+    by = _after_a_decline_of(_DECLINED, _DECLINED + "\nargs: --dry-run", _DECLINED + "\nrerun: true")
+    assert by[3]["answer_seq"] is None and "repeat_of" not in by[3], by[3]
+    assert by[4]["answer_seq"] is None and "repeat_of" not in by[4], by[4]
+
+
+def test_a_rerun_answered_once_does_not_answer_the_next_rerun():
+    # no key on either side: None == None must not read as the same work
+    rerun = _DECLINED + "\nrerun: true"
+    by = _after_a_decline_of(rerun, rerun)
+    assert by[3]["answer_seq"] is None and "repeat_of" not in by[3], by[3]
+
+
+def test_the_dispatchers_own_annotation_does_not_make_a_repeat_different_work():
+    # the other direction: the line the dispatcher adds to a real repeat is not the being's argument
+    by = _after_a_decline_of(_DECLINED, _DECLINED + "\nUNCHANGED since the request at seq 1; the seat answered at seq 2.")
+    assert by[3]["answer_seq"] == 2 and by[3]["repeat_of"] == 1, by[3]

@@ -103,10 +103,6 @@ def request_subject(text: str) -> str:
     return f"{first}\n{rest}".strip()
 
 
-#: The 12-hex digest a request_run line carries ("(N bytes, sha256:<12>; ...").
-_SHA = re.compile(r"sha256:([0-9a-f]{12})")
-
-
 def earlier_requests(turns: Sequence[dict], member: str, query: str,
                      threshold: float = WORD_THRESHOLD) -> List[dict]:
     """The being's earlier request_runs on the same subject as `query` (its new request's path, why and
@@ -115,20 +111,17 @@ def earlier_requests(turns: Sequence[dict], member: str, query: str,
 
     `turns` is the seat conversation in order. Only the being's own requests are matched; the seat's
     answers are bound to them by the seq they name (conversations._ANSWER_NAMES), never by position."""
-    from sage.gateway.conversations import _ANSWER_NAMES
+    from sage.gateway.conversations import _ANSWER_NAMES, _request_key
     reqs, answers, by_file = [], {}, {}
-    sha_of = {}   # request seq -> the sha its line carried
     for t in turns:
         text = str(t.get("text", ""))
         if t.get("from") == member:
             if text.startswith("[request_run] "):
                 # the head: path and why, without the dispatcher's own lines (size, sha, annotations)
                 head = text.split("\n(", 1)[0]
-                m = _SHA.search(text)
                 reqs.append({"seq": t.get("seq"), "ts": str(t.get("ts") or ""),
                              "file": head.split("\n", 1)[0][len("[request_run] "):].strip(), "head": head,
-                             "sha": m.group(1) if m else ""})
-                sha_of[t.get("seq")] = m.group(1) if m else ""
+                             "key": _request_key(text)})
             continue
         first = text.strip().split("\n", 1)[0][:200]
         named = [int(n) for mm in _ANSWER_NAMES.finditer(text) for n in re.findall(r"\d+", mm.group(1))]
@@ -137,7 +130,7 @@ def earlier_requests(turns: Sequence[dict], member: str, query: str,
         if named:
             for r in reqs:
                 if r["seq"] in named:
-                    by_file.setdefault(r["file"], []).append((t.get("seq"), first, r["sha"], r["seq"]))
+                    by_file.setdefault(r["file"], []).append((t.get("seq"), first, r["key"], r["seq"]))
     if not reqs:
         return []
     rk = Ranker([request_subject(r["head"]) for r in reqs])
@@ -151,13 +144,15 @@ def earlier_requests(turns: Sequence[dict], member: str, query: str,
             # THE SEAT ANSWERS A REPEATED REQUEST ONCE, naming one seq of it (seat_run_requests); the
             # copies are answered by that answer. Bound to the next answer for the same file after it.
             a = next((x for x in by_file.get(r["file"], ()) if isinstance(x[0], int) and x[0] > r["seq"]), None)
-        if a is None and isinstance(r["seq"], int) and r["sha"]:
-            # A REPEAT FILED AFTER THE ANSWER IS ANSWERED BY IT TOO, when its bytes are the ones answered
-            # (cbp's review of #665). Measured on sprout-being 11-09: the seat declined
+        if a is None and isinstance(r["seq"], int) and r["key"] is not None:
+            # A REPEAT FILED AFTER THE ANSWER IS ANSWERED BY IT TOO, when it asks for the work answered: the
+            # same path, bytes and arguments, read by conversations._request_key, so a digest quoted in `why`
+            # is not its bytes and an explicit rerun repeats nothing (cbp's and pub's reviews of #665, #666).
+            # Measured on sprout-being 11-09: the seat declined
             # scratch/restart-sprout-claude-with-sudo.py (sha 48684f53f84a) at seq 2677; the ten repeats
             # after it were listed "(not answered yet)" here while the same receipt quoted that decline.
             prior = [x for x in by_file.get(r["file"], ())
-                     if isinstance(x[0], int) and x[0] < r["seq"] and x[2] == r["sha"]]
+                     if isinstance(x[0], int) and x[0] < r["seq"] and x[2] == r["key"]]
             if prior:
                 a = prior[-1]
                 repeat_of = a[3]
