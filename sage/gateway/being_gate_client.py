@@ -3154,7 +3154,7 @@ _TOOL_SCHEMAS = {
                     "You name the file — the only thing it needs — and the seat decides whether to run it. "
                     "If it runs it, its answer carries the real output: exit code, stdout, stderr; if it "
                     "declines, its answer says why. Answers come in your conversation with the seat, when "
-                    "the seat is there to give them (receipts also say how long it has been quiet). Adding "
+                    "the seat is there to give them (a receipt says so when the seat has been quiet for 3 hours or more). Adding "
                     "what you expect to learn is optional and helps the seat decide. Nothing runs at the "
                     "moment you call this; what you get back is a "
                     "receipt that the seat was asked, not a result. Use it instead of asking a "
