@@ -2561,7 +2561,12 @@ TODO_WINDOW_H = 48
 TODO_SHOWN = 15
 _BLOCK = re.compile(r"^\s*(20\d\d-\d\d-\d\d)[ T](\d\d:\d\d)")
 _SECTION = re.compile(r"^\s*[-*]?\s*\[?\s*(still open|open|added|done|completed)\s*\]?\s*:?\s*$", re.I)
-_NONE = re.compile(r"^\s*[-*]?\s*\[?\s*(still open|open)\s*\]?\s*:?\s*(none|nothing)\b", re.I)
+# "still open: none" CLEARS THE LIST, SO IT MUST BE THE WHOLE LINE (Legion's counterexample on #658): ending
+# in `(none|nothing)\b`, it also matched `- [still open] Nothing from sprout-being yet on the camera`, a real
+# open item, and wiped every open item above it. Now only "none" / "nothing" (optionally "nothing open"),
+# with at most a trailing ./! and one parenthesised note, is the empty-list marker.
+_NONE = re.compile(r"^\s*[-*]?\s*\[?\s*(still open|open)\s*\]?\s*:?\s*(none|nothing)(?:\s+open)?\s*[.!]?"
+                   r"\s*(?:\([^)]*\))?\s*[.!]?\s*$", re.I)
 _ITEM = re.compile(r"^\s*[-*]\s+(.*\S)\s*$")
 _BOX = re.compile(r"^\[([ xX])\]\s*(.*)$")
 _TAG = re.compile(r"^\[(done|still open|open|added|completed)\]\s*:?\s*(.*)$", re.I)
@@ -2617,18 +2622,32 @@ _BARE_ALL = re.compile(r"^\s*(?:(20\d\d-\d\d-\d\d)(?:[ T](\d\d:\d\d)(?::\d\d)?)?
 
 def _canonical_todo(text: str) -> str:
     out = []
+    # A date-only entry (`2026-11-08: [still open] …`) takes the time of the latest timed line of the SAME
+    # day above it, so it keeps its place in that day's order; with none, the start of the day (Legion on #658).
+    last_day, last_time = None, None
+
+    def stamp(day, time):
+        nonlocal last_day, last_time
+        if time:
+            last_day, last_time = day, time
+            return f"{day} {time} UTC"
+        return f"{day} {last_time if last_day == day and last_time else '00:00'} UTC"
+
     for line in text.splitlines():
         a = _BARE_ALL.match(line)
         if a:
             if a.group(1):
-                out.append(f"{a.group(1)} {a.group(2) or '00:00'} UTC")
+                out.append(stamp(a.group(1), a.group(2)))
             out.append(f"- [done] {a.group(3)}")
             continue
         m = _INLINE_ITEM.match(line)
         if m:
-            out.append(f"{m.group(1)} {m.group(2) or '00:00'} UTC")
+            out.append(stamp(m.group(1), m.group(2)))
             out.append(f"- {m.group(3)}")
             continue
+        h = _BLOCK.match(line)
+        if h:
+            last_day, last_time = h.group(1), h.group(2)
         b = _BARE_TAG.match(line)
         if b and not _ITEM.match(line):
             out.append(f"- {b.group(1)}")

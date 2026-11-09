@@ -112,3 +112,46 @@ def test_a_short_fragment_in_an_all_list_does_not_widen_the_close():
     text = ("2026-11-08 10:00 UTC: [still open] Check the hub notify route.\n"
             "2026-11-08 12:00 UTC: all: ok, dp\n")
     assert list(_open(text)) == ["Check the hub notify route."]
+
+
+def test_an_open_item_that_starts_with_nothing_does_not_wipe_the_list():
+    """Legion's counterexample on #658: `_NONE` ended in `(none|nothing)\\b`, so this real item cleared all."""
+    text = ("2026-11-08 10:00 UTC: [still open] Check the hub notify route.\n"
+            "2026-11-08 10:05 UTC: [still open] Verify the peer_ask path.\n"
+            "2026-11-08 11:00 UTC: [still open] Nothing from sprout-being yet on the camera.\n")
+    assert sorted(_open(text)) == ["Check the hub notify route.", "Nothing from sprout-being yet on the camera.",
+                                   "Verify the peer_ask path."]
+
+
+def test_the_same_item_in_the_dashed_shape_does_not_wipe_either():
+    text = ("2026-11-08 10:00 UTC\nstill open:\n- Check the hub notify route.\n"
+            "- [still open] None of the replies have arrived yet\n")
+    assert sorted(_open(text)) == ["Check the hub notify route.", "None of the replies have arrived yet"]
+
+
+def test_a_genuine_none_still_clears_in_every_spelling():
+    for marker in ("still open: none", "- still open: none", "- [still open] None", "still open: nothing.",
+                   "still open: nothing open", "- still open: none (all closed this beat)",
+                   "2026-11-08 12:00 UTC: [still open] none"):
+        text = "2026-11-08 10:00 UTC: [still open] Check the hub notify route.\n" + marker + "\n"
+        assert _open(text) == {}, marker
+
+
+def test_a_date_only_entry_takes_the_time_of_the_last_timed_line_that_day():
+    text = ("2026-11-08 17:09 UTC: [still open] Follow up on camera advice for sprout-being.\n"
+            "2026-11-08: [still open] Send camera advice to sprout-being using peer_ask.\n")
+    items = _open(text)
+    assert items["Send camera advice to sprout-being using peer_ask."] == datetime(2026, 11, 8, 17, 9, tzinfo=timezone.utc)
+
+
+def test_a_date_only_entry_on_a_new_day_starts_that_day():
+    text = ("2026-11-07 23:00 UTC: [still open] Check the hub notify route.\n"
+            "2026-11-08: [still open] Verify the peer_ask path.\n")
+    assert _open(text)["Verify the peer_ask path."] == datetime(2026, 11, 8, 0, 0, tzinfo=timezone.utc)
+
+
+def test_a_one_line_checkbox_closes_and_opens():
+    text = ("2026-11-08 10:00 UTC: [ ] Check the hub notify route.\n"
+            "2026-11-08 10:05 UTC: [ ] Verify the peer_ask path.\n"
+            "2026-11-08 11:00 UTC: [x] Check the hub notify route.\n")
+    assert list(_open(text)) == ["Verify the peer_ask path."]
