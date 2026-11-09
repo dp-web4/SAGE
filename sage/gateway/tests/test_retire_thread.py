@@ -359,3 +359,11 @@ def test_long_topic_words_are_cut_like_the_reason(tmp_path):
     assert ok, msg
     line = bt.render_closed(h).splitlines()[1]
     assert "…: short reason" in line and len(line.split(": short reason")[0]) == len("- 1970-01-01 00:00Z, ") + bt.CLOSED_WORDS_CHARS, line
+
+
+def test_a_closing_by_a_dotted_name_is_still_shown(tmp_path):
+    # McNugget on #662: "[^.]*" before ". Topic words" hid any closing whose `by` held a dot
+    h = _home(tmp_path)
+    ok, msg, _ = bt.retire_thread(h, {"words": "installer", "reason": "done with it"}, by="seat.v0.3")
+    assert ok, msg
+    assert "installer: done with it" in bt.render_closed(h)

@@ -310,7 +310,9 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
 CLOSED_SHOWN = 4
 CLOSED_REASON_CHARS = 240
 CLOSED_WORDS_CHARS = 80   # topic words can be a whole todo sentence (598 chars on cbp; legion on #662)
-_HEAD = re.compile(r"^> RETIRED (\d{4}-\d{2}-\d{2} \d{2}:\d{2})Z with retire_thread[^.]*\. Topic words: (.*)\.\s*$")
+# the optional " (by <who>)" may hold dots (a dotted member id, "v0.3 seat"): McNugget on #662
+_HEAD = re.compile(r"^> RETIRED (\d{4}-\d{2}-\d{2} \d{2}:\d{2})Z with retire_thread(?: \(by [^)]*\))?\. "
+                   r"Topic words: (.*)\.\s*$")
 _WHY = re.compile(r"^> No longer current: (.*)$")
 
 
