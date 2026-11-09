@@ -4503,7 +4503,9 @@ class HestiaF1aDispatcher:
         # and whose relative imports and data are not new.py's. A prior run is evidence for
         # this request only when it ran this path, these bytes, and these arguments.
         # rerun="false" is the default spelled out, not a request to rerun: now that the spec lists
-        # rerun, a being may pass it on every call, and any `rerun:` line wakes the seat.
+        # rerun, a being may pass it on every call. A `rerun:` line makes the request new work for
+        # wake_is_owed only while its run is still un-woken (under answered_run_wake "skip"); on a
+        # default instance a run woken once is not woken again for the same bytes (cbp on #665).
         arg_lines = [f"{k}: {str(v).strip()}" for k, v in intent.args.items()
                      if k not in ("path", "why", "reason", "to") and str(v).strip()
                      and not (k == "rerun" and str(v).strip().lower() in ("false", "no", "0", "none"))]
@@ -4741,36 +4743,45 @@ class HestiaF1aDispatcher:
             note = ("The seat was asked and a wake was sent. NOTHING HAS RUN YET and this is not "
                     "a result. seat_quiet says how long the seat has been silent; it can answer in "
                     f"'{seat_conv}' when it is back. Nothing is owed by you in the meantime.")
-        if not woke_now and not unchanged:
-            # NO WAKE LEFT, ON ANY INSTANCE (a hub-fired sprout session's probe on #664). A repeat of a
-            # request already woken for, or one sent while the seat holds a pause, wakes nobody; the
-            # note said "asked and woken ... either way it answers" on all of them, a promise of a reply
-            # that was not coming, and an unkept promise is what the dead-seat story was made of.
-            why_not = str(_said.get("not_woken") or "").strip().rstrip(".")
+        why_not = str(_said.get("not_woken") or "").split(" Your message was recorded")[0].strip().rstrip(".")
+        # THE NOTE IS CHOSEN BY WHY NO WAKE LEFT, NOT BY THE INSTANCE (reviews of #665 by cbp, legion and
+        # McNugget, and two hub-fired sprout sessions' wake-spy probes). `_wake_why` names the cause:
+        # - "no wake was owed": answered_run_wake "skip" and an answered, unchanged file. The run stays
+        #   un-woken, so rerun="true" (new arguments) wakes the seat once; this is the only case where
+        #   that advice is true. Legion: on skip, rearm_owed_wakes() then returns [] -- "already
+        #   answered" really is why no wake follows.
+        # - "no new wake": this run was already woken; asking again in it, rerun or not, sends none.
+        # - a pause, a refused mesh, no listener: a wake may still follow (a refused wake is tried again;
+        #   a pause's owed wake is rearmed when it ends, except under "skip" for an answered, unchanged
+        #   request, where rearm_owed_wakes() returns [] -- legion on #665), so no sentence may say
+        #   whether one is coming. These get the reason and the facts only.
+        # The reason text for each already says what happens next; the note adds only what is true here.
+        answered_skip = (unchanged and not woke_now and why_not.startswith("no wake was owed")
+                         and self._skips_answered_run_wake())
+        if not woke_now and not answered_skip:
+            what = ""
+            if unchanged:
+                what = ("The seat already declined this same file, unchanged; its reason is above. " if declined
+                        else "The seat already answered this same file, unchanged; that answer is above. ")
             note = (f"The request was recorded in '{seat_conv}', but no wake was sent for it"
                     + (f" ({why_not})" if why_not else "") + ". NOTHING HAS RUN YET and this is not a result. "
-                    + (f"It repeats the request at seq {pending[0]}, which the seat was told about; it "
-                       f"answers once, in '{seat_conv}', and that answer covers every copy. "
-                       if pending else "The seat reads this conversation when it is next woken. ")
-                    + ("seat_quiet says how long the seat has been silent; it can answer when it is back. "
-                       if seat_quiet else "")
+                    + what
+                    + (f"It repeats the request at seq {pending[0]}; an answer in '{seat_conv}' covers every "
+                       f"copy. " if pending else "")
+                    + (f"seat_quiet says how long the seat has been silent; it can answer in '{seat_conv}' "
+                       f"when it is back. " if seat_quiet else "")
                     + "Nothing is owed by you in the meantime.")
-        if unchanged and not woke_now:
-            # THE RECEIPT SAYS WHAT HAPPENED, ON EVERY INSTANCE. First only under answered_run_wake
-            # "skip" (recut of #154); a default instance's repeat of an answered, unchanged file also
-            # wakes nobody once its run was woken for, and its receipt said "asked and woken".
-            note = ("The request was recorded in "
-                    f"'{seat_conv}', but the seat was NOT woken for it: it already answered this "
-                    "same file, unchanged, and that answer is above. NOTHING HAS RUN. To have it "
-                    "run again anyway, call request_run again with its argument rerun set to "
-                    "'true', next to path and why. It is not a line in your file.")
-            if declined:
-                note = ("The request was recorded in "
-                        f"'{seat_conv}', but the seat was NOT woken for it: it already declined this "
-                        "same file, unchanged, and its reason is above. NOTHING HAS RUN. Calling "
-                        "request_run again with its argument rerun set to 'true', next to path and "
-                        "why, asks the seat again; it does not make the file run, and the seat "
-                        "still decides. It is not a line in your file.")
+        if answered_skip:
+            # THE RECEIPT SAYS WHAT HAPPENED (recut of #154): under "skip" an already-answered request is
+            # sent but wakes nobody, and rerun="true" asks once more.
+            what = "declined this same file, unchanged, and its reason is above" if declined else \
+                "answered this same file, unchanged, and that answer is above"
+            note = (f"The request was recorded in '{seat_conv}', but the seat was NOT woken for it: it "
+                    f"already {what}. NOTHING HAS RUN. Calling request_run again with its argument rerun set "
+                    "to 'true', next to path and why, asks the seat once more: it wakes the seat if no wake "
+                    "has gone out for this run yet"
+                    + ("; it does not make the file run, and the seat still decides" if declined else "")
+                    + ". It is not a line in your file.")
         return ResultEnvelope(ok=True, witness_id=said.witness_id, result={
             **result,
             "requested": rel,
@@ -4897,10 +4908,20 @@ class HestiaF1aDispatcher:
                                       skip_answered=self._skips_answered_run_wake())
         if run_start is None:
             start = conv.unanswered_run_start(self.memory_root, to, self.member)
-            self._wake_why = (f"no new wake: a wake was already sent for your messages since seq "
-                              f"{start}, with no answer recorded since, and further messages in the "
-                              f"same run do not send another. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it" if start else
-                              "no wake was owed for this message. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
+            tail = (" Your message was recorded in the conversation; no wake was sent. This does not confirm "
+                    "anyone has read or accepted it")
+            # "ALREADY SENT" ONLY WHEN IT WAS (found while fixing #665): under answered_run_wake "skip" an
+            # answered, unchanged request opens a run that is never woken, and this said "a wake was
+            # already sent for your messages since seq N" for a run no wake went out for.
+            if start and conv.run_was_woken(self.memory_root, to, self.member, start):
+                self._wake_why = (f"no new wake: a wake was already sent for your messages since seq "
+                                  f"{start}, with no answer recorded since, and further messages in the "
+                                  f"same run do not send another." + tail)
+            elif start:
+                self._wake_why = ("no wake was owed for this message: the seat already answered this same "
+                                  "request, unchanged." + tail)
+            else:
+                self._wake_why = "no wake was owed for this message." + tail
             return None            # already woke them about this run; saying more is not new mail
         pointer = f"sage://conversation/{to}#seq={run_start}-{turn['seq']}"
         woke = []
