@@ -1098,9 +1098,8 @@ class HestiaF1aDispatcher:
             pass
         # THE SCOPE COMES FIRST (cbp on #668): the reflect record keeps an error's first 200 chars
         # (heartbeat._record_line), and a being journals from that record, not from this message. This limit
-        # shares its "not sent:" prefix with others; without its scope, a refusal here read as a limit on
-        # every request. Seen on sprout-being 11-01..08, where the cap fired on asks to other peers (never to
-        # its seat: _say_instead stops a peer_ask to the seat first).
+        # shares its "not sent:" prefix with others, and its scope was not stated. On sprout-being 11-01..08 the
+        # cap fired on asks to other peers, never to its seat (_say_instead stops a peer_ask to the seat first).
         return (f"not sent: a limit on peer_ask and mesh only ({self.ASK_CAP_PER_PEER} per "
                 f"{self.ASK_WINDOW_S // 3600} hours to {key!r}; say and request_run do not count) is reached. "
                 f"You have already asked {to!r} {len(mine)} times in the last "
@@ -4628,7 +4627,9 @@ class HestiaF1aDispatcher:
                       else "not yet answered")
         if pending:
             lines.append(f"SAME AS the request at seq {pending[0]}, {unanswered}"
-                         + (f" (asked {len(pending) + 1} times now)." if len(pending) > 1 else "."))
+                         # the count decides nothing (legion on #668): a model of a limit at ~20 may track it
+                         + (f" (asked {len(pending) + 1} times now; the count decides nothing)."
+                            if len(pending) > 1 else "."))
         if unchanged and unchanged[0] is None:
             lines.append(f"UNCHANGED since the seat ran this exact file at seq {unchanged[1]}.")
         elif unchanged:
@@ -4729,14 +4730,15 @@ class HestiaF1aDispatcher:
                 ago = f", {mins} minute{'s' if mins != 1 else ''} ago" if mins >= 0 else ""
             except (ValueError, TypeError):
                 pass
-            # "A NOTE, NOT A LIMIT" FIRST (cbp on #668): the reflect record keeps an ok result's first 240 chars.
-            # THE COUNT HERE IS NOT A THRESHOLD (legion on #668). This note counts the being's own repeats ("and N
-            # more times since"); on sprout-being 11-01 the count reached 21, and the being's "guard" model of a
-            # limit at ~20 attempts tracks it, not the peer_ask cap (3 per 6 h). The key was "already_asked", the
-            # phrase that model was named with; it is "same_request_note" now, and the text says a count decides
-            # nothing.
+            # "A NOTE, NOT A LIMIT, AND ITS COUNT DECIDES NOTHING" FIRST (cbp and legion on #668): the reflect record
+            # keeps an ok result's first 240 chars. Two texts count the being's own repeats of one request: this note
+            # ("and N more times since", N = repeats - 1) and the seat-conversation line above ("asked N times now",
+            # N = repeats + 1). On sprout-being 11-01 their largest values were 19 and 21 (legion's mirror counts).
+            # A model of a limit at ~20 attempts, which that being held from 11-01, may track them; that link is an
+            # inference. The peer_ask cap is 3 per 6 hours. The key was "already_asked"; it is "same_request_note".
             result["same_request_note"] = (
-                f"A note, not a limit: you already asked for this exact file, with these arguments, at seq {first}{ago}"
+                f"A note, not a limit, and its count decides nothing: you already asked for this exact file, with "
+                f"these arguments, at seq {first}{ago}"
                 + (f", and {len(pending) - 1} more time{'s' if len(pending) > 2 else ''} since" if len(pending) > 1 else "")
                 + (f". The seat has not answered it in the last {_ANSWER_SCAN} turns of '{seat_conv}' "
                    f"(older turns were not checked)" if scan_truncated

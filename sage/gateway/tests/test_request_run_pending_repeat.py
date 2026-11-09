@@ -286,13 +286,17 @@ def test_under_a_pause_or_a_refused_mesh_no_note_says_no_wake_is_coming():
         assert "tried again on your next message" in n and "rerun" not in n, (cfg, n)
 
 
-def test_the_already_asked_note_is_a_note_not_a_limit():
-    # sprout-being read the repeat note as a guard with a threshold; it says it decides nothing, and promises no answer
+def test_the_same_request_note_is_a_note_not_a_limit_and_its_count_decides_nothing():
+    # cbp and legion on #668: the note leads with its scope, says its count decides nothing, and promises no answer
     d, home = _seat_home()
     d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
     r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
     said = r.result["same_request_note"]
-    assert said.startswith("A note, not a limit:") and "answers once" not in said, said
+    assert said.startswith("A note, not a limit, and its count decides nothing:") and "answers once" not in said, said
+    assert "covers every copy of this request" in said and "Nothing about this request is decided" in said, said
+    # the seat-conversation line carries the same count, and says the same
+    d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "a third time"}), _ALLOW)
+    assert "(asked 3 times now; the count decides nothing)." in conv.recent(home, "seat", limit=1)[-1]["text"]
     assert "nothing stops you" not in said, "no encouragement to ask again (cbp on #668)"
     # and it survives the reflect record's 240-char cut of an ok result (cbp on #668)
     from sage.gateway.heartbeat import _record_line

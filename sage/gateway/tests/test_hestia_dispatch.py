@@ -1714,7 +1714,7 @@ def test_asking_one_peer_is_capped_per_window_and_a_refused_ask_leaves_nothing_b
     notices_before = len(_mb_calls("hestia_member_notify"))
     env = d(BeingIntent("peer_ask", {"to": "legion", "body": "a completely different question"}), _ALLOW)
     assert not env.ok and "already asked 'legion' 3 times" in env.error and "inbox" in env.error
-    # sprout-being 11-02..09: the refusal read as a "guard" over every request; it says what it counts
+    # cbp on #668: the refusal states its scope first, inside the reflect record's 200-char cut
     assert env.error.startswith("not sent: a limit on peer_ask and mesh only (3 per 6 hours to 'legion'; "
                                 "say and request_run do not count) is reached."), env.error
     # the cap is keyed on the peer, not the spelling of `to`: the sentence names what is actually counted
