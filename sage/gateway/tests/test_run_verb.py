@@ -855,3 +855,58 @@ def test_bwrap_setup_never_loads_or_removes_a_profile_it_did_not_write(tmp_path)
         assert r.returncode == 1 and prof.read_text() == THEIRS, (args, r.stdout)
         assert not log.exists(), f"apparmor_parser was called for an unmanaged profile: {log.read_text()}"
         assert "not written by this script" in r.stdout
+
+
+def _seat_home(home, last_ts="2026-11-08T21:32:38Z"):
+    from sage.gateway import conversations as conv
+    conv.create(home, "test-seat", title="seat", participants=["test-seat", "test-being"],
+                writable_by=["test-seat", "test-being"])
+    conv.append(home, "test-seat", speaker="test-being", text="are you there?", enforce_write=False,
+                ts="2026-11-08T21:31:15Z")
+    conv.append(home, "test-seat", speaker="test-seat", text="yes, this reply is me", enforce_write=False,
+                ts=last_ts)
+    conv.append(home, "test-seat", speaker="test-being", text="[request_run] restart.py", enforce_write=False,
+                ts="2026-11-08T21:46:00Z")
+
+
+def test_a_run_that_reports_on_the_seat_is_told_when_the_seat_last_wrote(tmp_path):
+    """sprout-being 11-08: its own probe printed "sprout-claude is NOT running. Try: systemctl restart
+    sprout-seat" five times, each receipt said only "not evidence either way", and it held the seat dead for a
+    day while the seat answered it every few hours. The receipt now carries when the seat last wrote."""
+    from datetime import datetime, timezone
+    from sage.gateway.hestia_dispatch import _seat_wrote_note
+    _seat_home(tmp_path)
+    at = datetime(2026, 11, 8, 22, 30, 57, tzinfo=timezone.utc).timestamp()
+    probe = "check-sprout-running.py\n✗ test-seat is NOT running.\n  Try: systemctl restart sprout-seat"
+    note = _seat_wrote_note(tmp_path, "test-seat", probe, at)
+    assert note.startswith("One fact from your own records: test-seat last wrote to you at 2026-11-08T21:32Z")
+    assert "(seq 2)" in note and "58 min before this run began" in note, note
+    low = note.lower()
+    assert "is running" not in low and "alive" not in low and "will answer" not in low, "the fact, nothing wider"
+    # the word seat is enough (sprout-seat), and a run that does not name the seat gets nothing
+    assert _seat_wrote_note(tmp_path, "test-seat", "pgrep -f sprout-seat: nothing", at)
+    assert _seat_wrote_note(tmp_path, "test-seat", "Failed to connect to bus: hestia.service", at) == ""
+    assert _seat_wrote_note(tmp_path, "test-seat", "the seated reader", at) == ""
+    # no seat, or a seat that never wrote: nothing
+    assert _seat_wrote_note(tmp_path, "", probe, at) == ""
+    assert _seat_wrote_note(tmp_path, "other-seat", "other-seat is NOT running", at) == ""
+
+
+def test_the_seat_note_counts_days_hours_and_seconds():
+    from sage.gateway.hestia_dispatch import _ago
+    assert [_ago(s) for s in (5, 119, 600, 7199, 7300, 3 * 86400)] == \
+        ["5 s", "119 s", "10 min", "119 min", "2 h 1 min", "3 days"]
+
+
+@needs_sandbox
+def test_a_run_reporting_on_the_seat_carries_its_last_turn_and_a_plain_run_does_not(tmp_path):
+    d, home = _run_dispatcher(tmp_path)
+    _seat_home(home)
+    d._seat_conversation = lambda: "test-seat"
+    (home / "scratch" / "probe.py").write_text("print('test-seat is NOT running. Try: systemctl restart it')\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/probe.py"}))
+    assert r.ok, r.error
+    assert "test-seat last wrote to you at 2026-11-08T21:32Z (seq 2)" in r.result["note"], r.result["note"]
+    (home / "scratch" / "plain.py").write_text("print('Port 7711 is CLOSED.')\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/plain.py"}))
+    assert r.ok and "last wrote to you" not in r.result["note"], r.result["note"]
