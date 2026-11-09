@@ -50,9 +50,13 @@ def close_all(items: Dict[str, Tuple[str, object]], body: str) -> Optional[Tuple
     # the id, then its reason in parentheses. Matched as one phrase it closed nothing, while 19 open items
     # contained the id. What it names is what comes before a bracketed or dashed note.
     phrase = norm(re.split(r"\s+[(\[]|\s+[—–]\s+|\s+-\s+", m.group(1), maxsplit=1)[0])
-    if len(phrase) < MIN_PHRASE:
+    # SEVERAL PHRASES, COMMA-SEPARATED. The first `all:` mcnugget-being wrote once it could see its list
+    # (2026-11-08 21:58Z) was `all: camera advice, peer_ask`: two phrases. Read as one string it matched nothing.
+    # Each part must stand on its own (MIN_PHRASE), so a short fragment cannot widen the close.
+    parts = [p for p in (norm(x) for x in phrase.split(",")) if len(p) >= MIN_PHRASE]
+    if not parts:
         return (phrase, [])
-    closed = [items.pop(k)[0] for k in [k for k in items if phrase in k]]
+    closed = [items.pop(k)[0] for k in [k for k in items if any(p in k for p in parts)]]
     return (phrase, closed)
 
 
