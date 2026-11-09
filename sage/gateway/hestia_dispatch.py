@@ -4753,7 +4753,7 @@ class HestiaF1aDispatcher:
         woke_now = bool(_said.get("woke"))
         # NO PROMISE OF A REPLY, EVEN WHEN WOKEN (legion's review of #668: the same kind of promise #665 removed
         # from the not-woken notes; on 954 sprout-being records and 2,418 cbp-being ones). A woken seat can still
-        # be away, and an unkept "it answers" may feed a being's belief that the seat is dead (an inference).
+        # be away, and an unkept "it answers" may feed a being's belief that the seat is gone (an inference).
         note = ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
                 "a result. The seat decides whether to run it; an answer, when one comes, is in "
                 f"'{seat_conv}'. Nothing is owed by you in the meantime.")
