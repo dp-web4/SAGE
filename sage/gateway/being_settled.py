@@ -87,12 +87,15 @@ def _flat(s) -> str:
     return re.sub(r"\s+", " ", str(s or "")).strip()
 
 
-def _near(e: dict, near: Optional[Dict[str, List[str]]]) -> str:
+def _near(e: dict, near: Optional[Dict[str, List[str]]], show: int = 3) -> str:
+    """The mark: the OLDEST other entry first, then the newest (cbp's review of #661: in sprout's shape the one
+    true seat entry was the oldest of eleven, and newest-three hid it; later is not truer). `show` ids, then +N."""
     ids = (near or {}).get(e["id"])
     if not ids:
         return ""
-    more = f"+{len(ids) - 3}" if len(ids) > 3 else ""
-    return f" ≈{','.join(ids[-3:][::-1])}{more}"  # the newest three: the latest word on it
+    pick = ids[:1] + ids[1:][::-1][:max(show - 1, 0)] if show > 0 else []
+    more = f"+{len(ids) - len(pick)}" if len(ids) > len(pick) else ""
+    return f" ≈{','.join(pick)}{more}"
 
 
 def _line(e: dict, cap: int = 0, near: Optional[Dict[str, List[str]]] = None) -> str:
@@ -145,7 +148,8 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
     why = a.get("why", "")[:WHY_MAX_CHARS]
     target = None
     if a.get("id"):
-        want = a["id"].lower().lstrip("[").rstrip("]")
+        # the first token: an id copied from the block reads "[s3 ≈s1]" (cbp's review of #661)
+        want = (a["id"].lower().lstrip("[").split() or [""])[0].rstrip("]")
         want = want if want.startswith("s") else "s" + want
         target = next((e for e in entries if e["id"] == want), None)
         if target is None:
@@ -188,7 +192,7 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                            f"settle id={target['id']} with that question and your new answer, so the answer stays "
                            "with the question it answers. If your answer answers a different question, settle it "
                            "as a new one: question and answer, without id. Nothing was changed.")
-        if _norm(given) != _norm(target["question"]) and _close_to([target], given, strict=True) is None:
+        if _norm(given) != _norm(target["question"]) and not _same_question(target, given):
             return False, (f"{target['id']} holds the question {target['question'][:160]!r}; yours, "
                            f"{given[:160]!r}, reads as a different question. Settle yours as a new one (question "
                            f"and answer, without id), or reopen {target['id']} first if it no longer holds. "
@@ -234,11 +238,15 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
         # WHAT THE EARLIER ONE SAYS, NOT ONLY ITS QUESTION. sprout-being 11-07: s101 ("No — pgrep returns
         # nothing") was settled 2.5 h after s100 ("NOT a long-running service"), on one subject; a receipt naming
         # s100's question would not have shown that the two answers disagree.
+        near = _close_all(entries[:-1], question)
         said = "; ".join(f"{c['id']} (settled {str(c.get('at', ''))[:10]}) says {_flat(c.get('answer', ''))[:200]!r}"
-                         for c in _close_all(entries[:-1], question))
-        msg += (f" It reads close to {close['id']} ({close['question'][:120]!r}). Your earlier answer there: {said}. "
-                f"If they are the same question, keep one: reopen {new['id']}, then settle id={close['id']} with "
-                "your newest answer. If they differ, both stay, and each beat marks them with \u2248.")
+                         for c in near)
+        # "WITH THE ANSWER THAT HOLDS", NOT "YOUR NEWEST" (legion's review of #661): followed literally on the
+        # s100/s101 shape, "settle id=s1 with your newest answer" replaced the true entry with the false one
+        msg += (f" It reads close to {close['id']} ({close['question'][:120]!r}). Your earlier "
+                f"answer{'s' if len(near) > 1 else ''}: {said}. If they are the same question, keep one: reopen "
+                f"{new['id']}, then settle id={close['id']} with the answer that holds. If they differ, both stay, "
+                "and each beat marks them with \u2248.")
     return ok, msg
 
 
@@ -256,8 +264,13 @@ def _unnamed(text: str) -> str:
 
 
 def _stem(t: str) -> str:
-    """A plain English ending off, so run/runs/running, service/services and process/processes meet (pub's
-    review of #661: the first cut made running->runn, services->servic and process->proces)."""
+    """A plain English ending off, so runs/run, service/services and process/processes meet (pub's review of
+    #661: the first cut made services->servic and process->proces).
+
+    NO UNDOUBLING: `running` stays `runn`, apart from `run`. Measured on sprout's settled log (a hub-fired
+    sprout session, #661): joining them linked "Did sprout-claude run check-video-devices-simple.py?" (did a
+    script execute) to "Is sprout-seat running?" (is a seat alive), 7 -> 19 such links, nothing gained on the
+    live list. On this subject they are two questions (pub withdrew the suggestion)."""
     if len(t) > 4 and t.endswith("ies"):
         return t[:-3] + "y"
     if len(t) > 4 and t.endswith("es") and t[:-2].endswith(("s", "x", "z", "ch", "sh")):
@@ -266,9 +279,7 @@ def _stem(t: str) -> str:
         return t[:-1]
     for suf in ("ing", "ed"):
         if t.endswith(suf) and len(t) - len(suf) >= 3:
-            b = t[:-len(suf)]
-            # a doubled final consonant is the ending's (running, stopped), not the word's (killed, called)
-            return b[:-1] if len(b) > 3 and b[-1] == b[-2] and b[-1] in "bdgmnprt" else b
+            return t[:-len(suf)]
     return t
 
 
@@ -286,7 +297,7 @@ def _subject_terms(text: str) -> Dict[str, str]:
     from sage.gateway.home_recall import _terms
     out: Dict[str, str] = {}
     for t in _terms(_unnamed(text)):
-        parts = [x for x in re.split(r"[-_/.]", t) if x]
+        parts = [x for x in t.split("-") if x]
         for x in (parts if len(parts) > 1 else [t]):
             x = _stem(x.strip("'"))
             if len(x) > 1 and x not in ("it", "its"):
@@ -294,16 +305,10 @@ def _subject_terms(text: str) -> Dict[str, str]:
     return out
 
 
-def _closeness(questions: List[str], strict: bool = False):
+def _closeness(questions: List[str]):
     """score(query_terms, i): relevance's idf overlap over these questions, where the parts of one name count
-    as one shared word (two parts of 'sprout-claude' are not two things in common).
-
-    NAMING DIVIDES BY THE SHORTER SIDE; STRICT BY BOTH (their geometric mean). Measured on sprout's settled log
-    (111 questions) at CLOSE_AT: the shorter side links 9 of its 10 live seat entries and lets 12 of 453 links
-    cross subjects, most of them two generic words ("physical machine") filling a short question; the geometric
-    mean links 7 of 10 and 3 of 234. A name costs the being one quoted line, so naming takes recall. Accepting a
-    reworded question as the SAME one puts an answer under it (cbp-being's s10, 10-28..30), so that takes
-    precision (pub's review of #661)."""
+    as one shared word (two parts of 'sprout-claude' are not two things in common). This is for NAMING only:
+    whether a reworded question is the SAME question is _same_question's, on the predicate CLOSE_AT was set for."""
     groups = [_subject_terms(q) for q in questions]
     df: Dict[str, int] = {}
     for g in groups:
@@ -317,23 +322,25 @@ def _closeness(questions: List[str], strict: bool = False):
     def score(q: Dict[str, str], i: int) -> float:
         d = groups[i]
         shared = set(q) & set(d)
-        words = len({q[t] for t in shared})
+        # BOTH SIDES (cbp's review of #661): counted from the query only, "the parts of one name are one word"
+        # held when the hyphenated question asked, not when the spaced one did, so marks went one way (s102
+        # and s105 marked s101 on sprout's live list; s101 marked neither)
+        words = min(len({q[t] for t in shared}), len({d[t] for t in shared})) if shared else 0
         if not shared or words < min(2, len(set(q.values())), len(set(d.values()))):
             return 0.0
-        a, b = sum(idf(t) for t in q), sum(idf(t) for t in d)
-        den = (math.sqrt(a * b) if strict else min(a, b)) or 1.0
+        den = min(sum(idf(t) for t in q), sum(idf(t) for t in d)) or 1.0
         return sum(idf(t) for t in shared) / den
 
     return groups, score
 
 
-def _close_all(entries: List[dict], question: str, limit: int = 3, strict: bool = False) -> List[dict]:
+def _close_all(entries: List[dict], question: str, limit: int = 3) -> List[dict]:
     """Existing entries whose question reads like this one, at or over CLOSE_AT, closest first (newer first on
     a tie). It names, never merges: whether two questions are one is the being's to say."""
     if not entries:
         return []
     try:
-        _, score = _closeness([e["question"] for e in entries], strict)
+        _, score = _closeness([e["question"] for e in entries])
         q = _subject_terms(question)
         hits = [(score(q, i), i) for i in range(len(entries))]
     except Exception:
@@ -342,10 +349,28 @@ def _close_all(entries: List[dict], question: str, limit: int = 3, strict: bool 
     return [entries[i] for _, i in hits[:limit]]
 
 
-def _close_to(entries: List[dict], question: str, strict: bool = False) -> Optional[dict]:
+def _close_to(entries: List[dict], question: str) -> Optional[dict]:
     """The existing entry whose question reads most like this one, at or over CLOSE_AT; None otherwise."""
-    hits = _close_all(entries, question, 1, strict)
+    hits = _close_all(entries, question, 1)
     return hits[0] if hits else None
+
+
+def _same_question(target: dict, given: str) -> bool:
+    """Whether `given` restates `target`'s question, so `id=` may put an answer under it: exactly the predicate
+    CLOSE_AT was calibrated for (relevance's terms; same-question pairs 0.58, distinct <= 0.30), as on main.
+
+    NOT THE NAMING SCORE, AND NOT LOOSENED (cbp's and legion's reviews of #661). Naming may take two questions on
+    one subject; this may not, because a false admit takes the old answer out of the beat. Measured over the
+    12,210 ordered pairs of sprout's 111 settled questions: main's predicate admits 789; the naming score's
+    terms with a both-sides divisor admitted 662, 244 of them new, and those included "How to restart
+    sprout-claude?" for "Does sprout-claude need to be restarted?" (how vs whether); folding hyphens alone
+    admitted 1,986, including "How can sprout seat be restarted?" for "Is sprout-seat running?". So a respelled
+    name ("sprout-seat" for "sprout seat") is NAMED by the mark and the receipt, not admitted here."""
+    try:
+        from sage.gateway.relevance import Ranker
+        return bool(Ranker([_unnamed(target["question"])]).related(_unnamed(given), CLOSE_AT))
+    except Exception:
+        return False
 
 
 def _neighbours(entries: List[dict]) -> Dict[str, List[str]]:
@@ -399,9 +424,22 @@ def _commit(instance, entries: List[dict], nxt: int, log: dict, now, ok_msg: str
     return True, ok_msg
 
 
+#: A short line keeps at least this much of its question; a mark that would take it below is left off the
+#: line (the entry keeps its mark wherever it is shown whole, and in the listing).
+SHORT_QUESTION_FLOOR = 24
+
+
 def _short(e: dict, cap: int, near: Optional[Dict[str, List[str]]] = None) -> str:
-    """An entry as its id, question and day only, the question cut to fit `cap`."""
-    pre, tail = f"[{e['id']}{_near(e, near)}] ", f" (settled {str(e.get('at', ''))[:10]})"
+    """An entry as its id, question and day only, the question cut to fit `cap`.
+
+    ONE ID IN A SHORT LINE'S MARK, AND NEVER AT THE QUESTION'S EXPENSE (legion's review of #661): on legion-being's
+    full list, three ids took the median short question from 49 chars to 28, and at every field cap with 3-digit
+    ids the block passed RENDER_CHARS and showed 8 chars of a question. A mark asks the being to compare two
+    entries; a question it cannot recognise defeats it."""
+    tail = f" (settled {str(e.get('at', ''))[:10]})"
+    pre = f"[{e['id']}{_near(e, near, 1)}] "
+    if cap - len(pre) - len(tail) < SHORT_QUESTION_FLOOR:
+        pre = f"[{e['id']}] "
     q, room = _flat(e["question"]), max(cap - len(pre) - len(tail), 8)
     return pre + (q if len(q) <= room else q[:room - 1].rstrip() + "…") + tail
 
@@ -423,9 +461,9 @@ def render(instance) -> str:
     if near:
         # THE BLOCK SHOWED TWO ANSWERS TO ONE SUBJECT AS UNRELATED (sprout-being, 11-07..09: 11 entries on
         # whether its seat was alive, 2 of them true). It says which read alike; which holds stays the being's.
-        head += ("\n(\u2248 after an id names the newest other entries whose question reads like this one's: "
-                 "[s7 \u2248s9,s4] reads close to s9 and s4, and +N counts the rest. Their answers may agree or "
-                 "not; the day on each says which came later.)")
+        head += ("\n(\u2248 after an id names other entries whose question reads like this one's, the oldest "
+                 "first: [s9 \u2248s4,s7] reads close to s4 and s7, and +N counts the rest. Their answers may "
+                 "agree or not.)")
     foot = "- (entries shown without an answer: settle with no arguments shows them whole)"
     newest = list(reversed(entries))
     # room for the newest whole, then an equal share for each of the rest

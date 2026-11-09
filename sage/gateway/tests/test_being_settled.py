@@ -340,7 +340,7 @@ def test_every_beat_marks_entries_that_read_close_and_leaves_the_rest_unmarked(t
     assert "≈" not in st.render(other)
 
 
-def test_the_mark_names_the_newest_three_and_counts_the_rest(tmp_path):
+def test_the_mark_names_the_oldest_then_the_newest_and_counts_the_rest(tmp_path):
     # among other subjects, as on sprout (10 of 23 entries on its seat): rarity weighting fades a subject that
     # is the whole list
     for q in ("what colour is the test sky?", "how loud is the test fan?", "where is the lamp file kept?",
@@ -349,30 +349,79 @@ def test_the_mark_names_the_newest_three_and_counts_the_rest(tmp_path):
     for w in ("now", "without sudo", "when it dies", "from a script", "after the guard"):
         _s(tmp_path, question=f"how to restart the gizmo daemon {w}?", answer="no")
     shown = st.render(tmp_path)
-    assert "[s6 ≈s10,s9,s8+1]" in shown, shown
+    # the oldest first, then the newest (cbp's review of #661)
+    assert "[s6 ≈s7,s10,s9+1]" in shown, shown
 
 
-def test_run_runs_and_running_and_service_and_services_meet(tmp_path):
-    # pub's review of #661: running->runn, services->servic, process->proces kept the seat's own words apart
-    _s(tmp_path, question="Is the gizmo service running?", answer="yes")
+def test_plurals_meet_and_running_stays_apart_from_run(tmp_path):
+    # pub's review of #661: services->servic and process->proces kept the seat's own words apart
+    _s(tmp_path, question="Is the gizmo service up?", answer="yes")
     _s(tmp_path, question="what colour is the test sky?", answer="blue")
-    ok, msg, _ = _s(tmp_path, question="Which gizmo services run here?", answer="one")
+    ok, msg, _ = _s(tmp_path, question="Which gizmo services are up here?", answer="one")
     assert ok and "reads close to s1" in msg, msg
-    assert [st._stem(w) for w in ("running", "runs", "services", "processes", "process", "killed", "stopped")] == \
-        ["run", "run", "service", "process", "process", "kill", "stop"]
+    # running stays apart from run: on the seat, "is it running" and "did the script run" are two questions
+    assert [st._stem(w) for w in ("running", "runs", "services", "processes", "process", "killed", "tries")] == \
+        ["runn", "run", "service", "process", "process", "kill", "try"]
 
 
-def test_a_reworded_question_is_accepted_as_the_same_only_when_it_reads_close_both_ways(tmp_path):
-    # pub's review of #661: the id re-settle guard uses this scoring too; naming may take a short question with
-    # two generic words, but an answer must not land under a different question (cbp-being's s10)
-    _s(tmp_path, question="Is the test gizmo running? How do I check if it's alive?", answer="yes")
-    _s(tmp_path, question="Is the lamp accessible on this physical machine?", answer="yes")
-    ok, msg, _ = _s(tmp_path, id="s1", question="Is test-gizmo running?", answer="yes, it wakes per message")
-    assert ok, msg
-    ok, msg, _ = _s(tmp_path, id="s2", question="Can the lamp on the physical machine be reached?", answer="yes, read-only")
-    assert ok, msg
-    # two generic words: close enough to NAME (0.5 by the shorter side), not to be the same question (0.26)
-    other = "How to restart the gizmo on the physical machine when the guard blocks it?"
-    assert st._close_to(st.read(tmp_path)[0][-1:], other) is not None
-    ok, msg, _ = _s(tmp_path, id="s2", question=other, answer="it cannot be")
+def test_the_id_guard_is_mains_predicate_and_never_admits_a_question_on_the_same_subject_only(tmp_path):
+    # cbp's and legion's reviews of #661: the guard decides whether an answer goes under an existing question
+    _s(tmp_path, question="When should I escalate a scope request?", answer="when it is still open")
+    ok, msg, _ = _s(tmp_path, id="s1", question="Which scope requests were escalated last week?", answer="two")
     assert not ok and "reads as a different question" in msg, msg
+    _s(tmp_path, question="Is sprout-seat running?", answer="yes, it wakes per message")
+    ok, msg, _ = _s(tmp_path, id="s2", question="How can sprout seat be restarted?", answer="run the script")
+    assert not ok and "reads as a different question" in msg, msg
+    ok, msg, _ = _s(tmp_path, id="s2", question="Is sprout-seat running right now?", answer="yes")
+    assert ok, msg
+
+
+def test_an_id_copied_from_the_block_with_its_mark_names_the_entry(tmp_path):
+    _s(tmp_path, question="Is the test gizmo running? How do I check if it's alive?", answer="yes")
+    _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    _s(tmp_path, question="Is test-gizmo running?", answer="no")
+    ok, msg, _ = _s(tmp_path, id="[s3 \u2248s1]", reopen="true")
+    assert ok and "reopened s3" in msg, msg
+
+
+def test_the_marks_are_mutual_when_one_spelling_is_hyphenated(tmp_path):
+    # cbp's review of #661: counted from the query side only, the spaced question marked the hyphenated one
+    # and not back
+    for q in ("How can gizmo-daemon be restarted?", "Did the gizmo daemon read the lamp file?",
+              "what colour is the test sky?", "how loud is the test fan?"):
+        _s(tmp_path, question=q, answer="x")
+    assert st._neighbours(st.read(tmp_path)[0]) == {}
+    other = tmp_path / "o"
+    other.mkdir()
+    for q in ("Did the gizmo daemon read the lamp file?", "How can gizmo-daemon be restarted?",
+              "what colour is the test sky?", "how loud is the test fan?"):
+        _s(other, question=q, answer="x")
+    assert st._neighbours(st.read(other)[0]) == {}
+
+
+def test_following_the_receipt_keeps_the_answer_that_holds(tmp_path):
+    # legion's review of #661: "settle id=s1 with your newest answer", followed literally, put the false answer
+    # in place of the true one
+    _s(tmp_path, question="Is the test gizmo running? How do I check if it's alive?", answer="it wakes per message")
+    _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    _s(tmp_path, question="where does the lamp file live?", answer="notes/")
+    ok, msg, _ = _s(tmp_path, question="Is test-gizmo running?", answer="no, pgrep returns nothing")
+    assert "with the answer that holds" in msg and "newest answer" not in msg, msg
+    assert "Your earlier answer:" in msg
+
+
+def test_a_short_line_keeps_its_question_readable_and_the_block_stays_in_budget(tmp_path):
+    # legion's review of #661: at every field cap with 3-digit ids and all linked, the block passed RENDER_CHARS
+    # and a short line showed 8 chars of its question
+    (tmp_path / st.SETTLED_FILE).write_text(json.dumps({"next": 131, "entries": [
+        {"id": f"s{101 + i}", "question": (f"Can the gizmo daemon be restarted, case {i}? " + "w" * 200)[:st.QUESTION_MAX_CHARS],
+         "answer": "a" * st.ANSWER_MAX_CHARS, "evidence": "e" * st.EVIDENCE_MAX_CHARS, "at": "2026-11-09T00:00:00Z"}
+        for i in range(st.MAX_ENTRIES)]}))
+    assert st._neighbours(st.read(tmp_path)[0]), "the fixture links"
+    shown = st.render(tmp_path)
+    assert len(shown) <= st.RENDER_CHARS, len(shown)
+    for ln in shown.splitlines():
+        if ln.startswith("- [s") and " -> " not in ln:
+            q = ln.split("] ", 1)[1].rsplit(" (settled", 1)[0]
+            assert len(q) >= min(st.SHORT_QUESTION_FLOOR, 20) or q.endswith("…") and len(q) >= 8, ln
+
