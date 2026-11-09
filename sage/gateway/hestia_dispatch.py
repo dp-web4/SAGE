@@ -2618,7 +2618,8 @@ class HestiaF1aDispatcher:
                 f"Not said aloud: this reads as a shell command ({cmd}). Speaking plays sound "
                 f"only; it runs nothing, and it does not ask anyone in the room to run it for you. "
                 f"To have a script of yours run, keep it as a .py or .sh file in your home and use "
-                f"request_run; the seat decides and answers in your conversation with it. To say "
+                f"request_run; the seat decides, and an answer, when one comes, is in your conversation "
+                f"with it. To say "
                 f"something to a person, say it as words to them."))
         # Refused BEFORE any hestia action is opened and before any sound: a being on a body with
         # no speaker gets a true sentence, the way a headless being calling `gaze` does.
@@ -4750,8 +4751,11 @@ class HestiaF1aDispatcher:
             result["seat_quiet"] = seat_quiet
         _said = said.result or {}
         woke_now = bool(_said.get("woke"))
+        # NO PROMISE OF A REPLY, EVEN WHEN WOKEN (legion's review of #668: the same kind of promise #665 removed
+        # from the not-woken notes; on 954 sprout-being records and 2,418 cbp-being ones). A woken seat can still
+        # be away, and an unkept "it answers" may feed a being's belief that the seat is gone (an inference).
         note = ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
-                "a result. The seat may run it or decline, and either way it answers in "
+                "a result. The seat decides whether to run it; an answer, when one comes, is in "
                 f"'{seat_conv}'. Nothing is owed by you in the meantime.")
         if seat_quiet and woke_now:
             note = ("The seat was asked and a wake was sent. NOTHING HAS RUN YET and this is not "

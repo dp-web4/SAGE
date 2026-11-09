@@ -303,3 +303,12 @@ def test_the_same_request_note_is_a_note_not_a_limit_and_its_count_decides_nothi
     from sage.gateway.being_gate_client import BeingIntent as _BI
     line = _record_line(_BI("request_run", {"path": "notes/probe.py", "why": "again"}), r)
     assert "A note, not a limit" in line, line
+
+
+def test_a_woken_receipt_promises_no_answer():
+    # legion on #668: "either way it answers" promised a reply the wake does not guarantee
+    d, home = _seat_home()
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+    n = r.result["note"]
+    assert "asked and woken" in n and "either way it answers" not in n, n
+    assert "an answer, when one comes, is in 'seat'" in n, n
