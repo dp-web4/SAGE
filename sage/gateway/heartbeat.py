@@ -520,7 +520,7 @@ ANSWER_SCHEMA = {"type": "object",
 # cbp-claude's pattern plus three narrow shapes; on a fresh set written after tuning it matched 6/8
 # change questions and 0/8 others. A miss costs nothing: the turn is exactly today's.
 # 2026-09-28 05:07Z, the first live question after #249: dp asked "what's new and different?". The
-# being answered, in its own reflective voice ("still learning what 'I' means"), a real answer. The
+# being answered, in its own reflective voice, a real answer. The
 # gate had not matched the wording (the "what's new" shape had to end at "new"), so the record of
 # what changed was simply not on offer. That shape now takes new/different, joined by and/or, still
 # ending there. Offering the line does not oblige the being to use it; it only makes the facts

@@ -23,7 +23,7 @@ def _home():
     conv.create(h, "room", title="room", participants=[ME, "voice"], writable_by=[ME, "voice"])
     say = lambda cid, who, text, ts: conv.append(h, cid, speaker=who, text=text, ts=ts, enforce_write=False)
     say("dp", "dp", "consciousness might be like\na whirlpool in the river.", "2026-10-01T05:00:00Z")
-    say("room", ME, "The room doesn't need words to be real.", "2026-10-01T05:30:00Z")
+    say("room", ME, "The lamp on the shelf stayed lit all evening.", "2026-10-01T05:30:00Z")
     say("room", "voice", "I'm here with you. I hear you.", "2026-10-01T05:31:00Z")
     t = say("room", "voice", "Hi Sprout. Do you remember anything we talked about before?", "2026-10-01T06:20:00Z")
     say("room", "voice", "a later line", "2026-10-01T06:25:00Z")
@@ -39,7 +39,7 @@ def test_the_block_says_who_it_is_and_the_conversation_before_the_turn_across_al
     assert "be present with what is here" in block
     lines = block.split("oldest first):\n")[1].splitlines()
     assert lines[0].startswith("- 80 min earlier, dp wrote in 'dp': \"consciousness might be like a whirlpool")
-    assert lines[1] == "- 50 min earlier, you said aloud in the room: \"The room doesn't need words to be real.\""
+    assert lines[1] == "- 50 min earlier, you said aloud in the room: \"The lamp on the shelf stayed lit all evening.\""
     assert lines[2] == "- 49 min earlier, a voice in the room said: \"I'm here with you. I hear you.\""
     assert "Do you remember anything" not in block and "a later line" not in block, "only BEFORE the turn"
 
@@ -72,7 +72,7 @@ def test_a_private_turn_never_reaches_an_answer_to_the_room_by_default():
                 enforce_write=False)
     block = hb.answer_context_block(h, ME, hb.SelectedTurn("room", t))
     assert "PRIVATE" not in block and "whirlpool" not in block, "nothing from 'dp' in an answer to 'room'"
-    assert "The room doesn't need words to be real." in block, "the room's own history still rides"
+    assert "The lamp on the shelf stayed lit all evening." in block, "the room's own history still rides"
     assert block.startswith("You are sprout:"), "its own continuity rides every answer"
 
 

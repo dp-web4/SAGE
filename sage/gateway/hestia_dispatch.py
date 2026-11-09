@@ -59,8 +59,9 @@ _PENDING_SCAN = 80
 #: stays the window for the seat-quiet fact. Measured on sprout-being 11-09: the seat declined one of its
 #: scripts at seq 2677, with its reasons; 91 turns later every receipt for those bytes said "SAME AS the request
 #: at seq 2714, not answered in the last 80 turns (asked 10 times now)", and repeats of an unchanged file wake
-#: no one by design. Minutes after the being had agreed with the seat that it was a session, it took the
-#: silence and "not answered" to mean the seat was dead, and asked again.
+#: no one by design. Five minutes after the being had agreed with the seat that it was a session (seq 2767), its
+#: journal still held that the seat needed a restart. 84 minutes after, it asked again, calling the seat dead
+#: (seq 2768).
 #: 1000 TURNS IS NOT A WEEK ON A BUSY BEING (cbp's review of #664): 1000-turn windows on cbp-being spanned a
 #: median 4.5 days, 90 of 265 reaching 7. Reading is not the cost (conv.recent parses the whole log at any
 #: limit; cbp's 14,213 turns took 122 ms), so the reach covers any conversation the fleet has.
