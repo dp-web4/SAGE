@@ -653,6 +653,19 @@ def _run_result_matches_request(text: str, key: Optional[tuple]) -> bool:
     return re.fullmatch(phrase + where + verdict, first[head.end():]) is not None
 
 
+def _run_receipt_contradicts(text: str, key: Optional[tuple]) -> bool:
+    """Does this seat line say it ran some other path or bytes than `key`? Only a receipt that names both
+    can contradict: a decline, words or a malformed receipt says nothing about bytes, so it is False here
+    (where `_run_result_matches_request` is False for not being proof; the two are not opposites)."""
+    if key is None:
+        return False
+    head = re.match(r"\[request_run\] I ran (\S+) \(sha ([0-9a-f]{12,64})\)", str(text or ""))
+    if not head:
+        return False
+    ran = head.group(2)
+    return head.group(1) != key[0] or not (key[1].startswith(ran) or ran.startswith(key[1]))
+
+
 def _already_answered(turns: list, speaker: str, idx: int) -> bool:
     """Is turns[idx] a repeat of an earlier request of `speaker`'s that the seat ANSWERED?
 
@@ -686,6 +699,15 @@ def _already_answered(turns: list, speaker: str, idx: int) -> bool:
     return False
 
 
+def run_was_woken(instance: Path, conv_id: str, speaker: str, run_start: int) -> bool:
+    """Whether the wake record says the run starting at `run_start` (or a later one) was woken."""
+    try:
+        state = json.loads(notify_state_path(instance, conv_id, speaker).read_text())
+    except (OSError, ValueError):
+        return False
+    return int(state.get("woke_for_run_starting_at") or 0) >= int(run_start)
+
+
 def wake_is_owed(instance: Path, conv_id: str, speaker: str,
                  skip_answered: bool = False) -> Optional[int]:
     """The run-start seq a wake is owed for, or None. Idempotent per run, and retried if the
@@ -710,7 +732,9 @@ def wake_is_owed(instance: Path, conv_id: str, speaker: str,
     Measured on cbp-being: 67 unchanged-file requests in 6 days, each one a seat wake whose
     only possible act was the same answer, which request_run already carries back to the being
     in the same beat (#178). The request is still sent and recorded; only the wake is not.
-    Any other turn in the run (prose, new bytes, other arguments, `rerun`) still owes one."""
+    Any other turn in a run that has NOT been woken yet (prose, new bytes, other arguments, `rerun`)
+    still owes one. Once the run was woken, only new bytes owe another (below), on any instance: a
+    `rerun` of the same bytes in a woken run wakes nobody (cbp's review of #665)."""
     start = unanswered_run_start(instance, conv_id, speaker)
     if start is None:
         return None

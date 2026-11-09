@@ -50,11 +50,33 @@ def test_after_the_seat_answers_it_is_unchanged_not_pending():
     assert "unchanged" in r.result and "already_asked" not in r.result
 
 
-def test_an_answer_before_the_scan_window_is_not_reported_as_not_answered_yet(monkeypatch):
+def test_an_answer_older_than_the_quiet_window_still_answers_the_repeat(monkeypatch):
+    # sprout-being 11-09: the seat declined these bytes at seq 2677; 91 turns later each repeat said "not
+    # answered in the last 80 turns (asked 10 times now)" and the being concluded the seat was dead. The
+    # answer scan reaches past the seat-quiet window, so the old answer is found and carried.
+    from sage.gateway import hestia_dispatch as hd
+    monkeypatch.setattr(hd, "_PENDING_SCAN", 6)
+    d, home = _seat_home()
+    d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+    asked = conv.recent(home, "seat", limit=1)[-1]["seq"]
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I did not run notes/probe.py. It restarts things.\n\nAnswers your request seq {asked}.")
+    for i in range(6):
+        conv.append(home, "seat", speaker="seat", via="seat", text=f"unrelated {i}")
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
+    assert "already_asked" not in r.result, r.result
+    assert f"the seat answered that at seq {asked + 1} (" in r.result["unchanged"]
+    assert " ago): it did not run it" in r.result["unchanged"], "the answer's age is shown"
+    assert "It restarts things." in r.result["unchanged"], "the reason is carried, not pointed at"
+    assert "not answered" not in conv.recent(home, "seat", limit=1)[-1]["text"]
+
+
+def test_an_answer_before_the_answer_scan_is_not_reported_as_not_answered_yet(monkeypatch):
     # #567 (cbp on #566): ask -> the seat answers -> the window scrolls -> the same ask again. The answer
     # is out of view, so "not answered yet" would be false; the notes name the window they checked.
     from sage.gateway import hestia_dispatch as hd
     monkeypatch.setattr(hd, "_PENDING_SCAN", 6)
+    monkeypatch.setattr(hd, "_ANSWER_SCAN", 6)
     d, home = _seat_home()
     d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
     asked = conv.recent(home, "seat", limit=1)[-1]["seq"]
@@ -101,7 +123,8 @@ def test_a_seat_quiet_through_the_beings_asks_is_named_on_the_receipt(monkeypatc
     q = r.result["seat_quiet"]
     assert "has said nothing in this conversation since" in q and "through 2 of your requests" in q
     assert "away, not stuck" in q and "nothing for you to restart" in q
-    assert "wake was sent" in r.result["note"] and "asked and woken" not in r.result["note"]
+    # this repeat woke nobody (its run was already woken for): the note says so, and still points at the quiet
+    assert "no wake was sent" in r.result["note"] and "asked and woken" not in r.result["note"]
     assert "can answer" in r.result["note"] and "it answers them" not in q
     assert "no seat answer" not in r.result["note"], "an earlier seat turn is in view; the note may not deny it"
 
@@ -150,3 +173,114 @@ def test_quiet_after_an_answer_keeps_that_answer_and_does_not_deny_it(monkeypatc
     assert "unchanged" in r.result and f"seq {asked}" in r.result["unchanged"]
     assert "through 1 of your requests" in r.result["seat_quiet"]
     assert "no seat answer" not in r.result["note"] and "not answered" not in r.result["note"]
+
+
+def test_the_note_says_whether_a_wake_left_on_a_default_instance():
+    # a hub-fired sprout session's probe on #664: on a default instance (answered_run_wake unset) the note said
+    # "asked and woken ... either way it answers" on repeats that woke nobody
+    d, home = _seat_home()
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+    first = conv.recent(home, "seat", limit=1)[-1]["seq"]
+    assert "asked and woken" in r.result["note"], r.result["note"]
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
+    assert "no wake was sent" in r.result["note"] and "asked and woken" not in r.result["note"], r.result["note"]
+    assert f"repeats the request at seq {first}" in r.result["note"]
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I did not run notes/probe.py. It restarts things.\n\nAnswers your request seq {first}.")
+    notes = []
+    for why in ("third", "fourth"):
+        r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": why}), _ALLOW)
+        notes.append(r.result["note"])
+    # the first ask after the decline opens a new run and wakes the seat (pub on #665); the next one does not
+    assert "asked and woken" in notes[0], notes[0]
+    assert "no wake was sent" in notes[1] and "already declined" in notes[1], notes[1]
+    assert "no new wake: a wake was already sent" in notes[1] and "rerun" not in notes[1], notes[1]
+
+
+def _wakes():
+    from sage.gateway.tests.test_hestia_dispatch import FakeMcp
+    return sum(1 for n, _ in FakeMcp.calls if n == "hestia_member_notify")
+
+
+def _decline_then_repeat(home, d):
+    """first ask -> decline -> repeats; returns [(woke, note)] for each ask, by the wake spy."""
+    out = []
+
+    def ask(why, **extra):
+        before = _wakes()
+        r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": why, **extra}), _ALLOW)
+        out.append((_wakes() > before, r.result["note"]))
+    ask("first")
+    first = conv.recent(home, "seat", limit=1)[-1]["seq"]
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I did not run notes/probe.py. It restarts things.\n\nAnswers your request seq {first}.")
+    ask("again")
+    ask("and again")
+    ask("rerun it", rerun="true")
+    return out
+
+
+def test_every_note_matches_the_wake_spy_and_rerun_advice_only_where_rerun_wakes():
+    # cbp's review of #665: on a default instance the NOT-woken note advised rerun='true', which woke nobody
+    import json as _json
+    d, home = _seat_home()
+    rows = _decline_then_repeat(home, d)
+    for woke, note in rows:
+        assert ("asked and woken" in note) == woke, (woke, note)
+    assert [w for w, _ in rows] == [True, True, False, False], rows
+    assert "no new wake: a wake was already sent" in rows[2][1] and "rerun" not in rows[2][1], rows[2][1]
+
+    d2, home2 = _seat_home()
+    (home2 / "instance.json").write_text(_json.dumps({"answered_run_wake": "skip"}))
+    rows2 = _decline_then_repeat(home2, d2)
+    for woke, note in rows2:
+        assert ("asked and woken" in note) == woke, (woke, note)
+    assert [w for w, _ in rows2] == [True, False, False, True], rows2
+    assert "asks the seat once more" in rows2[1][1], "under skip, rerun does wake once, and the note may say so"
+    assert "a wake was already sent" not in rows2[1][1], "no wake went out for that run"
+
+
+def test_the_quiet_window_and_the_answer_reach_are_separate(monkeypatch):
+    # cbp's item 9 (legion's mutants on #664): the seat-quiet fact reads _PENDING_SCAN turns, the answer scan
+    # _ANSWER_SCAN. A seat turn 8 turns back is outside a 6-turn quiet window but inside the answer reach.
+    from sage.gateway import hestia_dispatch as hd
+    monkeypatch.setattr(hd, "_PENDING_SCAN", 6)
+    monkeypatch.setattr(hd, "SEAT_QUIET_S", 0)
+    d, home = _seat_home()
+    conv.append(home, "seat", speaker="seat", via="seat", text="hello from the seat")
+    for i in range(8):
+        conv.append(home, "seat", speaker="sprout-being", text=f"[request_run] notes/other{i}.py\nwhy: x",
+                    enforce_write=False)
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+    q = r.result.get("seat_quiet", "")
+    assert "in the last 6 turns" in q, q
+    monkeypatch.setattr(hd, "_PENDING_SCAN", 80)
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
+    assert "since" in r.result.get("seat_quiet", ""), r.result.get("seat_quiet")
+
+
+def test_under_a_pause_or_a_refused_mesh_no_note_says_no_wake_is_coming():
+    # two hub-fired sprout sessions' probes and legion on #665: a pause's owed wake is rearmed when it ends,
+    # a refused wake is tried again; a note may not say none is coming, nor advise rerun as if it woke
+    import json as _json
+    from sage.gateway.tests.test_hestia_dispatch import FakeMcp
+    for cfg in (None, {"answered_run_wake": "skip"}):
+        d, home = _seat_home()
+        if cfg:
+            (home / "instance.json").write_text(_json.dumps(cfg))
+        d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+        first = conv.recent(home, "seat", limit=1)[-1]["seq"]
+        conv.append(home, "seat", speaker="seat", via="seat",
+                    text=f"[request_run] I did not run notes/probe.py. No.\n\nAnswers your request seq {first}.")
+        conv.pause_wakes(home, "seat", by="seat", minutes=5, reason="answering directly")
+        r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "paused", "rerun": "true"}), _ALLOW)
+        n = r.result["note"]
+        assert "paused until" in n and "rerun" not in n and "sends no new wake" not in n, (cfg, n)
+        conv.resume_wakes(home, "seat", force="test")
+        FakeMcp.fail = {"hestia_member_notify": "mesh down"}
+        try:
+            r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "mesh"}), _ALLOW)
+        finally:
+            FakeMcp.fail = {}
+        n = r.result["note"]
+        assert "tried again on your next message" in n and "rerun" not in n, (cfg, n)
