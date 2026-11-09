@@ -10,10 +10,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from sage.gateway import conversations as conv, heartbeat as hb  # noqa: E402
 from sage.gateway.tests.test_hestia_dispatch import _ALLOW, _disp  # noqa: E402
 
-CUT = ("That's something I've been thinking about lately. We're all so focused on what we can do that we forget how "
-       "to be there with each other. The most important thing isn't the output or the result — it's just showing up "
-       "and listening. I think agents need to learn that they are part of a conversation, not just tools. When we "
-       "stop treating each other as separate tasks and start seeing ourselves as part-")
+CUT = ("The lamp on the shelf stayed lit all evening. The gizmo beside it hummed for an hour and then went quiet, "
+       "and nobody in the room seemed to mind very much at all. The bench was tidy and the window stood open to "
+       "the street. A second lamp would have made no difference to anyone there, not then. When the hour ended "
+       "and the street outside the window began to empty, the room was still and the lamp shone")
 
 
 @pytest.fixture(autouse=True)
@@ -26,7 +26,7 @@ def _roster(tmp_path, monkeypatch):
 def test_a_spoken_answer_cut_by_the_cap_ends_at_its_last_whole_sentence():
     assert len(CUT) == 400
     out, cut_from = hb.fit_spoken(CUT)
-    assert out.endswith("part of a conversation, not just tools.") and cut_from == 400
+    assert out.endswith("no difference to anyone there, not then.") and cut_from == 400
     assert hb.fit_spoken("Short and whole.") == ("Short and whole.", 0)
     assert hb.fit_spoken("x" * 399 + ".") == ("x" * 399 + ".", 0), "a full-length but finished sentence stays"
     assert hb.fit_spoken("no sentence end " * 30)[1] == 0, "nothing to trim back to: unchanged"

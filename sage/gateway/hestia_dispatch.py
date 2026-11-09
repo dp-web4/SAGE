@@ -53,10 +53,28 @@ from sage.gateway.reference_f1a import ReferenceF1aDispatcher
 _RUN_MARKER = "[request_run]"
 # The first line of a seat run/decline receipt (seat_run_requests.py): the verb and the path.
 _SEAT_RUN_LINE = re.compile(r"\[request_run\] I (ran|did not run) (\S+)")
-# How many seat-conversation turns request_run reads for earlier asks and their answers.
+# The window for the seat-quiet fact (_seat_quiet): how many recent seat-conversation turns it reads.
 _PENDING_SCAN = 80
+#: How far back an ANSWER to these bytes is looked for (the request scan). Wider than _PENDING_SCAN, which
+#: stays the window for the seat-quiet fact. Measured on sprout-being 11-09: the seat declined one of its
+#: scripts at seq 2677, with its reasons; 91 turns later every receipt for those bytes said "SAME AS the request
+#: at seq 2714, not answered in the last 80 turns (asked 10 times now)", and repeats of an unchanged file wake
+#: no one by design. In the beat that began five minutes after the being had agreed with the seat that it was a
+#: session (seq 2767), its journal still held that the seat needed a restart. 84 minutes after, it asked again,
+#: calling the seat dead (seq 2768).
+#: 1000 TURNS IS NOT A WEEK ON A BUSY BEING (cbp's review of #664): 1000-turn windows on cbp-being spanned a
+#: median 4.5 days, 90 of 265 reaching 7. Reading is not the cost (conv.recent parses the whole log at any
+#: limit; cbp's 14,213 turns took 122 ms), so the reach covers any conversation the fleet has.
+_ANSWER_SCAN = 20000
 #: How long the seat may say nothing, while the being keeps asking, before a request_run receipt says so.
 SEAT_QUIET_S = 3 * 3600
+
+
+#: What a long silence from the seat does and does not mean, said wherever the being meets it.
+_SEAT_AWAY = ("A seat that has not written for hours may be away, not stuck: there is nothing for you to "
+              "restart. Your requests stay in this conversation, and it can answer them when it is back.")
+_SEAT_AWAY_REQUEST = ("A quiet seat may be away, not stuck: there is nothing for you to restart from "
+                      "this request. Your requests stay here, and it can answer them when it is back.")
 
 
 def _seat_quiet(turns, member: str, seat_conv: str, truncated: bool, now=None):
@@ -75,8 +93,7 @@ def _seat_quiet(turns, member: str, seat_conv: str, truncated: bool, now=None):
         if t.get("from") == seat_conv:
             last, asks_since = t, 0
         # Other speakers (including the operator) do not prove the seat replied.
-    away = ("A quiet seat may be away, not stuck: there is nothing for you to restart from "
-            "this request. Your requests stay here, and it can answer them when it is back.")
+    away = _SEAT_AWAY_REQUEST
     if last is None:
         if not truncated or not asks_since:
             return None     # a new conversation, or one the being has not asked in: nothing to say
@@ -1240,7 +1257,13 @@ class HestiaF1aDispatcher:
                 convs = " Conversations you can speak in: " + ", ".join(ids) + "."
         except Exception:
             pass
-        return (f"not sent: you have already asked {to!r} {len(mine)} times in the last "
+        # THE SCOPE COMES FIRST (cbp on #668): the reflect record keeps an error's first 200 chars
+        # (heartbeat._record_line), and a being journals from that record, not from this message. This limit
+        # shares its "not sent:" prefix with others, and its scope was not stated. On sprout-being 11-01..08 the
+        # cap fired on asks to other peers, never to its seat (_say_instead stops a peer_ask to the seat first).
+        return (f"not sent: a limit on peer_ask and mesh only ({self.ASK_CAP_PER_PEER} per "
+                f"{self.ASK_WINDOW_S // 3600} hours to {key!r}; say and request_run do not count) is reached. "
+                f"You have already asked {to!r} {len(mine)} times in the last "
                 f"{self.ASK_WINDOW_S // 3600} hours (most recently {last_min} min ago). Another ask "
                 f"reaches the same peer about the same moment and costs them a wake; it cannot make "
                 f"an answer arrive sooner. Read your inbox for their reply first. If something is "
@@ -2793,11 +2816,11 @@ class HestiaF1aDispatcher:
                 f"speak takes one utterance of up to {_body.SPEAK_MAX_CHARS} characters; yours is "
                 f"{len(text)}. Nothing was said. Say the part that matters most, or say it in turns."))
         # A SHELL COMMAND SPOKEN ALOUD RUNS NOTHING, AND IS NOT PLAYED. Measured on sprout-being
-        # 2026-10-14: with its run requests unanswered, it spoke `python3 scratch/... 2>&1 | tee`
-        # four times and `sudo usermod -aG video $USER && sudo systemctl restart ...` three times
-        # through the headset, then asked the seat to verify the result "after adding user to the
-        # video group" -- it took the speaking for the doing. The seat told it, in its own channel,
-        # that speech runs nothing (seq 248); it spoke the sudo line twice more. The correction has
+        # 2026-10-14: with its run requests unanswered, it spoke a script invocation four times and
+        # a root command three times through the headset, then asked the seat to verify the result
+        # as if the command had been applied -- it took the speaking for the doing. The seat told it,
+        # in its own channel, that speech runs nothing (seq 248); it spoke the root command twice
+        # more. The correction has
         # to arrive in the act's own receipt, at the moment of the act. And a root command broadcast
         # into a room is an ask to whoever is listening, which is not a door this body offers.
         # Narrow on purpose: a leading command word or a shell operator, not prose that mentions one.
@@ -2807,7 +2830,8 @@ class HestiaF1aDispatcher:
                 f"Not said aloud: this reads as a shell command ({cmd}). Speaking plays sound "
                 f"only; it runs nothing, and it does not ask anyone in the room to run it for you. "
                 f"To have a script of yours run, keep it as a .py or .sh file in your home and use "
-                f"request_run; the seat decides and answers in your conversation with it. To say "
+                f"request_run; the seat decides, and an answer, when one comes, is in your conversation "
+                f"with it. To say "
                 f"something to a person, say it as words to them."))
         # Refused BEFORE any hestia action is opened and before any sound: a being on a body with
         # no speaker gets a true sentence, the way a headless being calling `gaze` does.
@@ -2859,10 +2883,9 @@ class HestiaF1aDispatcher:
         except Exception as e:
             room_err = f"{type(e).__name__}: {e}"[:160]
         # SOUND RUNS NOTHING, AND THE RECEIPT SAYS SO. Measured on sprout-being 2026-10-14: with
-        # its run requests going nowhere, it spoke `python3 scratch/test-cv2-video1.py ...` aloud
-        # three times, then `sudo usermod -aG video $USER && sudo systemctl restart ...`, and 40 s
-        # later asked the seat to verify OpenCV "after adding user to the video group and
-        # restarting udisks2" — it took the speaking for the doing. The receipt said only that
+        # its run requests going nowhere, it spoke a script invocation aloud three times, then a
+        # root command, and 40 s later asked the seat to verify the result as if the command had
+        # been applied — it took the speaking for the doing. The receipt said only that
         # the words were played, which is true and left the inference open.
         said = (f"played aloud through {speaker} ({done['seconds']}s): \"{text}\". "
                 f"Speaking is sound only: nothing said aloud is executed.")
@@ -3858,6 +3881,7 @@ class HestiaF1aDispatcher:
                     + tail.decode(errors="replace"))
 
         stopped = False
+        run_t0 = time.time()   # both sandboxes: `started` is set on the bwrap path only
         try:
             o_path, e_path = os.path.join(outdir, "stdout"), os.path.join(outdir, "stderr")
             why = None
@@ -3920,6 +3944,15 @@ class HestiaF1aDispatcher:
             "note": _run_note(rc, errtxt, [b for b, _ in staged], out)}
         if action_id and _HOST_VIEW.search(f"{out}\n{errtxt}"):
             result["note"] += " " + _daemon_answered_note(action_id)
+        if _HOST_VIEW.search(f"{out}\n{errtxt}"):
+            try:
+                seat = self._seat_conversation()
+                said = _seat_wrote_note(self.memory_root, seat, f"{staged[0][0]}\n{out}\n{errtxt}",
+                                        run_t0) if seat else ""
+            except Exception:
+                said = ""
+            if said:
+                result["note"] += " " + said
         if not seatbelt:
             mounts, skipped, _mask = grant_mounts
             result["note"] += _run_reach_note(mounts, skipped)
@@ -4729,6 +4762,7 @@ class HestiaF1aDispatcher:
         digest = hashlib.sha256(p.read_bytes()).hexdigest()[:12]
         unchanged = None  # (seq it asked at, seq the seat answered at)
         answer_text = ""   # what that answer SAID, to hand back rather than point at
+        answer_ts = ""     # when it was said, so the being can judge how old the answer is
         asked_at = None
         asked_seqs = []    # every earlier request for these bytes and arguments, oldest first
         asked_ts = {}      # seq -> when it was asked
@@ -4739,13 +4773,17 @@ class HestiaF1aDispatcher:
         # and whose relative imports and data are not new.py's. A prior run is evidence for
         # this request only when it ran this path, these bytes, and these arguments.
         # rerun="false" is the default spelled out, not a request to rerun: now that the spec lists
-        # rerun, a being may pass it on every call, and any `rerun:` line wakes the seat.
+        # rerun, a being may pass it on every call. A `rerun:` line makes the request new work for
+        # wake_is_owed only while its run is still un-woken (under answered_run_wake "skip"); on a
+        # default instance a run woken once is not woken again for the same bytes (cbp on #665).
         arg_lines = [f"{k}: {str(v).strip()}" for k, v in intent.args.items()
                      if k not in ("path", "why", "reason", "to") and str(v).strip()
                      and not (k == "rerun" and str(v).strip().lower() in ("false", "no", "0", "none"))]
         lines = [f"[request_run] {rel}",
                  f"why: {why}" if why else "why: (none given — the being did not say what it expects to learn)",
-                 f"({p.stat().st_size} bytes, sha256:{digest}; the seat decides whether to run it and answers here)"]
+                 # no promise of a reply (legion and cbp on #673); _REQUEST_SOURCE_HEADER pins only
+                 # "(N bytes, sha256:HEX; <anything>)", so these words can change without breaking identity
+                 f"({p.stat().st_size} bytes, sha256:{digest}; the seat decides whether to run it; its answer, if any, comes here)"]
         # Parse the text we will actually send, including multiline explanations.
         # A synthetic short why could hide ambiguous source headers from this reader.
         request_key = conv._request_key("\n".join(lines + arg_lines))
@@ -4758,17 +4796,18 @@ class HestiaF1aDispatcher:
                 return None
             return m.group(1), m.group(2).rstrip("."), first
 
-        # THE SCAN SEES THE LAST _PENDING_SCAN TURNS, AND A PENDING NOTE SAYS SO (#567, cbp on #566). An
+        # THE SCAN SEES THE LAST _ANSWER_SCAN TURNS, AND A PENDING NOTE SAYS SO (#567, cbp on #566). An
         # answer to an EARLIER ask for these bytes answers this one (below), and that answer can sit
         # before the window while a later ask is inside it. "Not answered yet" was then false. When the
         # conversation is longer than the window, the notes name the window instead of claiming "yet".
-        window = conv.recent(self.memory_root, seat_conv, limit=_PENDING_SCAN + 1)
-        scan_truncated = len(window) > _PENDING_SCAN
+        window = conv.recent(self.memory_root, seat_conv, limit=_ANSWER_SCAN + 1)
+        scan_truncated = len(window) > _ANSWER_SCAN
         try:
-            seat_quiet = _seat_quiet(window[-_PENDING_SCAN:], self.member, seat_conv, scan_truncated)
+            seat_quiet = _seat_quiet(window[-_PENDING_SCAN:], self.member, seat_conv,
+                                     len(window) > _PENDING_SCAN)
         except Exception:
             seat_quiet = None
-        for t in window[-_PENDING_SCAN:]:
+        for t in window[-_ANSWER_SCAN:]:
             text = str(t.get("text", ""))
             if t.get("from") == self.member and text.startswith(f"[request_run] {rel}\n"):
                 # The prior request counts only if it asked for these bytes WITH THESE
@@ -4797,6 +4836,7 @@ class HestiaF1aDispatcher:
                 # no argument clause means unknown, not default arguments.
                 unchanged = (asked_at, t.get("seq"))
                 answer_text = text
+                answer_ts = str(t.get("ts") or "")
             elif asked_seqs:
                 # ONLY A TURN BOUND TO THIS REQUEST ANSWERS IT. GPT re-review of #276 at
                 # fef135b7b: any later seat turn counted, so request new.py -> an unrelated
@@ -4832,6 +4872,7 @@ class HestiaF1aDispatcher:
                     continue
                 unchanged = (max(_hit), t.get("seq"))
                 answer_text = text
+                answer_ts = str(t.get("ts") or "")
         # EVERY ARGUMENT THE BEING GAVE REACHES THE SEAT. Measured 2026-09-22 08:3xZ: cbp-being
         # put its flags in 'body' ("Run ... with --input-dim 10 --output-dim 1 ...") and the
         # seat was shown "why: (none given)" and no flags. Across its first 66 request_runs,
@@ -4848,11 +4889,13 @@ class HestiaF1aDispatcher:
         # so nothing told it the first one was still in the queue. Say so, and mark the turn for the
         # seat, so neither side reads a repeat as a new request.
         pending = [a for a in asked_seqs if a is not None] if not unchanged else []
-        unanswered = (f"not answered in the last {_PENDING_SCAN} turns" if scan_truncated
+        unanswered = (f"not answered in the last {_ANSWER_SCAN} turns" if scan_truncated
                       else "not yet answered")
         if pending:
             lines.append(f"SAME AS the request at seq {pending[0]}, {unanswered}"
-                         + (f" (asked {len(pending) + 1} times now)." if len(pending) > 1 else "."))
+                         # the count decides nothing (legion on #668): a model of a limit at ~20 may track it
+                         + (f" (asked {len(pending) + 1} times now; the count decides nothing)."
+                            if len(pending) > 1 else "."))
         if unchanged and unchanged[0] is None:
             lines.append(f"UNCHANGED since the seat ran this exact file at seq {unchanged[1]}.")
         elif unchanged:
@@ -4886,6 +4929,14 @@ class HestiaF1aDispatcher:
         _verdict = _SEAT_RUN_LINE.match(answer_text.split("\n", 1)[0]) if unchanged else None
         declined = bool(_verdict and _verdict.group(1) == "did not run" and unchanged[0] is not None)
         executed = bool(unchanged and conv._run_result_matches_request(answer_text, request_key))
+        answer_age = ""
+        if unchanged and answer_ts:
+            try:
+                from datetime import datetime, timezone
+                _a = datetime.fromisoformat(answer_ts.replace("Z", "+00:00"))
+                answer_age = f" ({_ago((datetime.now(timezone.utc) - _a).total_seconds())} ago)"
+            except (ValueError, TypeError):
+                answer_age = ""
         if unchanged:
             # CARRY THE ANSWER, DO NOT POINT AT IT. Measured 2026-09-22 over cbp-being's 556
             # beats: an edit receipt that names the defect in its own return value ("Python
@@ -4902,18 +4953,18 @@ class HestiaF1aDispatcher:
                 # again "with rerun=true to force execution". Nothing had run to be evidence.
                 result["unchanged"] = (
                     f"This file is byte-for-byte the one you asked about at seq {unchanged[0]}, and "
-                    f"the seat answered that at seq {unchanged[1]}: it did not run it. Nothing ran. "
+                    f"the seat answered that at seq {unchanged[1]}{answer_age}: it did not run it. Nothing ran. "
                     f"Its reason:\n"
                     f"--- seq {unchanged[1]} ---\n{carried}\n--- end ---\n"
                     f"The same file will most likely get the same answer, unless what that reason "
                     f"rests on has changed. To change what you ask for: memory_edit the lines, or "
                     f"retire_note the file and then memory_write it anew.")
             elif unchanged[0] is None:
-                since = (f"This file is byte-for-byte the one the seat ran at seq {unchanged[1]}, "
+                since = (f"This file is byte-for-byte the one the seat ran at seq {unchanged[1]}{answer_age}, "
                          f"on its own, before you asked. ")
             else:
                 since = (f"This file is byte-for-byte the one you asked about at seq {unchanged[0]}, and "
-                         f"the seat answered that at seq {unchanged[1]}. ")
+                         f"the seat answered that at seq {unchanged[1]}{answer_age}. ")
             if not declined and not executed:
                 # Answered, but not by a run receipt for these bytes: say what is known (the seat
                 # answered) and what is not (whether anything ran), and carry the answer itself.
@@ -4945,41 +4996,77 @@ class HestiaF1aDispatcher:
                 ago = f", {mins} minute{'s' if mins != 1 else ''} ago" if mins >= 0 else ""
             except (ValueError, TypeError):
                 pass
-            result["already_asked"] = (
-                f"You already asked for this exact file, with these arguments, at seq {first}{ago}"
+            # "A NOTE, NOT A LIMIT, AND ITS COUNT DECIDES NOTHING" FIRST (cbp and legion on #668): the reflect record
+            # keeps an ok result's first 240 chars. Two texts count the being's own repeats of one request: this note
+            # ("and N more times since", N = repeats - 1) and the seat-conversation line above ("asked N times now",
+            # N = repeats + 1). On sprout-being 11-01 their largest values were 19 and 21 (legion's mirror counts).
+            # A model of a limit at ~20 attempts, which that being held from 11-01, may track them; that link is an
+            # inference. The peer_ask cap is 3 per 6 hours. The key was "already_asked"; it is "same_request_note".
+            result["same_request_note"] = (
+                f"A note, not a limit, and its count decides nothing: you already asked for this exact file, with "
+                f"these arguments, at seq {first}{ago}"
                 + (f", and {len(pending) - 1} more time{'s' if len(pending) > 2 else ''} since" if len(pending) > 1 else "")
-                + (f". The seat has not answered it in the last {_PENDING_SCAN} turns of '{seat_conv}' "
+                + (f". The seat has not answered it in the last {_ANSWER_SCAN} turns of '{seat_conv}' "
                    f"(older turns were not checked)" if scan_truncated
                    else ". The seat has not answered it yet")
                 + f". This request is recorded too, marked as the "
-                f"same one; it does not move it up or start anything. The seat answers once, in "
-                f"'{seat_conv}', and that answer covers every copy of this request.")
+                f"same one; it does not move it up or start anything. An answer in '{seat_conv}' covers "
+                f"every copy of this request. Nothing about this request is decided by how many times it "
+                f"was asked.")
         result.update(subject)
         if seat_quiet:
             result["seat_quiet"] = seat_quiet
+        _said = said.result or {}
+        woke_now = bool(_said.get("woke"))
+        # NO PROMISE OF A REPLY, EVEN WHEN WOKEN (legion's review of #668: the same kind of promise #665 removed
+        # from the not-woken notes; on 954 sprout-being records and 2,418 cbp-being ones). A woken seat can still
+        # be away, and an unkept "it answers" may feed a being's belief that the seat is gone (an inference).
         note = ("The seat has been asked and woken. NOTHING HAS RUN YET and this is not "
-                "a result. The seat may run it or decline, and either way it answers in "
+                "a result. The seat decides whether to run it; an answer, when one comes, is in "
                 f"'{seat_conv}'. Nothing is owed by you in the meantime.")
-        if seat_quiet:
+        if seat_quiet and woke_now:
             note = ("The seat was asked and a wake was sent. NOTHING HAS RUN YET and this is not "
                     "a result. seat_quiet says how long the seat has been silent; it can answer in "
                     f"'{seat_conv}' when it is back. Nothing is owed by you in the meantime.")
-        if unchanged and not (said.result or {}).get("woke") and self._skips_answered_run_wake():
-            # THE RECEIPT SAYS WHAT HAPPENED. Under answered_run_wake "skip" (per-instance,
-            # recut of #154) an already-answered request is sent but wakes nobody; "asked and
-            # woken" would be false. Only this instance's receipts change.
-            note = ("The request was recorded in "
-                    f"'{seat_conv}', but the seat was NOT woken for it: it already answered this "
-                    "same file, unchanged, and that answer is above. NOTHING HAS RUN. To have it "
-                    "run again anyway, call request_run again with its argument rerun set to "
-                    "'true', next to path and why. It is not a line in your file.")
-            if declined:
-                note = ("The request was recorded in "
-                        f"'{seat_conv}', but the seat was NOT woken for it: it already declined this "
-                        "same file, unchanged, and its reason is above. NOTHING HAS RUN. Calling "
-                        "request_run again with its argument rerun set to 'true', next to path and "
-                        "why, asks the seat again; it does not make the file run, and the seat "
-                        "still decides. It is not a line in your file.")
+        why_not = str(_said.get("not_woken") or "").split(" Your message was recorded")[0].strip().rstrip(".")
+        # THE NOTE IS CHOSEN BY WHY NO WAKE LEFT, NOT BY THE INSTANCE (reviews of #665 by cbp, legion and
+        # McNugget, and two hub-fired sprout sessions' wake-spy probes). `_wake_why` names the cause:
+        # - "no wake was owed": answered_run_wake "skip" and an answered, unchanged file. The run stays
+        #   un-woken, so rerun="true" (new arguments) wakes the seat once; this is the only case where
+        #   that advice is true. Legion: on skip, rearm_owed_wakes() then returns [] -- "already
+        #   answered" really is why no wake follows.
+        # - "no new wake": this run was already woken; asking again in it, rerun or not, sends none.
+        # - a pause, a refused mesh, no listener: a wake may still follow (a refused wake is tried again;
+        #   a pause's owed wake is rearmed when it ends, except under "skip" for an answered, unchanged
+        #   request, where rearm_owed_wakes() returns [] -- legion on #665), so no sentence may say
+        #   whether one is coming. These get the reason and the facts only.
+        # The reason text for each already says what happens next; the note adds only what is true here.
+        answered_skip = (unchanged and not woke_now and why_not.startswith("no wake was owed")
+                         and self._skips_answered_run_wake())
+        if not woke_now and not answered_skip:
+            what = ""
+            if unchanged:
+                what = ("The seat already declined this same file, unchanged; its reason is above. " if declined
+                        else "The seat already answered this same file, unchanged; that answer is above. ")
+            note = (f"The request was recorded in '{seat_conv}', but no wake was sent for it"
+                    + (f" ({why_not})" if why_not else "") + ". NOTHING HAS RUN YET and this is not a result. "
+                    + what
+                    + (f"It repeats the request at seq {pending[0]}; an answer in '{seat_conv}' covers every "
+                       f"copy. " if pending else "")
+                    + (f"seat_quiet says how long the seat has been silent; it can answer in '{seat_conv}' "
+                       f"when it is back. " if seat_quiet else "")
+                    + "Nothing is owed by you in the meantime.")
+        if answered_skip:
+            # THE RECEIPT SAYS WHAT HAPPENED (recut of #154): under "skip" an already-answered request is
+            # sent but wakes nobody, and rerun="true" asks once more.
+            what = "declined this same file, unchanged, and its reason is above" if declined else \
+                "answered this same file, unchanged, and that answer is above"
+            note = (f"The request was recorded in '{seat_conv}', but the seat was NOT woken for it: it "
+                    f"already {what}. NOTHING HAS RUN. Calling request_run again with its argument rerun set "
+                    "to 'true', next to path and why, asks the seat once more: it wakes the seat if no wake "
+                    "has gone out for this run yet"
+                    + ("; it does not make the file run, and the seat still decides" if declined else "")
+                    + ". It is not a line in your file.")
         return ResultEnvelope(ok=True, witness_id=said.witness_id, result={
             **result,
             "requested": rel,
@@ -5106,10 +5193,20 @@ class HestiaF1aDispatcher:
                                       skip_answered=self._skips_answered_run_wake())
         if run_start is None:
             start = conv.unanswered_run_start(self.memory_root, to, self.member)
-            self._wake_why = (f"no new wake: a wake was already sent for your messages since seq "
-                              f"{start}, with no answer recorded since, and further messages in the "
-                              f"same run do not send another. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it" if start else
-                              "no wake was owed for this message. Your message was recorded in the conversation; no wake was sent. This does not confirm anyone has read or accepted it")
+            tail = (" Your message was recorded in the conversation; no wake was sent. This does not confirm "
+                    "anyone has read or accepted it")
+            # "ALREADY SENT" ONLY WHEN IT WAS (found while fixing #665): under answered_run_wake "skip" an
+            # answered, unchanged request opens a run that is never woken, and this said "a wake was
+            # already sent for your messages since seq N" for a run no wake went out for.
+            if start and conv.run_was_woken(self.memory_root, to, self.member, start):
+                self._wake_why = (f"no new wake: a wake was already sent for your messages since seq "
+                                  f"{start}, with no answer recorded since, and further messages in the "
+                                  f"same run do not send another." + tail)
+            elif start:
+                self._wake_why = ("no wake was owed for this message: the seat already answered this same "
+                                  "request, unchanged." + tail)
+            else:
+                self._wake_why = "no wake was owed for this message." + tail
             return None            # already woke them about this run; saying more is not new mail
         pointer = f"sage://conversation/{to}#seq={run_start}-{turn['seq']}"
         woke = []
@@ -5646,7 +5743,7 @@ def _daemon_answered_note(action_id: str) -> str:
     """THE ONE FACT ABOUT THE HOST THAT A RUN DOES CARRY. cbp-being, 2026-11-01 18:27Z: dp told it the
     daemon is running and is the gate; in the same beat it ran three port checks seven times, each
     receipt carried _host_note ("not evidence that a service on this machine is down, or that it is
-    up"), and its own scripts printed "The Hestia daemon is NOT running". It replied that the daemon
+    up"), and its own scripts printed that the daemon was not running. It replied that the daemon
     was down. A note that only says "this proves nothing" loses to a sentence the being wrote itself.
 
     NOVA's review of #609 refused "the daemon that decides your acts is running" because nothing in a
@@ -5660,6 +5757,60 @@ def _daemon_answered_note(action_id: str) -> str:
             f"one began.")
 
 
+#: How far back the seat's last turn is looked for, in the being's conversation with it.
+SEAT_WROTE_SCAN = 400
+
+
+def _ago(secs: float) -> str:
+    secs = max(0, int(secs))
+    if secs < 120:
+        return f"{secs} s"
+    if secs < 2 * 3600:
+        return f"{secs // 60} min"
+    if secs < 2 * 86400:
+        return f"{secs // 3600} h {secs % 3600 // 60} min"
+    return f"{secs // 86400} days"
+
+
+def _seat_wrote_note(memory_root, seat_conv: str, said: str, started: float) -> str:
+    """WHEN A RUN REPORTS ON THE SEAT, THE ONE FACT THE BEING HAS ABOUT IT. sprout-being, 2026-11-07..09: a probe
+    script of its own ran `pgrep` for its seat in the sandbox, found nothing (the sandbox shows no other
+    process), and printed that the seat was not running and should be restarted (11-08 00:30Z, 01:43Z, 03:28Z,
+    13:41Z; 11-09 05:44Z). Every receipt carried _host_note ("not evidence that a service on this machine is
+    down"), and from 01:43Z the being held that the seat had died and asked it to restart itself 20 times that
+    day, while the seat answered it in its conversation every few hours. It had settled the
+    opposite, correctly, at 20:10Z the evening before. A note that only says "this proves nothing" lost to a
+    sentence the being wrote itself, as it did for the daemon (_daemon_answered_note).
+
+    The being's own conversation with its seat holds the fact: when the seat last wrote in it. That is read
+    from the being's home, not inferred from the run, and the note claims nothing beyond it: not that a
+    process exists, not that the seat will answer next. Said only when the run reports on the host
+    (_HOST_VIEW) AND names the seat (its conversation id, or the word seat)."""
+    low = (said or "").lower()
+    if not seat_conv or not (seat_conv.lower() in low or re.search(r"(?<![a-z0-9])seat(?![a-z0-9])", low)):
+        return ""
+    from sage.gateway import conversations as conv
+    turns = conv.recent(memory_root, seat_conv, limit=SEAT_WROTE_SCAN)
+    last = next((t for t in reversed(turns or []) if t.get("from") == seat_conv and t.get("ts")), None)
+    if last is None:
+        return ""
+    try:
+        from datetime import datetime, timezone
+        at = datetime.strptime(str(last["ts"])[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+        gap = started - at.timestamp()
+        ago = f"{_ago(gap)} before" if gap >= 0 else f"{_ago(-gap)} after"   # the seat can write during the run
+    except (ValueError, TypeError):
+        return ""
+    seq = f" (seq {last['seq']})" if last.get("seq") is not None else ""
+    # A LONG GAP IS NOT THE PROBE'S VERDICT (legion's review of #663): beside a probe's own line telling the
+    # being to restart the seat, "46 h before this run began" reads as agreement. Replayed on the mirrored
+    # traces, the gap was 3 h or more on 25 of 80 sprout receipts (14 over a day, inside the seat's real 48 h
+    # silence of 11-01..03) and on 10 of 10 cbp ones. Past SEAT_QUIET_S the note says what _seat_quiet says for a request.
+    away = (" " + _SEAT_AWAY) if gap >= SEAT_QUIET_S else ""
+    return (f"One fact from your own records: {seat_conv} last wrote to you at {str(last['ts'])[:16]}Z{seq}, "
+            f"{ago} this run began, in your conversation \"{seat_conv}\".{away}")
+
+
 #: Output that reports on the machine outside the sandbox: services, systemd, D-Bus, ports, processes.
 _HOST_VIEW = re.compile(
     r"systemctl|systemd|\bd-?bus\b|connect to bus|connection refused|not listening|\bport \d{2,5}\b"
@@ -5669,7 +5820,7 @@ _HOST_VIEW = re.compile(
 def _host_note() -> str:
     """THE SANDBOX CANNOT SEE THIS MACHINE, SO WHAT A RUN SAYS ABOUT IT IS ABOUT THE SANDBOX. cbp-being,
     2026-10-28..31: its runs reported "Failed to connect to bus", "System has not been booted with systemd",
-    port 7711 closed and "the Hestia daemon is not running", and it concluded the daemon was down and asked
+    port 7711 closed and that the daemon was not running, and it concluded the daemon was down and asked
     for systemd, D-Bus and Docker installers, over and over, while the daemon decided every one of its acts.
     The run is --unshare-pid --unshare-net: PID 1 is the run itself and there is no network. The note said
     "no network"; it never said that this also hides every other process, service and port. That is the

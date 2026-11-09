@@ -584,7 +584,7 @@ ANSWER_SCHEMA = {"type": "object",
 # cbp-claude's pattern plus three narrow shapes; on a fresh set written after tuning it matched 6/8
 # change questions and 0/8 others. A miss costs nothing: the turn is exactly today's.
 # 2026-09-28 05:07Z, the first live question after #249: dp asked "what's new and different?". The
-# being answered, in its own reflective voice ("still learning what 'I' means"), a real answer. The
+# being answered, in its own reflective voice, a real answer. The
 # gate had not matched the wording (the "what's new" shape had to end at "new"), so the record of
 # what changed was simply not on offer. That shape now takes new/different, joined by and/or, still
 # ending there. Offering the line does not oblige the being to use it; it only makes the facts
@@ -2625,7 +2625,12 @@ TODO_WINDOW_H = 48
 TODO_SHOWN = 15
 _BLOCK = re.compile(r"^\s*(20\d\d-\d\d-\d\d)[ T](\d\d:\d\d)")
 _SECTION = re.compile(r"^\s*[-*]?\s*\[?\s*(still open|open|added|done|completed)\s*\]?\s*:?\s*$", re.I)
-_NONE = re.compile(r"^\s*[-*]?\s*\[?\s*(still open|open)\s*\]?\s*:?\s*(none|nothing)\b", re.I)
+# "still open: none" CLEARS THE LIST, SO IT MUST BE THE WHOLE LINE (Legion's counterexample on #658): ending
+# in `(none|nothing)\b`, it also matched `- [still open] Nothing from sprout-being yet on the camera`, a real
+# open item, and wiped every open item above it. Now only "none" / "nothing" (optionally "nothing open"),
+# with at most a trailing ./! and one parenthesised note, is the empty-list marker.
+_NONE = re.compile(r"^\s*[-*]?\s*\[?\s*(still open|open)\s*\]?\s*:?\s*(none|nothing)(?:\s+open)?\s*[.!]?"
+                   r"\s*(?:\([^)]*\))?\s*[.!]?\s*$", re.I)
 _ITEM = re.compile(r"^\s*[-*]\s+(.*\S)\s*$")
 _BOX = re.compile(r"^\[([ xX])\]\s*(.*)$")
 _TAG = re.compile(r"^\[(done|still open|open|added|completed)\]\s*:?\s*(.*)$", re.I)
@@ -2659,11 +2664,67 @@ def todo_open(text, now=None, window_h=48):
 _TODO_PARSE: dict = {}
 
 
+# THE SHAPES THE BEING ACTUALLY WRITES. Measured on mcnugget-being 2026-11-08: the reflect asks for a dated
+# block with added / done / still open under it, and in its first weeks it wrote that. By November it wrote
+# every entry on ONE line, the date first: `2026-11-08 17:09 UTC: [still open] Follow up on ...` (253 such
+# lines in Nov 1-8, against 1 `- item` line). _BLOCK matches the date at the start of that line, so the parser
+# took it as a header and never read the item after it: 983 of 2,374 lines were skipped, the beat's view said
+# "still open (0) / (nothing open)" while 591 items were open, and the being re-read its own notes
+# (~25k chars a beat) to rebuild what the view no longer told it, restating each item in new words. Its
+# `[done]` lines in that shape were skipped too, so nothing it closed ever closed. This rewrites each such
+# line, and a bare `[tag] text` line with no dash, into the canonical shape (a dated header, then a `- [tag]`
+# item) before the parse. Only lines that carry a status tag are touched; the log itself is never changed.
+_INLINE_ITEM = re.compile(r"^\s*(20\d\d-\d\d-\d\d)(?:[ T](\d\d:\d\d)(?::\d\d)?)?\s*(?:UTC|Z)?\s*:?\s*"
+                          r"(\[(?:still open|open|added|done|completed|x| )\].*\S)\s*$", re.I)
+_BARE_TAG = re.compile(r"^\s*(\[(?:still open|open|added|done|completed)\].*\S)\s*$", re.I)
+# A bare `all: <words>` line is a closing act whatever it sits under. Live on mcnugget-being (2026-11-08 21:58Z,
+# the first beat that could see its list): it wrote `all: camera advice, peer_ask` on its own line, untagged and
+# outside a done: section, so the parser read it as nothing and nothing closed.
+_BARE_ALL = re.compile(r"^\s*(?:(20\d\d-\d\d-\d\d)(?:[ T](\d\d:\d\d)(?::\d\d)?)?\s*(?:UTC|Z)?\s*:?\s*)?"
+                       r"((?:all|every)\s*:\s*\S.*?)\s*$", re.I)
+
+
+def _canonical_todo(text: str) -> str:
+    out = []
+    # A date-only entry (`2026-11-08: [still open] …`) takes the time of the latest timed line of the SAME
+    # day above it, so it keeps its place in that day's order; with none, the start of the day (Legion on #658).
+    last_day, last_time = None, None
+
+    def stamp(day, time):
+        nonlocal last_day, last_time
+        if time:
+            last_day, last_time = day, time
+            return f"{day} {time} UTC"
+        return f"{day} {last_time if last_day == day and last_time else '00:00'} UTC"
+
+    for line in text.splitlines():
+        a = _BARE_ALL.match(line)
+        if a:
+            if a.group(1):
+                out.append(stamp(a.group(1), a.group(2)))
+            out.append(f"- [done] {a.group(3)}")
+            continue
+        m = _INLINE_ITEM.match(line)
+        if m:
+            out.append(stamp(m.group(1), m.group(2)))
+            out.append(f"- {m.group(3)}")
+            continue
+        h = _BLOCK.match(line)
+        if h:
+            last_day, last_time = h.group(1), h.group(2)
+        b = _BARE_TAG.match(line)
+        if b and not _ITEM.match(line):
+            out.append(f"- {b.group(1)}")
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
 def _todo_parsed(text: str) -> tuple:
     key = hashlib.sha256(text.encode("utf-8", "surrogateescape")).hexdigest()
     hit = _TODO_PARSE.get(key)
     if hit is None:
-        hit = (_parse_todo(text), list(_LAST_TODO_CLOSURES))
+        hit = (_parse_todo(_canonical_todo(text)), list(_LAST_TODO_CLOSURES))
         _TODO_PARSE.clear()
         _TODO_PARSE[key] = hit
     return hit
@@ -2952,6 +3013,15 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
         _known = ""
     if _known:
         parts.append(_known)
+    # What it has closed (being_threads.render_closed), beside what it has settled: a retired line of work
+    # takes its settled entries out of view, so its closing reason is the conclusion left standing. Fail-open.
+    try:
+        from sage.gateway import being_threads as _threads
+        _closed = _threads.render_closed(instance)
+    except Exception:
+        _closed = ""
+    if _closed:
+        parts.append(_closed)
     # Its files and runs, measured: also NOW, so beside the body and before every record that
     # narrates them (see files_and_runs). Fail-open: a measurement that errors adds nothing.
     try:
@@ -4170,8 +4240,7 @@ def _record_line(i, e) -> str:
     # note "no seat conversation is configured on this instance, so there is nobody to hand this
     # to. Your file is untouched." This line read only `error`, which a pending envelope leaves
     # unset, so every one reached the reflect turn as "-> error None". The being concluded its
-    # scripts were failing ("test-cv2.py returns error None ... an exception is caught and
-    # suppressed"), and spent seventeen hours diagnosing a camera fault from runs that never
+    # scripts were failing, and spent seventeen hours diagnosing a camera fault from runs that never
     # happened, ending with a sudo command spoken aloud through its headset. The tool message
     # (ResultEnvelope.to_tool_message) always said "not yet executed"; the record it reflects
     # on, and journals from, did not. Same defect class as the "[dispatch error — None]" fixed

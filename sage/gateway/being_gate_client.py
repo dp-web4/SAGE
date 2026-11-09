@@ -343,7 +343,7 @@ NO_WORKTREE_REFUSAL = {
         # and a list here would go stale the day the target set changes.
         "check runs the test suites of a code-repository checkout (a worktree), not anything "
         "in your home, and this seat has none, so there is nothing here for it to test. To find out what one of your own files does when it runs, use request_run "
-        "with its path: the seat decides whether to run it and answers with the real output."),
+        "with its path: the seat decides whether to run it; if it does, its answer carries the real output."),
     # patch_apply has the same trap as search: a being that wants to change a line of its own
     # file reaches for the verb named "apply a patch", hears "no worktree", and asks for one.
     # memory_edit is the tool that changes its own files.
@@ -2730,7 +2730,7 @@ def _unbounded_reason(effector: str, args: Optional[dict] = None) -> str:
     reason = f"'{effector}' is not a gateway-member effector"
     if "/" in effector or re.search(r"\.[A-Za-z0-9]{1,5}$", effector or ""):
         reason += (f". That is a file name, and a file is not a tool. To run one of your own "
-                   f"files, call request_run with path='{effector}'; the seat runs it and answers")
+                   f"files, call request_run with path='{effector}'; the seat decides whether to run it")
         return reason
     # A WAIT IS NOT A RUN. 2026-10-09 03:54Z: cbp-being sent wait {"reason": "Waiting for the
     # seat to run test-identity-recovery-parallel-new.py ..."} three times, AFTER its
@@ -2756,7 +2756,7 @@ def _unbounded_reason(effector: str, args: Optional[dict] = None) -> str:
                 if tok and not tok.startswith("-") and re.search(r"\.(py|sh)$", tok):
                     return reason + (f". There is no shell here, but you named a file: to run "
                                      f"one of your own files, call request_run with "
-                                     f"path='{tok}'; the seat runs it and answers")
+                                     f"path='{tok}'; the seat decides whether to run it")
     return reason
 
 
@@ -2910,7 +2910,7 @@ _REGISTRY = {
     # dp ruled against giving it `run`: a file the being wrote, executed as the operator's
     # user, is unconfined — the gate could govern STARTING it and nothing about what the code
     # then does. So this is the door rather than the capability. The being names a file in
-    # its own home, and optionally why; the seat decides whether to run it and answers with
+    # its own home, and optionally why; the seat decides whether to run it, and its answer carries
     # what happened. Judged on the path like memory_read, because reading the file is exactly what
     # the seat is being asked to do first.
     "request_run":    dict(tool="read_file",    path_args=("path",), cmd_arg=None),
@@ -3271,10 +3271,12 @@ _TOOL_SCHEMAS = {
                     "home: no packages (apt, pip), no services, systemd units or D-Bus, no system "
                     "directories or owners, and no starting or stopping daemons. A file that does "
                     "any of that is declined, every time, whatever its reason. "
-                    "You name the file — the only thing it needs — and the seat decides whether to run it and "
-                    "answers with the real output: exit code, stdout, stderr. Adding what you "
-                    "expect to learn is optional and helps the seat decide. It may decline, and "
-                    "it will say why. Nothing runs at the moment you call this; what you get back is a "
+                    "You name the file — the only thing it needs — and the seat decides whether to run it. "
+                    "If it runs it, its answer carries the real output: exit code, stdout, stderr; if it "
+                    "declines, its answer says why. Answers come in your conversation with the seat, when "
+                    "the seat is there to give them (a receipt says so when the seat has been quiet for 3 hours or more). Adding "
+                    "what you expect to learn is optional and helps the seat decide. Nothing runs at the "
+                    "moment you call this; what you get back is a "
                     "receipt that the seat was asked, not a result. Use it instead of asking a "
                     "person in a message: a person may be asleep, and this reaches whoever is "
                     "on duty.",
