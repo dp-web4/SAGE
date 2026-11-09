@@ -96,6 +96,7 @@ def test_a_shell_command_is_not_played_and_the_refusal_says_speaking_runs_nothin
         env = d._do_speak(BeingIntent("speak", {"text": cmd}))
         assert not env.ok and env.error.startswith("Not said aloud: this reads as a shell command")
         assert "runs nothing" in env.error and "request_run" in env.error
+        assert "decides and answers" not in env.error, "no promise of an answer (#673 reviews)"
     assert played == [] and calls == [] and not os.path.exists(os.path.join(home, "spoken.jsonl"))
 
 

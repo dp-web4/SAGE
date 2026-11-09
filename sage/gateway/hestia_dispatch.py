@@ -2618,7 +2618,8 @@ class HestiaF1aDispatcher:
                 f"Not said aloud: this reads as a shell command ({cmd}). Speaking plays sound "
                 f"only; it runs nothing, and it does not ask anyone in the room to run it for you. "
                 f"To have a script of yours run, keep it as a .py or .sh file in your home and use "
-                f"request_run; the seat decides and answers in your conversation with it. To say "
+                f"request_run; the seat decides, and an answer, when one comes, is in your conversation "
+                f"with it. To say "
                 f"something to a person, say it as words to them."))
         # Refused BEFORE any hestia action is opened and before any sound: a being on a body with
         # no speaker gets a true sentence, the way a headless being calling `gaze` does.
