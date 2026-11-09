@@ -525,3 +525,14 @@ def test_a_question_with_quote_marks_or_a_backslash_is_copied_back_as_written(tm
     # a copy that keeps the delimiters is the same question
     ok, msg, _ = _s(tmp_path, id="s1", question="\u00ab" + held + "\u00bb", answer="yes again")
     assert ok and st.read(tmp_path)[0][0]["question"] == held, msg
+
+
+def test_a_copy_that_carries_the_period_or_outer_quotes_is_stored_without_guillemets(tmp_path):
+    # cbp's re-check of #661: a copy taking the receipt's following period, or wrapped in quote marks, stored the
+    # guillemets, and they nested on the next copy
+    held = "Is the gizmo lamp on?"
+    _s(tmp_path, question=held, answer="yes")
+    for copy in ("\u00ab" + held + "\u00bb.", '"\u00ab' + held + '\u00bb"', "  \u00ab" + held + "\u00bb ;"):
+        ok, msg, _ = _s(tmp_path, id="s1", question=copy, answer="yes, " + copy[:3])
+        assert ok, msg
+        assert st.read(tmp_path)[0][0]["question"] == held, st.read(tmp_path)[0][0]["question"]
