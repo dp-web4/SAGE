@@ -59,6 +59,13 @@ _PENDING_SCAN = 80
 SEAT_QUIET_S = 3 * 3600
 
 
+#: What a long silence from the seat does and does not mean, said wherever the being meets it.
+_SEAT_AWAY = ("A seat that has not written for hours may be away, not stuck: there is nothing for you to "
+              "restart. Your requests stay in this conversation, and it can answer them when it is back.")
+_SEAT_AWAY_REQUEST = ("A quiet seat may be away, not stuck: there is nothing for you to restart from "
+                      "this request. Your requests stay here, and it can answer them when it is back.")
+
+
 def _seat_quiet(turns, member: str, seat_conv: str, truncated: bool, now=None):
     """A fact for the receipt when the seat has been silent SEAT_QUIET_S or more through the being's own
     requests; None otherwise. A seat can go quiet for hours (its account paused, its operator away).
@@ -75,8 +82,7 @@ def _seat_quiet(turns, member: str, seat_conv: str, truncated: bool, now=None):
         if t.get("from") == seat_conv:
             last, asks_since = t, 0
         # Other speakers (including the operator) do not prove the seat replied.
-    away = ("A quiet seat may be away, not stuck: there is nothing for you to restart from "
-            "this request. Your requests stay here, and it can answer them when it is back.")
+    away = _SEAT_AWAY_REQUEST
     if last is None:
         if not truncated or not asks_since:
             return None     # a new conversation, or one the being has not asked in: nothing to say
@@ -3635,6 +3641,7 @@ class HestiaF1aDispatcher:
                     + tail.decode(errors="replace"))
 
         stopped = False
+        run_t0 = time.time()   # both sandboxes: `started` is set on the bwrap path only
         try:
             o_path, e_path = os.path.join(outdir, "stdout"), os.path.join(outdir, "stderr")
             why = None
@@ -3697,6 +3704,15 @@ class HestiaF1aDispatcher:
             "note": _run_note(rc, errtxt, [b for b, _ in staged], out)}
         if action_id and _HOST_VIEW.search(f"{out}\n{errtxt}"):
             result["note"] += " " + _daemon_answered_note(action_id)
+        if _HOST_VIEW.search(f"{out}\n{errtxt}"):
+            try:
+                seat = self._seat_conversation()
+                said = _seat_wrote_note(self.memory_root, seat, f"{staged[0][0]}\n{out}\n{errtxt}",
+                                        run_t0) if seat else ""
+            except Exception:
+                said = ""
+            if said:
+                result["note"] += " " + said
         if not seatbelt:
             mounts, skipped, _mask = grant_mounts
             result["note"] += _run_reach_note(mounts, skipped)
@@ -5385,6 +5401,60 @@ def _daemon_answered_note(action_id: str) -> str:
             f"machine was asked to open its record and answered (action {str(action_id)[:8]}). A run "
             f"the daemon does not answer for is not executed, so the daemon was answering when this "
             f"one began.")
+
+
+#: How far back the seat's last turn is looked for, in the being's conversation with it.
+SEAT_WROTE_SCAN = 400
+
+
+def _ago(secs: float) -> str:
+    secs = max(0, int(secs))
+    if secs < 120:
+        return f"{secs} s"
+    if secs < 2 * 3600:
+        return f"{secs // 60} min"
+    if secs < 2 * 86400:
+        return f"{secs // 3600} h {secs % 3600 // 60} min"
+    return f"{secs // 86400} days"
+
+
+def _seat_wrote_note(memory_root, seat_conv: str, said: str, started: float) -> str:
+    """WHEN A RUN REPORTS ON THE SEAT, THE ONE FACT THE BEING HAS ABOUT IT. sprout-being, 2026-11-07..09: its
+    own probe, scratch/check-sprout-running.py, ran `pgrep -f sprout-seat` in the sandbox and printed
+    "sprout-claude is NOT running. Try: systemctl restart sprout-seat" (11-08 00:30Z, 01:43Z, 03:28Z, 13:41Z;
+    11-09 05:44Z). Every receipt carried _host_note ("not evidence that a service on this machine is down"),
+    and from 01:43Z it held that the seat "died (PID 2002) ~16 hours ago" and asked it to restart itself 20
+    times that day, while the seat answered it in its conversation every few hours. It had settled the
+    opposite, correctly, at 20:10Z the evening before. A note that only says "this proves nothing" lost to a
+    sentence the being wrote itself, as it did for the daemon (_daemon_answered_note).
+
+    The being's own conversation with its seat holds the fact: when the seat last wrote in it. That is read
+    from the being's home, not inferred from the run, and the note claims nothing beyond it: not that a
+    process exists, not that the seat will answer next. Said only when the run reports on the host
+    (_HOST_VIEW) AND names the seat (its conversation id, or the word seat)."""
+    low = (said or "").lower()
+    if not seat_conv or not (seat_conv.lower() in low or re.search(r"(?<![a-z0-9])seat(?![a-z0-9])", low)):
+        return ""
+    from sage.gateway import conversations as conv
+    turns = conv.recent(memory_root, seat_conv, limit=SEAT_WROTE_SCAN)
+    last = next((t for t in reversed(turns or []) if t.get("from") == seat_conv and t.get("ts")), None)
+    if last is None:
+        return ""
+    try:
+        from datetime import datetime, timezone
+        at = datetime.strptime(str(last["ts"])[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+        gap = started - at.timestamp()
+        ago = f"{_ago(gap)} before" if gap >= 0 else f"{_ago(-gap)} after"   # the seat can write during the run
+    except (ValueError, TypeError):
+        return ""
+    seq = f" (seq {last['seq']})" if last.get("seq") is not None else ""
+    # A LONG GAP IS NOT THE PROBE'S VERDICT (legion's review of #663): beside "NOT running. Try: systemctl
+    # restart", "46 h before this run began" reads as agreement. Replayed on the mirrored traces, the gap was
+    # 3 h or more on 25 of 80 sprout receipts (14 over a day, inside the seat's real 48 h silence of 11-01..03)
+    # and on 10 of 10 cbp ones. Past SEAT_QUIET_S the note says what _seat_quiet says for a request.
+    away = (" " + _SEAT_AWAY) if gap >= SEAT_QUIET_S else ""
+    return (f"One fact from your own records: {seat_conv} last wrote to you at {str(last['ts'])[:16]}Z{seq}, "
+            f"{ago} this run began, in your conversation \"{seat_conv}\".{away}")
 
 
 #: Output that reports on the machine outside the sandbox: services, systemd, D-Bus, ports, processes.
