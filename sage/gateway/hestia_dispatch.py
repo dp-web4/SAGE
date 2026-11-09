@@ -5437,13 +5437,13 @@ def _seat_wrote_note(memory_root, seat_conv: str, said: str, started: float) -> 
     try:
         from datetime import datetime, timezone
         at = datetime.strptime(str(last["ts"])[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-        ago = _ago(started - at.timestamp())
+        gap = started - at.timestamp()
+        ago = f"{_ago(gap)} before" if gap >= 0 else f"{_ago(-gap)} after"   # the seat can write during the run
     except (ValueError, TypeError):
         return ""
     seq = f" (seq {last['seq']})" if last.get("seq") is not None else ""
     return (f"One fact from your own records: {seat_conv} last wrote to you at {str(last['ts'])[:16]}Z{seq}, "
-            f"{ago} before this run began, in your conversation \"{seat_conv}\". Whether the sandbox shows a "
-            f"process for it is not evidence about that.")
+            f"{ago} this run began, in your conversation \"{seat_conv}\".")
 
 
 #: Output that reports on the machine outside the sandbox: services, systemd, D-Bus, ports, processes.

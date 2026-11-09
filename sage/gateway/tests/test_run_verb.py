@@ -883,6 +883,9 @@ def test_a_run_that_reports_on_the_seat_is_told_when_the_seat_last_wrote(tmp_pat
     assert "(seq 2)" in note and "58 min before this run began" in note, note
     low = note.lower()
     assert "is running" not in low and "alive" not in low and "will answer" not in low, "the fact, nothing wider"
+    # a turn written while the run was going is after it began, and the note says so
+    during = datetime(2026, 11, 8, 21, 22, 38, tzinfo=timezone.utc).timestamp()
+    assert "10 min after this run began" in _seat_wrote_note(tmp_path, "test-seat", probe, during)
     # the word seat is enough (sprout-seat), and a run that does not name the seat gets nothing
     assert _seat_wrote_note(tmp_path, "test-seat", "pgrep -f sprout-seat: nothing", at)
     assert _seat_wrote_note(tmp_path, "test-seat", "Failed to connect to bus: hestia.service", at) == ""
