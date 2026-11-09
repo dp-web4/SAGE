@@ -1096,19 +1096,19 @@ class HestiaF1aDispatcher:
                 convs = " Conversations you can speak in: " + ", ".join(ids) + "."
         except Exception:
             pass
-        return (f"not sent: you have already asked {to!r} {len(mine)} times in the last "
+        # THE SCOPE COMES FIRST (cbp on #668): the reflect record keeps an error's first 200 chars
+        # (heartbeat._record_line), and a being journals from that record, not from this message. This limit
+        # shares its "not sent:" prefix with others; without its scope, a refusal here read as a limit on
+        # every request. Seen on sprout-being 11-01..08, where the cap fired on asks to other peers (never to
+        # its seat: _say_instead stops a peer_ask to the seat first).
+        return (f"not sent: a limit on peer_ask and mesh only ({self.ASK_CAP_PER_PEER} per "
+                f"{self.ASK_WINDOW_S // 3600} hours to {key!r}; say and request_run do not count) is reached. "
+                f"You have already asked {to!r} {len(mine)} times in the last "
                 f"{self.ASK_WINDOW_S // 3600} hours (most recently {last_min} min ago). Another ask "
                 f"reaches the same peer about the same moment and costs them a wake; it cannot make "
                 f"an answer arrive sooner. Read your inbox for their reply first. If something is "
                 f"still wrong, check it yourself this beat (recall, memory_read), or say what you "
-                f"found in a conversation.{convs} You can ask {to!r} again in about {frees_min} min. "
-                # WHAT THIS LIMIT IS, AND IS NOT. sprout-being met this refusal 36 times on 11-02 and from that
-                # morning wrote of "the 'already asked' guard" that "blocks all file execution requests" and
-                # "steps aside after ~20 attempts" (the cap is 3 per 6 h); for a week it read the seat's own
-                # request_run declines as that guard, and wrote a skill around it.
-                f"This limit counts only peer_ask and mesh to {key!r}, {self.ASK_CAP_PER_PEER} per "
-                f"{self.ASK_WINDOW_S // 3600} hours. say in a conversation and request_run are not counted by "
-                f"it, and what the seat does with a request_run is the seat's own answer, not this limit.")
+                f"found in a conversation.{convs} You can ask {to!r} again in about {frees_min} min.")
 
     def _record_ask(self, to: str, via: str, text: str, queued_id: Any) -> None:
         row = {"t": self._now(), "peer": self._peer_key(to), "to": to, "via": via,
@@ -4729,16 +4729,22 @@ class HestiaF1aDispatcher:
                 ago = f", {mins} minute{'s' if mins != 1 else ''} ago" if mins >= 0 else ""
             except (ValueError, TypeError):
                 pass
-            result["already_asked"] = (
-                f"You already asked for this exact file, with these arguments, at seq {first}{ago}"
+            # "A NOTE, NOT A LIMIT" FIRST (cbp on #668): the reflect record keeps an ok result's first 240 chars.
+            # THE COUNT HERE IS NOT A THRESHOLD (legion on #668). This note counts the being's own repeats ("and N
+            # more times since"); on sprout-being 11-01 the count reached 21, and the being's "guard" model of a
+            # limit at ~20 attempts tracks it, not the peer_ask cap (3 per 6 h). The key was "already_asked", the
+            # phrase that model was named with; it is "same_request_note" now, and the text says a count decides
+            # nothing.
+            result["same_request_note"] = (
+                f"A note, not a limit: you already asked for this exact file, with these arguments, at seq {first}{ago}"
                 + (f", and {len(pending) - 1} more time{'s' if len(pending) > 2 else ''} since" if len(pending) > 1 else "")
                 + (f". The seat has not answered it in the last {_ANSWER_SCAN} turns of '{seat_conv}' "
                    f"(older turns were not checked)" if scan_truncated
                    else ". The seat has not answered it yet")
                 + f". This request is recorded too, marked as the "
                 f"same one; it does not move it up or start anything. An answer in '{seat_conv}' covers "
-                f"every copy of this request. This is a note, not a limit: nothing stops you asking "
-                f"again, and nothing about this request is decided by how many times it was asked.")
+                f"every copy of this request. Nothing about this request is decided by how many times it "
+                f"was asked.")
         result.update(subject)
         if seat_quiet:
             result["seat_quiet"] = seat_quiet

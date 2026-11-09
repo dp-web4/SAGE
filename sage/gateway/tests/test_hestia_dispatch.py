@@ -1715,11 +1715,11 @@ def test_asking_one_peer_is_capped_per_window_and_a_refused_ask_leaves_nothing_b
     env = d(BeingIntent("peer_ask", {"to": "legion", "body": "a completely different question"}), _ALLOW)
     assert not env.ok and "already asked 'legion' 3 times" in env.error and "inbox" in env.error
     # sprout-being 11-02..09: the refusal read as a "guard" over every request; it says what it counts
-    assert "counts only peer_ask and mesh to 'legion', 3 per 6 hours" in env.error, env.error
-    assert "request_run are not counted" in env.error and "the seat's own answer" in env.error
+    assert env.error.startswith("not sent: a limit on peer_ask and mesh only (3 per 6 hours to 'legion'; "
+                                "say and request_run do not count) is reached."), env.error
     # the cap is keyed on the peer, not the spelling of `to`: the sentence names what is actually counted
     env = d(BeingIntent("peer_ask", {"to": "Legion/foo", "body": "another address, same peer"}), _ALLOW)
-    assert not env.ok and "counts only peer_ask and mesh to 'legion', 3 per 6 hours" in env.error, env.error
+    assert not env.ok and "a limit on peer_ask and mesh only (3 per 6 hours to 'legion'" in env.error, env.error
     assert len(published) == 3, "a refused ask must not publish a forum file"
     assert len(_mb_calls("hestia_member_notify")) == notices_before, "and must not notify"
     env = d(BeingIntent("mesh", {"to": "legion", "kind": "coordination", "pointer": "p"}), _ALLOW)
@@ -2907,3 +2907,16 @@ def test_other_save_texts_are_not_receipts():
                  "Server is in read-only mode. save_cartridge is disabled."):
         _, env = _remember_with_save_reply(text)
         assert not env.ok and "NOT saved" in env.error and "EMPTY" not in env.error, (text, env)
+
+
+def test_the_cap_scope_survives_the_reflect_record():
+    # cbp on #668: _record_line keeps an error's first 200 chars, and reflect journals from that record
+    from sage.gateway.heartbeat import _record_line
+    d, root = _disp(publish_fn=lambda to, body: "shared-context/forum/being/q.md")
+    clock = [1_000_000.0]
+    d._now = lambda: clock[0]
+    for i in range(3):
+        assert d(BeingIntent("peer_ask", {"to": "legion", "body": f"q {i}"}), _ALLOW).ok
+    i4 = BeingIntent("peer_ask", {"to": "legion", "body": "q 4"})
+    line = _record_line(i4, d(i4, _ALLOW))
+    assert "a limit on peer_ask and mesh only" in line and "say and request_run do not count" in line, line
