@@ -147,8 +147,7 @@ def earlier_requests(turns: Sequence[dict], member: str, query: str,
             # A REPEAT FILED AFTER THE ANSWER IS ANSWERED BY IT TOO, when it asks for the work answered: the
             # same path, bytes and arguments, read by conversations._request_key, so a digest quoted in `why`
             # is not its bytes and an explicit rerun repeats nothing (cbp's and pub's reviews of #665, #666).
-            # Measured on sprout-being 11-09: the seat declined
-            # scratch/restart-sprout-claude-with-sudo.py (sha 48684f53f84a) at seq 2677; the ten repeats
+            # Measured on sprout-being 11-09: the seat declined one of its scripts at seq 2677; the ten repeats
             # after it were listed "(not answered yet)" here while the same receipt quoted that decline.
             # THE SAME WORK ON EITHER SIDE OF THE REQUEST, AND THE NEWEST ANSWER STANDS, as `unchanged` already
             # does (legion's review of #667): checked prior-first, a later run read "declined" under the receipt

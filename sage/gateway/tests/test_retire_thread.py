@@ -312,8 +312,8 @@ def test_a_todo_write_failure_is_reported_as_possibly_partial(tmp_path, monkeypa
 
 
 def test_a_closed_line_keeps_its_reason_in_every_beat_and_its_items_stay_retired(tmp_path):
-    # sprout-being 11-07 08:11Z: it retired its seat thread with "The seat is alive and answering ... No restart
-    # needed"; 15 settled entries left the beat, and so did that reason. By 22:46Z it had settled the opposite.
+    # sprout-being 11-07 08:11Z: it retired its seat thread with a true reason; 15 settled entries left the
+    # beat, and so did that reason. By 22:46Z it had settled the opposite.
     h = _home(tmp_path)
     assert bt.render_closed(h) == "", "nothing closed, no block"
     ok, msg, _ = _go(h, {"words": "widget, daemon", "reason": "The daemon is fine; it was never down."}, now=0)

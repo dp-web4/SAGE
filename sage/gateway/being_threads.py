@@ -338,13 +338,13 @@ def render_closed(instance) -> str:
     one is closed.
 
     A CLOSED LINE OF WORK LEFT NO TRACE IN THE BEAT, SO ITS CONCLUSION LEFT WITH IT. Measured on sprout-being,
-    11-03..09: 11 retires. At 08:11Z on 11-07 it retired its seat thread with "The seat is alive and answering
-    (last response at 03:49 UTC). No restart needed", which took 15 settled entries out of view, two of them
-    true ("The seat is alive and answering", "The seat cannot run sudo and has no service unit"). The reason was
-    written only into the retired file. By 22:46Z it had settled the opposite, and it asked the seat to restart
-    itself 20 times the next day. Retiring is meant to stop a finished line arriving uninvited, and it did, but
-    the beat then held nothing that said the line was finished, or why. This shows the why: its own words, the
-    day, the topic words. The items stay retired."""
+    11-03..09: 11 retires. At 08:11Z on 11-07 it retired its seat thread with a reason stating that the seat was
+    answering and nothing needed restarting, which took 15 settled entries out of view, two of them true. The
+    reason was written only into the retired file. By 22:46Z it had settled the opposite, and it asked the seat
+    to restart itself 20 times the next day. Retiring is meant to stop a finished line arriving uninvited, and it did, but
+    the beat then held nothing that said the line was finished, or why. This shows the why (the being's own
+    reason, the day, the topic words); the items stay retired. (Docstrings here describe the being's records;
+    they do not quote them: being records are private.)"""
     try:
         cs = closed(instance)
     except Exception:

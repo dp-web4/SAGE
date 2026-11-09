@@ -870,14 +870,14 @@ def _seat_home(home, last_ts="2026-11-08T21:32:38Z"):
 
 
 def test_a_run_that_reports_on_the_seat_is_told_when_the_seat_last_wrote(tmp_path):
-    """sprout-being 11-08: its own probe printed "sprout-claude is NOT running. Try: systemctl restart
-    sprout-seat" five times, each receipt said only "not evidence either way", and it held the seat dead for a
-    day while the seat answered it every few hours. The receipt now carries when the seat last wrote."""
+    """sprout-being 11-08: a probe of its own printed five times that its seat was not running, each receipt said
+    only "not evidence either way", and it held the seat dead for a day while the seat answered it every few
+    hours. The receipt now carries when the seat last wrote."""
     from datetime import datetime, timezone
     from sage.gateway.hestia_dispatch import _seat_wrote_note
     _seat_home(tmp_path)
     at = datetime(2026, 11, 8, 22, 30, 57, tzinfo=timezone.utc).timestamp()
-    probe = "check-sprout-running.py\n✗ test-seat is NOT running.\n  Try: systemctl restart sprout-seat"
+    probe = "check-gizmo.py\ntest-seat is NOT running.\n  Try: systemctl restart gizmo-seat"
     note = _seat_wrote_note(tmp_path, "test-seat", probe, at)
     assert note.startswith("One fact from your own records: test-seat last wrote to you at 2026-11-08T21:32Z")
     assert "(seq 2)" in note and "58 min before this run began" in note, note
