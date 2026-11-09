@@ -65,7 +65,8 @@ def test_an_answer_older_than_the_quiet_window_still_answers_the_repeat(monkeypa
         conv.append(home, "seat", speaker="seat", via="seat", text=f"unrelated {i}")
     r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
     assert "already_asked" not in r.result, r.result
-    assert f"the seat answered that at seq {asked + 1}: it did not run it" in r.result["unchanged"]
+    assert f"the seat answered that at seq {asked + 1} (" in r.result["unchanged"]
+    assert " ago): it did not run it" in r.result["unchanged"], "the answer's age is shown"
     assert "It restarts things." in r.result["unchanged"], "the reason is carried, not pointed at"
     assert "not answered" not in conv.recent(home, "seat", limit=1)[-1]["text"]
 
@@ -122,7 +123,8 @@ def test_a_seat_quiet_through_the_beings_asks_is_named_on_the_receipt(monkeypatc
     q = r.result["seat_quiet"]
     assert "has said nothing in this conversation since" in q and "through 2 of your requests" in q
     assert "away, not stuck" in q and "nothing for you to restart" in q
-    assert "wake was sent" in r.result["note"] and "asked and woken" not in r.result["note"]
+    # this repeat woke nobody (its run was already woken for): the note says so, and still points at the quiet
+    assert "no wake was sent" in r.result["note"] and "asked and woken" not in r.result["note"]
     assert "can answer" in r.result["note"] and "it answers them" not in q
     assert "no seat answer" not in r.result["note"], "an earlier seat turn is in view; the note may not deny it"
 
@@ -171,3 +173,24 @@ def test_quiet_after_an_answer_keeps_that_answer_and_does_not_deny_it(monkeypatc
     assert "unchanged" in r.result and f"seq {asked}" in r.result["unchanged"]
     assert "through 1 of your requests" in r.result["seat_quiet"]
     assert "no seat answer" not in r.result["note"] and "not answered" not in r.result["note"]
+
+
+def test_the_note_says_whether_a_wake_left_on_a_default_instance():
+    # a hub-fired sprout session's probe on #664: on a default instance (answered_run_wake unset) the note said
+    # "asked and woken ... either way it answers" on repeats that woke nobody
+    d, home = _seat_home()
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "first"}), _ALLOW)
+    first = conv.recent(home, "seat", limit=1)[-1]["seq"]
+    assert "asked and woken" in r.result["note"], r.result["note"]
+    r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": "again"}), _ALLOW)
+    assert "no wake was sent" in r.result["note"] and "asked and woken" not in r.result["note"], r.result["note"]
+    assert f"repeats the request at seq {first}" in r.result["note"]
+    conv.append(home, "seat", speaker="seat", via="seat",
+                text=f"[request_run] I did not run notes/probe.py. It restarts things.\n\nAnswers your request seq {first}.")
+    notes = []
+    for why in ("third", "fourth"):
+        r = d(BeingIntent("request_run", {"path": "notes/probe.py", "why": why}), _ALLOW)
+        notes.append((r.result.get("woke_now"), r.result["note"]))
+    for _, n in notes:
+        assert "either way it answers" not in n or "asked and woken" in n, n
+    assert any("NOT woken" in n and "already declined" in n for _, n in notes), notes
