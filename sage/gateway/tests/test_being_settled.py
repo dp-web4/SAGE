@@ -295,13 +295,13 @@ def test_a_full_list_names_what_to_reopen_and_never_advises_folding(tmp_path):
 
 
 def test_a_hyphenated_name_and_its_spaced_spelling_read_close_and_the_receipt_quotes_the_earlier_answer(tmp_path):
-    # sprout-being 11-07: s100 "Is the sprout seat running? How do I check if it's alive?" -> "NOT a long-running
-    # service", then s101 "Is sprout-seat running?" -> "No — pgrep returns nothing", 2.5 h later. 'sprout-seat'
-    # was one word, so they scored 0.0 and the receipt for s101 named nothing.
+    # sprout-being 11-07: s100 and s101 asked one question, the seat's name spaced in one and hyphenated in the
+    # other, with opposite answers 2.5 h apart; the hyphenated name was one word, so they scored 0.0 and the
+    # receipt for s101 named nothing.
     _s(tmp_path, question="Is the test gizmo running? How do I check if it's alive?",
        answer="it is not a long-running service; each message wakes a fresh one")
     _s(tmp_path, question="what colour is the test sky?", answer="blue")
-    ok, msg, _ = _s(tmp_path, question="Is test-gizmo running?", answer="no, pgrep returns nothing")
+    ok, msg, _ = _s(tmp_path, question="Is test-gizmo running?", answer="no, the probe finds nothing")
     assert ok and "reads close to s1" in msg
     assert "s1 (settled 1970-01-01) says 'it is not a long-running service" in msg, msg
     assert "reopen s3, then settle id=s1" in msg
@@ -315,8 +315,8 @@ def test_a_word_and_its_plain_ending_read_close(tmp_path):
 
 
 def test_the_two_parts_of_one_name_are_one_shared_word(tmp_path):
-    # in sprout's settled log, 'sprout-claude' split into two shared words linked "Did sprout-claude run
-    # check-video.py?" to "How can sprout-claude be restarted?"
+    # in sprout's settled log, a hyphenated seat name split into two shared words linked a question about one
+    # script's run to a question about restarting the seat
     _s(tmp_path, question="How can gizmo-daemon be restarted?", answer="it cannot")
     ok, msg, _ = _s(tmp_path, question="Did gizmo-daemon read the lamp file?", answer="yes")
     assert ok and "reads close" not in msg, msg
@@ -370,28 +370,28 @@ def test_plurals_meet_and_running_stays_apart_from_run(tmp_path):
 
 def test_the_id_guard_is_mains_predicate_and_never_admits_a_question_on_the_same_subject_only(tmp_path):
     # cbp's and legion's reviews of #661: the guard decides whether an answer goes under an existing question
-    _s(tmp_path, question="When should I escalate a scope request?", answer="when it is still open")
-    ok, msg, _ = _s(tmp_path, id="s1", question="Which scope requests were escalated last week?", answer="two")
+    _s(tmp_path, question="When should I escalate a gizmo ticket?", answer="when it is still open")
+    ok, msg, _ = _s(tmp_path, id="s1", question="Which gizmo tickets were escalated last week?", answer="two")
     assert not ok and "reads as a different question" in msg, msg
-    _s(tmp_path, question="Is sprout-seat running?", answer="yes, it wakes per message")
-    ok, msg, _ = _s(tmp_path, id="s2", question="How can sprout seat be restarted?", answer="run the script")
+    _s(tmp_path, question="Is gizmo-seat running?", answer="yes, it wakes per message")
+    ok, msg, _ = _s(tmp_path, id="s2", question="How can gizmo seat be restarted?", answer="run the script")
     assert not ok and "reads as a different question" in msg, msg
-    ok, msg, _ = _s(tmp_path, id="s2", question="sprout-seat running?", answer="yes")
+    ok, msg, _ = _s(tmp_path, id="s2", question="gizmo-seat running?", answer="yes")
     assert ok, msg
     # saying MORE narrows the question (pub's re-review of #661): refused
-    ok, msg, _ = _s(tmp_path, id="s2", question="Is sprout-seat running on legion?", answer="no")
+    ok, msg, _ = _s(tmp_path, id="s2", question="Is gizmo-seat running on legion?", answer="no")
     assert not ok and "reads as a different question" in msg, msg
 
 
 def test_the_id_guard_refuses_a_question_on_the_same_words_that_asks_something_else(tmp_path):
-    # a hub-fired sprout session's table on #661: on main, "When does a scope request expire?" was ADMITTED as
+    # a hub-fired sprout session's table on #661: on main, "When does a gizmo ticket expire?" was ADMITTED as
     # cbp-being's s10 (only the plural was refused, for want of stemming); both spellings are pinned here
-    _s(tmp_path, question="When should I escalate a scope request?", answer="when it is still open")
-    for other in ("When does a scope request expire?", "When do scope requests expire?",
-                  "When should a scope request expire?", "Which scope requests were escalated last week?"):
+    _s(tmp_path, question="When should I escalate a gizmo ticket?", answer="when it is still open")
+    for other in ("When does a gizmo ticket expire?", "When do gizmo tickets expire?",
+                  "When should a gizmo ticket expire?", "Which gizmo tickets were escalated last week?"):
         ok, msg, _ = _s(tmp_path, id="s1", question=other, answer="x")
         assert not ok and "reads as a different question" in msg, (other, msg)
-    ok, msg, _ = _s(tmp_path, id="s1", question="When should scope requests be escalated?", answer="while open")
+    ok, msg, _ = _s(tmp_path, id="s1", question="When should gizmo tickets be escalated?", answer="while open")
     assert ok, msg
     # how vs whether
     _s(tmp_path, question="Does the gizmo daemon need to be restarted?", answer="no")
@@ -429,7 +429,7 @@ def test_following_the_receipt_keeps_the_answer_that_holds(tmp_path):
     _s(tmp_path, question="Is the test gizmo running? How do I check if it's alive?", answer="it wakes per message")
     _s(tmp_path, question="what colour is the test sky?", answer="blue")
     _s(tmp_path, question="where does the lamp file live?", answer="notes/")
-    ok, msg, _ = _s(tmp_path, question="Is test-gizmo running?", answer="no, pgrep returns nothing")
+    ok, msg, _ = _s(tmp_path, question="Is test-gizmo running?", answer="no, the probe finds nothing")
     assert "with the answer that holds" in msg and "newest answer" not in msg, msg
     assert "Your earlier answer:" in msg
 
@@ -457,7 +457,7 @@ def test_the_full_list_refusal_quotes_the_close_answer_and_asks_for_the_one_that
     _s(tmp_path, question="Is the test gizmo running? How do I check if it's alive?", answer="it wakes per message")
     for i in range(st.MAX_ENTRIES - 1):
         assert _s(tmp_path, question=f"filler {i} about lamps", answer="a")[0]
-    ok, msg, _ = _s(tmp_path, question="Is test-gizmo running?", answer="no, pgrep returns nothing")
+    ok, msg, _ = _s(tmp_path, question="Is test-gizmo running?", answer="no, the probe finds nothing")
     assert not ok and "reads close to s1" in msg, msg
     assert "'it wakes per message'" in msg and "the answer that holds" in msg and "newest" not in msg, msg
 

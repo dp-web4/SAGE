@@ -243,9 +243,9 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                       f"settled {new['id']}: {question[:120]!r} -> {answer[:200]!r}. It is shown to you at the "
                       "start of every beat. To change it later, settle the same question again (with its id, if you like).")
     if ok and close:
-        # WHAT THE EARLIER ONE SAYS, NOT ONLY ITS QUESTION. sprout-being 11-07: s101 ("No — pgrep returns
-        # nothing") was settled 2.5 h after s100 ("NOT a long-running service"), on one subject; a receipt naming
-        # s100's question would not have shown that the two answers disagree.
+        # WHAT THE EARLIER ONE SAYS, NOT ONLY ITS QUESTION. sprout-being 11-07: s101 was settled 2.5 h after s100,
+        # on one subject, with the opposite answer; a receipt naming s100's question would not have shown that the
+        # two answers disagree.
         near = _close_all(entries[:-1], question)
         said = "; ".join(f"{c['id']} (settled {str(c.get('at', ''))[:10]}) says {_flat(c.get('answer', ''))[:200]!r}"
                          for c in near)
@@ -276,9 +276,8 @@ def _stem(t: str) -> str:
     #661: the first cut made services->servic and process->proces).
 
     NO UNDOUBLING: `running` stays `runn`, apart from `run`. Measured on sprout's settled log (a hub-fired
-    sprout session, #661): joining them linked "Did sprout-claude run check-video-devices-simple.py?" (did a
-    script execute) to "Is sprout-seat running?" (is a seat alive), 7 -> 19 such links, nothing gained on the
-    live list. On this subject they are two questions (pub withdrew the suggestion)."""
+    sprout session, #661): joining them linked questions about whether a script had executed to questions about
+    whether the seat was alive, 7 -> 19 such links, nothing gained on the live list. On this subject they are two questions (pub withdrew the suggestion)."""
     if len(t) > 4 and t.endswith("ies"):
         t = t[:-3] + "y"
     elif len(t) > 4 and t.endswith("es") and t[:-2].endswith(("s", "x", "z", "ch", "sh")):
@@ -296,13 +295,13 @@ def _stem(t: str) -> str:
     return t[:-1] if len(t) > 4 and t.endswith("e") else t
 
 def _subject_terms(text: str) -> Dict[str, str]:
-    """{term: the word it came from}. A hyphenated name gives its parts, so 'sprout-seat' meets 'sprout seat',
+    """{term: the word it came from}. A hyphenated name gives its parts, so 'gizmo-seat' meets 'gizmo seat',
     and a word loses a plain ending, so 'restarted' meets 'restart'.
 
-    MEASURED ON SPROUT, 2026-11-09. It settled s100 "Is the sprout seat running? How do I check if it's alive?"
-    -> "NOT a long-running service ... each message triggers a fresh session" at 20:10Z on 11-07, and s101 "Is
-    sprout-seat running?" -> "No — pgrep returns nothing" at 22:46Z. relevance's terms scored that pair 0.0:
-    'sprout-seat' was one word, so the receipt for s101 named nothing, and both were shown as unrelated every
+    MEASURED ON SPROUT, 2026-11-09. It settled s100 (whether its seat was running; true answer) at 20:10Z on
+    11-07, and s101 (the same question, its seat's name spelled with a hyphen; the opposite answer) at 22:46Z.
+    relevance's terms scored that pair 0.0: the hyphenated name was one word, so the receipt for s101 named
+    nothing, and both were shown as unrelated every
     beat after. Over the next two days it settled the seat dead or restartable in 5 more entries, worded 5 ways.
     With these terms, 9 of its 10 seat entries are linked at CLOSE_AT and nothing else is; across all 111
     questions in its settled log, at least 16 of 460 links join two subjects (a floor: the links between two
@@ -386,12 +385,12 @@ def _same_question(target: dict, given: str) -> bool:
 
     NOT THE NAMING SCORE, AND STRICTER THAN MAIN (reviews of #661 by cbp, legion and McNugget, and a hub-fired
     sprout session's table). A false admit takes the old answer out of the beat; a false refusal costs one
-    retry, and the refusal says how. On main, against cbp-being's s10 "When should I escalate a scope
-    request?", "When does a scope request expire?" was ADMITTED (only the plural was refused, for want of
-    stemming), and no threshold on a one-entry corpus separates it from a true rewording (both 0.51). Over the
+    retry, and the refusal says how. On main, against a "when should I escalate X?" entry, "when does an X
+    expire?" was ADMITTED (only the plural was refused, for want of stemming), and no threshold on a one-entry
+    corpus separates it from a true rewording (both 0.51). Over the
     506 ordered pairs of sprout's live list this admits 1 (s101's wording under s100, one name spelled two ways); main's
-    predicate admitted 9. It still refuses some true rewordings ("scope request escalation timing?", "Can the
-    lamp ... be reached?" for "Is the lamp accessible ...?"), which the being restates or settles anew. And
+    predicate admitted 9. It still refuses some true rewordings (a terse "X escalation timing?", or a
+    reworded question with one word of its own), which the being restates or settles anew.
     saying less cannot tell a dropped qualifier from a dropped filler word: "Is the seat running?" is admitted
     under "Is the seat running on legion?" (a hub-fired sprout session on #661), the price of letting the
     s100/s101 respelling through. Nor does it read negation ("Is the seat not running?" and "Is the seat running?"
