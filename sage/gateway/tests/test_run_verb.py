@@ -913,3 +913,18 @@ def test_a_run_reporting_on_the_seat_carries_its_last_turn_and_a_plain_run_does_
     (home / "scratch" / "plain.py").write_text("print('Port 7711 is CLOSED.')\n")
     r = d._do_run(BeingIntent("run", {"path": "scratch/plain.py"}))
     assert r.ok and "last wrote to you" not in r.result["note"], r.result["note"]
+
+
+def test_a_long_gap_says_the_seat_may_be_away_not_that_the_probe_is_right(tmp_path):
+    """legion's review of #663: "46 h before this run began" beside "NOT running. Try: systemctl restart" reads
+    as agreement. Past SEAT_QUIET_S the note says a quiet seat may be away, with nothing to restart."""
+    from datetime import datetime, timezone
+    from sage.gateway.hestia_dispatch import SEAT_QUIET_S, _seat_wrote_note
+    _seat_home(tmp_path)
+    t = datetime(2026, 11, 8, 21, 32, 38, tzinfo=timezone.utc).timestamp()
+    probe = "test-seat is NOT running. Try: systemctl restart"
+    short = _seat_wrote_note(tmp_path, "test-seat", probe, t + SEAT_QUIET_S - 60)
+    long_ = _seat_wrote_note(tmp_path, "test-seat", probe, t + 46 * 3600)
+    assert "away, not stuck" not in short and short.endswith('"test-seat".')
+    assert "46 h 0 min before this run began" in long_, long_
+    assert "may be away, not stuck: there is nothing for you to restart" in long_, long_

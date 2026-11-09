@@ -59,6 +59,13 @@ _PENDING_SCAN = 80
 SEAT_QUIET_S = 3 * 3600
 
 
+#: What a long silence from the seat does and does not mean, said wherever the being meets it.
+_SEAT_AWAY = ("A seat that has not written for hours may be away, not stuck: there is nothing for you to "
+              "restart. Your requests stay in this conversation, and it can answer them when it is back.")
+_SEAT_AWAY_REQUEST = ("A quiet seat may be away, not stuck: there is nothing for you to restart from "
+                      "this request. Your requests stay here, and it can answer them when it is back.")
+
+
 def _seat_quiet(turns, member: str, seat_conv: str, truncated: bool, now=None):
     """A fact for the receipt when the seat has been silent SEAT_QUIET_S or more through the being's own
     requests; None otherwise. A seat can go quiet for hours (its account paused, its operator away).
@@ -75,8 +82,7 @@ def _seat_quiet(turns, member: str, seat_conv: str, truncated: bool, now=None):
         if t.get("from") == seat_conv:
             last, asks_since = t, 0
         # Other speakers (including the operator) do not prove the seat replied.
-    away = ("A quiet seat may be away, not stuck: there is nothing for you to restart from "
-            "this request. Your requests stay here, and it can answer them when it is back.")
+    away = _SEAT_AWAY_REQUEST
     if last is None:
         if not truncated or not asks_since:
             return None     # a new conversation, or one the being has not asked in: nothing to say
@@ -5442,8 +5448,13 @@ def _seat_wrote_note(memory_root, seat_conv: str, said: str, started: float) -> 
     except (ValueError, TypeError):
         return ""
     seq = f" (seq {last['seq']})" if last.get("seq") is not None else ""
+    # A LONG GAP IS NOT THE PROBE'S VERDICT (legion's review of #663): beside "NOT running. Try: systemctl
+    # restart", "46 h before this run began" reads as agreement. Replayed on the mirrored traces, the gap was
+    # 3 h or more on 25 of 80 sprout receipts (14 over a day, inside the seat's real 48 h silence of 11-01..03)
+    # and on 10 of 10 cbp ones. Past SEAT_QUIET_S the note says what _seat_quiet says for a request.
+    away = (" " + _SEAT_AWAY) if gap >= SEAT_QUIET_S else ""
     return (f"One fact from your own records: {seat_conv} last wrote to you at {str(last['ts'])[:16]}Z{seq}, "
-            f"{ago} this run began, in your conversation \"{seat_conv}\".")
+            f"{ago} this run began, in your conversation \"{seat_conv}\".{away}")
 
 
 #: Output that reports on the machine outside the sandbox: services, systemd, D-Bus, ports, processes.
