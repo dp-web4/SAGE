@@ -211,7 +211,7 @@ def _rank(units: List[Dict], query: str, top_k: int, snippet: int, exclude=None,
         scored.append((score, i, u))
     scored.sort(key=lambda s: (-s[0], -s[1]))          # higher score, then later in file (recency)
     if spread:
-        scored = _spread(scored)
+        scored = _spread(scored, limit=max(1, top_k))
     out = []
     for score, _, u in scored[: max(1, top_k)]:
         text = u["text"]
@@ -241,7 +241,8 @@ def _shingles(text: str) -> set:
     return {tuple(w[i:i + 3]) for i in range(len(w) - 2)}
 
 
-def _spread(scored: List[Tuple[float, int, Dict]]) -> List[Tuple[float, int, Dict]]:
+def _spread(scored: List[Tuple[float, int, Dict]],
+            limit: Optional[int] = None) -> List[Tuple[float, int, Dict]]:
     """Ordering, not removal: the best entry of each kind per day first, then the rest held
     back in score order. Near-duplicates of an entry already placed are dropped.
 
@@ -253,11 +254,21 @@ def _spread(scored: List[Tuple[float, int, Dict]]) -> List[Tuple[float, int, Dic
     Per KIND per day, and held rather than discarded (nova on SAGE#650): a hard one-per-day
     rule let a journal echo take the day's only slot from a conversation turn holding the
     diagnosis, and dropped a same-day fact even when slots were left. This is a rule about
-    spread over time and source, not a judgment of which entry matters."""
+    spread over time and source, not a judgment of which entry matters.
+
+    `limit`: only the first `limit` entries of the ordering are wanted (the caller shows
+    `top_k`). The result is then exactly the first `limit` entries of the unlimited ordering,
+    at O(n * limit) instead of O(n^2) (SAGE#686): first-pass entries precede every held one,
+    so once `limit` are placed nothing later can enter, and `seen` never grows past `limit`.
+    Unbounded, the held pass appended nearly every unit to `seen`, and a query of short
+    numbers that scores most of a 30k-unit home cost cbp-being ~19 CPU-minutes per beat."""
     def near(sh, seen):
         return bool(sh) and any(len(sh & x) / len(sh | x) > 0.5 for x in seen)
+    cap = len(scored) if limit is None else limit
     first, held, slots, seen = [], [], set(), []
     for s in scored:
+        if len(first) >= cap:
+            return first
         u = s[2]
         sh = _shingles(u["text"])
         if near(sh, seen):
@@ -271,6 +282,8 @@ def _spread(scored: List[Tuple[float, int, Dict]]) -> List[Tuple[float, int, Dic
         slots.add(slot)
         seen.append(sh)
     for s, sh in held:
+        if len(first) >= cap:
+            break
         if not near(sh, seen):
             first.append(s)
             seen.append(sh)
