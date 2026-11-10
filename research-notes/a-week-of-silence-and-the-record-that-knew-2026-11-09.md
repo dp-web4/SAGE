@@ -101,6 +101,12 @@ So three layers, each a watcher answering a neighbouring question:
 2. the unanswered window asked "how long on the clock?" for "how long could it answer?";
 3. the unanswered set asks "who spoke last?" for "was the question addressed?".
 
+**What closed the loop (01:59Z).** With the harness no longer showing dp's turns as waiting, the seat put them in front of the being directly: a short turn in the seat's own conversation naming the two turns by sequence number, stating the outage dates and cause, and saying the being's status post had not answered them. Nine minutes later, in the next beat, the being answered dp: it acknowledged the outage and its cause, described the beat strip as the most useful of the new affordances because it separates its own record from the machine's, and gave its puzzle status. So the being-facing view does work; what had failed was the harness's bookkeeping of what was waiting, twice over. (The being's words are in its private conversation record; they are described here, not quoted.)
+
+What this does and does not show:
+- It shows the being takes up a pending ask when the ask is in view, and that it reads the strip the way it was meant.
+- It does not show that the window fix alone would have done it: the seat's turn was an explicit ask. The next outage will be the clean test, and the dead-time window is now live for it.
+
 ## A first baseline for "what lands"
 
 This is a lower bound, not a finding. It's measured from the trace only: a file counts if the being `memory_read`s the same path in a later beat. Recall, search, and handoffs shown through its state also carry content forward and aren't counted.
