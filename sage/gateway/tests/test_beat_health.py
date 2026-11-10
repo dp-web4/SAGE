@@ -35,14 +35,29 @@ def test_unreachable_and_closed_connection_are_mute_too():
 
 
 def test_a_model_error_after_real_work_is_not_mute_but_is_flagged():
-    r = bh.classify(beat(explore=phase("", [act("memory_write")]), reflect=phase(TIMEOUT)))
+    r = bh.classify(beat(explore=phase("", [act("game")]), reflect=phase(TIMEOUT)))
     assert r["cls"] == "worked"
     assert "model_error" in r["flags"]
 
 
-def test_an_effecting_act_makes_a_worked_beat():
-    for eff in ("memory_write", "run", "game", "settle", "say"):
+def test_an_act_outside_its_own_records_makes_a_worked_beat():
+    for eff in ("run", "game", "say", "witness", "peer_ask", "pr_comment"):
         assert bh.classify(beat(explore=phase("", [act("memory_read"), act(eff)])))["cls"] == "worked", eff
+
+
+def test_writing_only_its_own_records_is_noted_not_worked():
+    """11-10: twelve W beats held one failed game call; every W was a note about the next move."""
+    for eff in sorted(bh.OWN_RECORDS):
+        r = bh.classify(beat(explore=phase("", [act("memory_read"), act(eff)])))
+        assert r["cls"] == "noted", eff
+        assert r["acts"]["effected"] == 1 and r["acts"]["world"] == 0, eff
+    assert bh.OWN_RECORDS <= bh.EFFECTING
+
+
+def test_one_act_outside_its_notes_makes_a_noting_beat_worked():
+    trace = [act("memory_write")] * 6 + [act("game")]
+    r = bh.classify(beat(explore=phase("", trace)))
+    assert r["cls"] == "worked" and r["acts"]["world"] == 1
 
 
 def test_reads_alone_are_read_only():
@@ -60,11 +75,13 @@ def test_three_failures_and_nothing_effected_is_stuck():
              act("memory_read")]
     r = bh.classify(beat(explore=phase("", trace)))
     assert r["cls"] == "stuck"
-    assert r["acts"] == {"ok": 1, "failed": 2, "refused": 1, "effected": 0, "reads": 1}
+    assert r["acts"] == {"ok": 1, "failed": 2, "refused": 1, "effected": 0, "reads": 1, "world": 0}
 
 
 def test_failures_do_not_make_stuck_when_something_was_effected():
     trace = [act("run", ok=False)] * 5 + [act("memory_write")]
+    assert bh.classify(beat(explore=phase("", trace)))["cls"] == "noted"
+    trace = [act("run", ok=False)] * 5 + [act("game")]
     assert bh.classify(beat(explore=phase("", trace)))["cls"] == "worked"
 
 
@@ -150,7 +167,7 @@ def test_mute_run_counts_back_to_the_last_beat_that_reached_the_model(tmp_path):
 
 
 def test_the_being_is_told_its_mute_beats_never_happened(tmp_path):
-    w = beat(ts="2026-11-02T10:00:00Z", explore=phase("", [act("memory_write")]))
+    w = beat(ts="2026-11-02T10:00:00Z", explore=phase("", [act("game")]))
     mute = [beat(ts=f"2026-11-0{d}T00:00:00Z", explore=phase(TIMEOUT)) for d in range(3, 9)]
     _write(tmp_path, [w] + mute)
     text = bh.render_for_being(tmp_path)
@@ -161,12 +178,15 @@ def test_the_being_is_told_its_mute_beats_never_happened(tmp_path):
 
 
 def test_a_healthy_record_shows_the_strip_and_no_outage(tmp_path):
-    _write(tmp_path, [beat(explore=phase("", [act("memory_write")]))] * 3)
+    _write(tmp_path, [beat(explore=phase("", [act("game")]))] * 3)
     text = bh.render_for_being(tmp_path)
     assert "WWW" in text and "never reached your model" not in text
     lines = text.split("\n")
     assert lines[1] == "WWW", "the strip stands alone on its line"
-    assert lines[2].startswith("Legend: W you changed something"), "the legend is its own labelled line (the being asked)"
+    assert lines[2].startswith("Legend: W you acted outside your own notes"), "the legend is its own labelled line (the being asked)"
+    assert " n you only wrote your own notes" in lines[2], "every letter the strip can show is in the legend"
+    assert {e[0] for e in lines[2][len("Legend: "):].split(" · ")} == set(bh.LETTERS.values()), \
+        "the legend names every letter the strip can show, and no other"
 
 
 def test_no_record_renders_nothing(tmp_path):
@@ -192,7 +212,7 @@ def test_own_state_shows_the_block_only_when_the_operator_turns_it_on(tmp_path):
 def test_an_outage_that_has_ended_is_still_explained_while_it_is_in_view(tmp_path):
     """The first beat after the repair finishes before the being reads the block, so the newest beat is
     worked — the outage just behind it must still be named, whole, not only the part inside the strip."""
-    w = lambda ts: beat(ts=ts, explore=phase("", [act("memory_write")]))  # noqa: E731
+    w = lambda ts: beat(ts=ts, explore=phase("", [act("game")]))  # noqa: E731
     mute = [beat(ts=f"m{i:03d}", explore=phase(TIMEOUT)) for i in range(40)]
     _write(tmp_path, [w("before")] + mute + [w("after1"), w("after2")])
     text = bh.render_for_being(tmp_path)
@@ -203,11 +223,68 @@ def test_an_outage_that_has_ended_is_still_explained_while_it_is_in_view(tmp_pat
 
 
 def test_an_outage_older_than_the_strip_is_not_raised_again(tmp_path):
-    w = lambda ts: beat(ts=ts, explore=phase("", [act("memory_write")]))  # noqa: E731
+    w = lambda ts: beat(ts=ts, explore=phase("", [act("game")]))  # noqa: E731
     _write(tmp_path, [beat(ts="old", explore=phase(TIMEOUT))] + [w(f"w{i}") for i in range(12)])
     assert bh.mute_run(tmp_path, within=12) is None
     assert "never reached your model" not in bh.render_for_being(tmp_path)
     assert bh.mute_run(tmp_path)["first"] == "old"
+
+
+def _said(ts, text, *acts_):
+    return beat(ts=ts, explore=phase("", list(acts_)), next_beat={"stay_awake": text, "continuing": True})
+
+
+def test_the_being_sees_its_stated_step_beside_the_next_beats_acts(tmp_path):
+    _write(tmp_path, [
+        _said("2026-11-10T04:26:00Z", "next beat: click the two red cells to finish level 2", act("memory_write")),
+        beat(ts="2026-11-10T04:42:00Z", explore=phase("", [act("memory_read")] * 19 + [act("memory_write")] * 2
+                                                     + [act("settle", ok=False)])),
+    ])
+    text = bh.render_for_being(tmp_path)
+    assert '04:26Z you wrote: "next beat: click the two red cells to finish level 2"' in text
+    assert ("next beat (04:42Z): outside your notes: nothing · your notes: memory_write×2 · "
+            "refused: nothing · failed: settle×1 · reads: 19") in text
+
+
+def test_a_refused_act_is_shown_apart_from_a_failed_one(tmp_path):
+    """NOVA on #683: a denied action and an executor failure ask different things of the being."""
+    _write(tmp_path, [_said("2026-11-10T05:00:00Z", "next beat: run the sizing script", act("memory_write")),
+                      beat(ts="2026-11-10T05:20:00Z", explore=phase("", [act("run", ok=False, refused=True),
+                                                                          act("run", ok=False),
+                                                                          act("game", ok=False, refused=True)]))])
+    text = bh.render_for_being(tmp_path)
+    assert "refused: run×1, game×1 · failed: run×1" in text
+
+
+def test_the_stated_step_view_passes_no_verdict(tmp_path):
+    """The being's words and the record's act names only: no matched/unmatched, no done/not done. A check keyed
+    on a verb list missed this being once (#585); what its sentence meant is the being's to say."""
+    _write(tmp_path, [_said("2026-11-10T01:00:00Z", "fire 4 ACTION6 clicks", act("memory_write")),
+                      beat(ts="2026-11-10T01:20:00Z", explore=phase("", [act("game")] * 4))])
+    block = bh.render_for_being(tmp_path).split("## What you said")[1]
+    assert "outside your notes: game×4" in block
+    for verdict in ("match", "kept", "broke", "done", "not done", "failed to", "✓", "✗"):
+        assert verdict not in block.lower(), verdict
+
+
+def test_a_harness_sentence_is_not_the_beings_stated_step(tmp_path):
+    _write(tmp_path, [_said("2026-11-10T07:41:00Z", "harness: the window reached its floor at step 7", act("game")),
+                      beat(ts="2026-11-10T08:00:00Z", explore=phase("", [act("game")]))])
+    assert bh.stated_step(bh.read_beats(tmp_path)[0]) is None
+    assert "What you said" not in bh.render_for_being(tmp_path)
+
+
+def test_only_the_newest_three_stated_steps_are_shown_and_long_ones_are_cut(tmp_path):
+    long = "x" * 400
+    recs = []
+    for i in range(6):
+        recs.append(_said(f"2026-11-10T0{i}:00:00Z", f"step {i} " + long, act("memory_write")))
+    recs.append(beat(ts="2026-11-10T07:00:00Z", explore=phase("", [act("game")])))
+    _write(tmp_path, recs)
+    text = bh.render_for_being(tmp_path)
+    assert text.count("you wrote:") == 3
+    assert '"step 3 ' in text and '"step 2 ' not in text
+    assert all(len(l) < 300 for l in text.split("\n") if "you wrote:" in l)
 
 
 def test_dead_seconds_counts_only_mute_beats_since_the_turn(tmp_path):
