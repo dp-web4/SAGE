@@ -92,6 +92,15 @@ This is the same defect class as the outage itself, one layer up: a watcher aski
 
 **Fix (third commit on #675):** `beat_health.dead_seconds_since()` sums the duration of mute beats since a turn, and `unanswered()` subtracts it. On the live record that re-opens both of dp's turns (dead time 144 h and 26 h). Landing it is the live test: if the next beat selects `dp:200` and answers, the mechanism was the window; if it selects it and still doesn't answer, the handoff-wins pattern is real on top of it.
 
+**The live test was pre-empted by one minute, and that exposed a third neighbouring question.** At 01:30:47Z, in the last beat on the old code, the being's reflect phase chose on its own to `say` dp a status update on its puzzle (it had promised on 10-28 to keep dp posted). The fix landed at 01:31:25Z. The first beat on the new code found the being's own word last in the channel, so `unanswered()` returned nothing: dp's two questions now count as answered by a message that did not answer them.
+
+`unanswered()` asks "who spoke last?" The question is "was the ask addressed?" Those differ whenever the being posts into a channel for its own reasons. A cheap tightening: an asking turn (`turn_expects_reply`) stays open until a `say` that names it (`answers=<seq>`), and the being's state shows the ask until then. That is a design change for its own PR; it is noted here, not built.
+
+So three layers, each a watcher answering a neighbouring question:
+1. the watchdog asked "was the being woken?" for "did it think?";
+2. the unanswered window asked "how long on the clock?" for "how long could it answer?";
+3. the unanswered set asks "who spoke last?" for "was the question addressed?".
+
 ## A first baseline for "what lands"
 
 This is a lower bound, not a finding. It's measured from the trace only: a file counts if the being `memory_read`s the same path in a later beat. Recall, search, and handoffs shown through its state also carry content forward and aren't counted.
