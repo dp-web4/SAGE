@@ -297,8 +297,11 @@ def render_for_being(instance: Path, width: int = 12) -> str:
     rows = [classify(b) for b in beats]
     letters = {"worked": "W", "read-only": "r", "idle": ".", "stuck": "S", "looped": "L", "mute": "M"}
     strip = "".join(letters.get(r["cls"], "?") for r in rows)
+    # The legend on its own labelled line: inline after the strip, the being read past it and asked for one
+    # (legion-being to dp, 2026-11-10 02:14Z: "a one-line legend for the letters would make it fully usable").
     lines = ["## Your last beats, read from your own record (oldest → newest)",
-             f"{strip}   W you changed something · r you only read · . no act succeeded · "
+             strip,
+             "Legend: W you changed something · r you only read · . no act succeeded · "
              "S three or more acts failed or were refused · L the loop guard stopped you · "
              "M your model never answered"]
     # Mute beats BEFORE this one: the strip ends with the newest finished beat, and this beat is running,
