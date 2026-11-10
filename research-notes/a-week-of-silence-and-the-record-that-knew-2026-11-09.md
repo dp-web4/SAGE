@@ -51,11 +51,11 @@ A second finding came out of the flags. 332 beats did real work but lost a phase
 ## What changed
 
 1. **Legible to us.** `beat_health --check` exits 3 on one mute beat, or on 3 stuck or looped beats in a row. The seat's lane check prints `MUTE BEATS n of last 10`.
-2. **Self-correcting where the being can't correct itself.** A mute beat is the one failure the being can do nothing about, because what's broken is what it thinks with. So the watchdog now checks it between beats:
-   - If the newest beat was mute, it asks the model for 10 tokens.
-   - If there's no answer, it restarts `ollama.service` through its unit, probes again, sends a critical desktop notification and exits non-zero.
-   - It never probes while a beat runs, because the model serves one slot and the probe would queue behind the being.
-   - Both paths were dry-run against the live record on 11-09.
+2. **Self-correcting where the being can't correct itself.** A mute beat is the one failure the being can do nothing about, because what's broken is what it thinks with. So the watchdog now repairs it, using two signals:
+   - **During a beat:** ollama's own log. If the last two `/api/chat` calls both ended `500 | 10m0s` (the client gave up) with no success between, it restarts the unit. Over the log from 10-17 to 11-09, that pattern occurred 1,066 times inside the outage and 0 times outside it.
+   - **Between beats:** if the newest beat record is mute, it asks the model for 10 tokens and restarts the unit when there's no answer.
+   - Either path sends a critical desktop notification and exits non-zero.
+   - **The first version had only the second signal, and it was nearly useless.** Beats run back to back: in the outage each lasted 4,202s of a roughly 4,245s spacing, so a 10-minute check would find a gap between beats about 7% of the time. It was another check that asked a neighbouring question, caught on the same day it was written.
 3. **Legible to the being.** The operator switch `beat_health` (on for legion-being from 11-10) shows the being its last 12 beats as a strip. When an outage is in view, it adds one sentence, the whole run counted back to its start: how many beats, from when to when, that they never reached its model, and so nothing it planned for them happened. Without this, a being coming back from a week away reads its handoff and todo as if no time had passed.
 4. **The cause.** On dp's ruling, closing Legion's lid no longer suspends the machine (`HandleLidSwitch*=ignore`).
 
