@@ -84,7 +84,13 @@ dp's two turns from the outage week are still unanswered:
 
 All three beats since the repair marked them seen (`dp: 200`), and none replied.
 
-One beat is an observation, not a result. It does fit an earlier one in this record: a pending conversation turn loses to a todo or handoff that is shown every beat (the run_census finding, 11-05). Being *told* about the gap evidently isn't the same as the gap mattering to what the being picks up. The question to watch: does the being answer over the next few beats on its own, and if not, is the outage sentence the wrong place, or the wrong form, for that information?
+A second beat (00:56Z) did the same: worked, no reply.
+
+**Then the record explained it, and it was not the being's choice.** In every one of the 163 mute beats the harness had *selected* dp's 11-08 turn as the one to answer (`selected: dp:200, expects_reply: True`); the model never spoke. In the first live beat, 27 hours later, `selected` was `None` and the turn was marked seen. `unanswered()` drops a turn after 24 hours, on the stated premise that "after `max_age_h` an unanswered turn is a choice the being made." The being did not live those hours. The outage aged the turn out of the window, and the first live beat filed it as history. So the being was shown "anyone who wrote to you in that time had no reply" in one block, and "nothing is waiting on you" in the conversation block beside it. It believed the second.
+
+This is the same defect class as the outage itself, one layer up: a watcher asking a neighbouring question. The window asked "how long has this been unanswered on the clock?" when the question was "how long has the being been *able* to answer it?"
+
+**Fix (third commit on #675):** `beat_health.dead_seconds_since()` sums the duration of mute beats since a turn, and `unanswered()` subtracts it. On the live record that re-opens both of dp's turns (dead time 144 h and 26 h). Landing it is the live test: if the next beat selects `dp:200` and answers, the mechanism was the window; if it selects it and still doesn't answer, the handoff-wins pattern is real on top of it.
 
 ## A first baseline for "what lands"
 
