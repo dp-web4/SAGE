@@ -88,6 +88,7 @@ def test_a_full_list_refuses_a_new_question_but_still_changes_an_old_one(tmp_pat
         assert _s(tmp_path, question=f"question {i}", answer="a")[0]
     ok, msg, _ = _s(tmp_path, question="one more", answer="a")
     assert not ok and "the most this list holds" in msg and "reopen" in msg
+    assert "(\u00abquestion 0\u00bb, " in msg, msg  # the longest held are shown copyable (cbp on #676)
     assert _s(tmp_path, question="question 3", answer="b")[0]
 
 
@@ -532,7 +533,25 @@ def test_a_copy_that_carries_the_period_or_outer_quotes_is_stored_without_guille
     # guillemets, and they nested on the next copy
     held = "Is the gizmo lamp on?"
     _s(tmp_path, question=held, answer="yes")
-    for copy in ("\u00ab" + held + "\u00bb.", '"\u00ab' + held + '\u00bb"', "  \u00ab" + held + "\u00bb ;"):
+    # and the ( ) the cap receipt prints around it (cbp on #676)
+    for copy in ("\u00ab" + held + "\u00bb.", '"\u00ab' + held + '\u00bb"', "  \u00ab" + held + "\u00bb ;",
+                 "(\u00ab" + held + "\u00bb)", "\u00ab" + held + "\u00bb),"):
         ok, msg, _ = _s(tmp_path, id="s1", question=copy, answer="yes, " + copy[:3])
         assert ok, msg
         assert st.read(tmp_path)[0][0]["question"] == held, st.read(tmp_path)[0][0]["question"]
+
+
+def test_a_paren_inside_the_question_is_kept(tmp_path):
+    # the match is anchored on the guillemets: only the ( ) outside them are the receipt's
+    held = "Is the lamp (the gizmo one) on?"
+    _s(tmp_path, question=held, answer="yes")
+    ok, msg, _ = _s(tmp_path, id="s1", question="(\u00ab" + held + "\u00bb)", answer="yes again")
+    assert ok and st.read(tmp_path)[0][0]["question"] == held, msg
+
+
+def test_the_replace_receipt_shows_the_question_copyable(tmp_path):
+    # cbp on #676: the receipt read right after keep-one was still repr-escaped
+    held = 'Does "it" hold?'
+    _s(tmp_path, question=held, answer="yes")
+    ok, msg, _ = _s(tmp_path, id="s1", question=held, answer="no")
+    assert ok and "\u00ab" + held + "\u00bb" in msg, msg
