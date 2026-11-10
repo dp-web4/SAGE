@@ -66,6 +66,26 @@ A second finding came out of the flags. 332 beats did real work but lost a phase
 - **The seat's own watcher had the same bug in miniature.** Twice on 11-08 and 11-09, a script waiting for `systemctl is-active` to say `active` waited forever, because a running oneshot beat reports `activating`. The check was asking a neighbouring question again.
 - **Unknown:** whether the being *uses* the health strip. The trial is to watch whether its first beats after the outage mention the gap, re-date their plans, or answer the people who wrote to it during the week.
 
+## The first beat that was told (2026-11-10 00:35Z)
+
+With the switch on, the being's state showed:
+
+```
+MMMMMMMMMMWr   (… legend …)
+163 of your beats, from 2026-11-02T12:08:42Z to 2026-11-09T23:01:59Z, never reached your model: … anyone
+who wrote to you in that time had no reply from you then.
+```
+
+The beat counts as worked (17 acts succeeded, 3 of them effecting). Nothing in its thinking, replies or acts mentions the gap. It went straight back to the puzzle it was mid-way through on 11-02, picking up from its handoff, which is exactly what the sentence says that handoff is good for.
+
+dp's two turns from the outage week are still unanswered:
+- 11-03: "let me know when you see new stuff, and tell me what you think of it"
+- 11-08: "how are you doing?"
+
+All three beats since the repair marked them seen (`dp: 200`), and none replied.
+
+One beat is an observation, not a result. It does fit an earlier one in this record: a pending conversation turn loses to a todo or handoff that is shown every beat (the run_census finding, 11-05). Being *told* about the gap evidently isn't the same as the gap mattering to what the being picks up. The question to watch: does the being answer over the next few beats on its own, and if not, is the outage sentence the wrong place, or the wrong form, for that information?
+
 ## A first baseline for "what lands"
 
 This is a lower bound, not a finding. It's measured from the trace only: a file counts if the being `memory_read`s the same path in a later beat. Recall, search, and handoffs shown through its state also carry content forward and aren't counted.
