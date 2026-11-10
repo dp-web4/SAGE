@@ -1,6 +1,7 @@
 """retire_thread: close a whole line of work at once (being_threads). dp, 2026-11-01, to cbp-being: "retire
 the whole hestia thread and work on something different" -- 550 of its 584 open todo items and 29 of its
 30 settled entries were on that thread, and retire_note / settle could only move one at a time."""
+import base64
 import builtins
 import io
 import json
@@ -367,3 +368,90 @@ def test_a_closing_by_a_dotted_name_is_still_shown(tmp_path):
     ok, msg, _ = bt.retire_thread(h, {"words": "installer", "reason": "done with it"}, by="seat.v0.3")
     assert ok, msg
     assert "installer: done with it" in bt.render_closed(h)
+
+
+# --- Failure-path coverage salvaged from codex/619-failure-test (NOVA, 2026-11-01), adapted to the
+# implementation that landed in dae8b2355. Each test pins one way a retire can fail part-way and checks
+# that the recovery evidence survives and the failure is not reported as a no-op.
+
+def _confirmed(h, args):
+    """The retire call main requires: the same args plus the confirmation its preview returned."""
+    ok, msg, _ = bt.retire_thread(h, dict(args, preview="true"))
+    assert ok, msg
+    m = re.search(r"confirmation: ([A-Za-z0-9_-]{22})", msg)
+    return dict(args, **({"confirmation": m.group(1)} if m else {}))
+
+def test_a_failed_settled_rollback_preserves_recovery_evidence(tmp_path, monkeypatch):
+    """A failed commit can mean the settled replacement happened but its undo failed."""
+    h = _home(tmp_path)
+    args = {"words": "widget", "reason": "r"}
+    call = _confirmed(h, args)   # preview first, before any failure is injected
+    original = (h / st.SETTLED_FILE).read_bytes()
+
+    def commit_with_failed_undo(instance, entries, nxt, log, now, msg):
+        # The documented _commit outcome: the replacement landed, logging failed, and restoring
+        # the prior settled bytes failed too.
+        (Path(instance) / st.SETTLED_FILE).write_text(json.dumps({"next": nxt, "entries": entries}))
+        return False, "the change was made but could not be recorded and could not be undone"
+
+    monkeypatch.setattr(st, "_commit", commit_with_failed_undo)
+    ok, msg, changed = bt.retire_thread(h, call)
+    assert not ok and (h / st.SETTLED_FILE).read_bytes() != original
+    assert (h / bt.archive_name(args)).exists(), "partial-effect recovery evidence must survive"
+    assert "nothing was retired" not in msg.lower(), "an unknown or partial effect is not a no-op"
+    assert changed, "the caller must not record a partial effect as unchanged"
+    archive = (h / bt.archive_name(args)).read_text()
+    encoded = archive.split("## Exact prior settled.json (base64, for recovery)\n\n", 1)[1].splitlines()[0]
+    assert base64.b64decode(encoded) == original
+
+
+def test_real_settled_log_and_restore_failures_do_not_erase_recovery(tmp_path, monkeypatch):
+    h = _home(tmp_path)
+    args = {"words": "widget", "reason": "r"}
+    call = _confirmed(h, args)   # preview first, before any failure is injected
+    original = (h / st.SETTLED_FILE).read_bytes()
+    real_open, real_write_bytes = builtins.open, Path.write_bytes
+
+    def fail_log(path, mode="r", *a, **kw):
+        if Path(path) == h / st.SETTLED_LOG and mode == "a":
+            raise OSError("synthetic audit-log failure")
+        return real_open(path, mode, *a, **kw)
+
+    def fail_settled_restore(path, data):
+        if path == h / st.SETTLED_FILE:
+            raise OSError("synthetic restore failure")
+        return real_write_bytes(path, data)
+
+    monkeypatch.setattr(builtins, "open", fail_log)
+    monkeypatch.setattr(Path, "write_bytes", fail_settled_restore)
+    ok, msg, changed = bt.retire_thread(h, call)
+    assert not ok and (h / st.SETTLED_FILE).read_bytes() != original
+    assert "could not be undone" in msg
+    assert (h / bt.archive_name(args)).exists(), "partial-effect recovery evidence must survive"
+    assert "nothing was retired" not in msg.lower()
+    assert changed
+
+
+def test_todo_restore_failure_preserves_archive_and_reports_partial_effect(tmp_path, monkeypatch):
+    h = _home(tmp_path)
+    args = {"words": "widget", "reason": "r"}
+    call = _confirmed(h, args)   # preview first, before any failure is injected
+    real_write = bt._write_atomic
+    todo_writes = 0
+
+    def fail_todo_restore(path, text):
+        nonlocal todo_writes
+        if path == h / bt.TODO:
+            todo_writes += 1
+            if todo_writes == 2:
+                raise OSError("synthetic todo restore failure")
+        return real_write(path, text)
+
+    monkeypatch.setattr(bt, "_write_atomic", fail_todo_restore)
+    monkeypatch.setattr(st, "_commit", lambda *a, **kw: (False, "synthetic commit failure"))
+    ok, msg, changed = bt.retire_thread(h, call)
+    assert not ok and changed and todo_writes == 2
+    assert "could NOT be restored" in msg and "may be partial" in msg
+    assert (h / bt.TODO).read_text() != TODO
+    archive = (h / bt.archive_name(args)).read_text()
+    assert TODO in archive
