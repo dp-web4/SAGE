@@ -2315,3 +2315,115 @@ def test_memory_write_through_a_file_names_the_file_not_a_raw_errno():
     assert "did not happen" in env.error
     assert "Errno" not in env.error
     assert open(blocker).read() == "an old note"
+
+
+# --- memory_edit refuses non-Python text in a .py file (SAGE #188, salvaged 2026-11-09) ---
+
+def test_memory_edit_refuses_a_prose_replacement_but_never_a_deletion():
+    """The append guard worked and the pattern walked to the other verb. cbp-being,
+    2026-09-23: at 11:22Z two label APPENDS were refused and it used memory_edit twice
+    instead, both landing — then at ~11:50Z it replaced lines 974-976 with the text
+    "[remove these lines]". That did the deletion it wanted and wrote a fresh defect in the
+    same act: prose at column 0 in the middle of a program.
+
+    The deletion path must stay open: an empty replacement is how lines are removed."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "s.py").write_text("a = 1\nb = 2\nc = 3\n")
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2,
+                                         "end_line": 2, "new": "[remove these lines]"}), _ALLOW)
+    assert not r.ok, "a prose replacement must be refused"
+    assert "memory_edit refused" in (r.error or ""), r.error
+    assert "empty replacement" in (r.error or ""), "it must name the deletion path"
+    assert (home / "notes" / "s.py").read_text() == "a = 1\nb = 2\nc = 3\n", "file must be untouched"
+
+    # THE CONTROL: deletion still works, and so does a real code replacement.
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2,
+                                         "end_line": 2, "new": ""}), _ALLOW)
+    assert r.ok, f"an empty replacement is a deletion and must be allowed: {r.error}"
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "a = 1",
+                                         "new": "a = 42"}), _ALLOW)
+    assert r.ok, f"a real code replacement must be allowed: {r.error}"
+    assert "a = 42" in (home / "notes" / "s.py").read_text()
+
+
+def test_memory_edit_in_a_non_python_file_takes_any_text():
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "j.md").write_text("one\ntwo\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/j.md", "start_line": 1,
+                                         "end_line": 1, "new": "[a label]"}), _ALLOW)
+    assert r.ok, f"prose belongs in notes and must never be refused there: {r.error}"
+
+
+def test_editing_prose_inside_a_docstring_is_not_refused():
+    """THE CONTROL that shapes the rule. A line inside a docstring IS prose, so the
+    standalone "is this Python" test refuses it — and refusing an ordinary docstring edit to
+    stop a rarer mistake is the kind of friction that gets a guard routed around. So the
+    standalone verdict is only acted on when the edit actually makes the file worse: when it
+    moves the first parse error earlier, or introduces one."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "d.py").write_text(
+        'def f(x):\n    """Do a thing.\n\n    Returns:\n        Dictionary of gradients.\n    """\n    return x\n')
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/d.py", "start_line": 5, "end_line": 5,
+                                         "new": "        Dictionary of updated gradients."}), _ALLOW)
+    assert r.ok, f"a docstring edit must not be refused: {r.error}"
+    assert "updated gradients" in (home / "notes" / "d.py").read_text()
+
+    # ...while replacing a CODE line with the same shape of text is still refused.
+    r = disp(BeingIntent("memory_edit", {"path": "notes/d.py", "start_line": 7, "end_line": 7,
+                                         "new": "[remove these lines]"}), _ALLOW)
+    assert not r.ok and "memory_edit refused" in (r.error or ""), r.error
+
+
+def test_prose_below_an_existing_error_is_still_refused():
+    """GPT's review of #188. The first version let the standalone verdict be overridden
+    whenever the edit did not move the FIRST SyntaxError earlier — and a file under repair is
+    almost always already broken, so that escape was open nearly all the time and a new defect
+    could be planted anywhere BELOW the existing one. Asking where the edit LANDS (inside a
+    docstring or not) answers the real question and has no such hole."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    # already broken at line 1; the edit lands far below it
+    (home / "notes" / "b.py").write_text("def f(:\n" + "".join(f"x{i} = {i}\n" for i in range(2, 30)))
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/b.py", "start_line": 20,
+                                         "end_line": 20, "new": "[remove these lines]"}), _ALLOW)
+    assert not r.ok, "prose below an existing error must still be refused"
+    assert "memory_edit refused" in (r.error or ""), r.error
+    assert "[remove these lines]" not in (home / "notes" / "b.py").read_text()
+
+    # ...and the deletion path through the same region is untouched.
+    r = disp(BeingIntent("memory_edit", {"path": "notes/b.py", "start_line": 20,
+                                         "end_line": 20, "new": ""}), _ALLOW)
+    assert r.ok, f"deletion must still work in a broken file: {r.error}"
+
+
+def test_a_text_mode_fragment_is_judged_by_its_whole_line():
+    """Ported control (2026-11-09): "foo(a" -> "foo(b" is not Python on its own, but the line it
+    leaves is, so the edit lands, even in a file that is already broken elsewhere."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "f.py").write_text("def g(:\n    pass\nx = foo(a, 2)\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/f.py", "old": "foo(a", "new": "foo(b"}), _ALLOW)
+    assert r.ok, f"a fragment that leaves a valid line must not be refused: {r.error}"
+    assert "foo(b, 2)" in (home / "notes" / "f.py").read_text()
+
+
+def test_a_line_that_only_parses_in_its_block_is_not_refused_when_the_file_parses():
+    """Ported control (2026-11-09): "    elif y:" is not Python alone, but the file parses after it."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "e.py").write_text("if x:\n    a = 1\nelse:\n    a = 2\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/e.py", "start_line": 3, "end_line": 3,
+                                         "new": "elif y:"}), _ALLOW)
+    assert r.ok, f"an edit that leaves the file parsing must not be refused: {r.error}"

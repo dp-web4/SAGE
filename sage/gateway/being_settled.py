@@ -150,8 +150,11 @@ def _copyable(q: str) -> str:
 
 def _uncopied(q: str) -> str:
     """A question as the being sends it, without the « » a copy from a receipt may carry along."""
-    q = q.strip()
-    return q[1:-1].strip() if len(q) >= 2 and q[0] == "«" and q[-1] == "»" else q
+    # with the sentence's period, or outer quote marks, carried along too (cbp's re-check of #661): otherwise the
+    # « » are stored, and nest one level deeper on every copy
+    # and the ( ) the cap receipt prints around it (cbp on #676)
+    m = re.fullmatch(r'[\s"\'`(]*«(.*)»[\s"\'`.,;:)]*', q, re.S)
+    return m.group(1).strip() if m else q.strip()
 
 
 def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
@@ -234,7 +237,7 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
         entries = [e for e in entries if e is not target] + [new]
         return _commit(instance, entries, nxt, {"op": "replace", "id": new["id"], "from": target, "to": new,
                                                 "why": why}, now,
-                       f"{new['id']} now reads: {question[:120]!r} -> {answer[:200]!r}. The earlier answer is "
+                       f"{new['id']} now reads: {_copyable(question)} -> {answer[:200]!r}. The earlier answer is "
                        "kept in settled_log.jsonl. It is shown to you at the start of every beat.")
     close = _close_to(entries, question)
     if len(entries) >= MAX_ENTRIES:
@@ -242,7 +245,7 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
         # the refused questions read close to one it held; the receipt named neither.
         # NO "FOLD IT INTO ONE YOU HAVE". That advice, without a close entry, is how cbp-being's questions came to
         # carry answers to other questions (s10, s20, s42: 10-28..30). A full list is made room in by reopening.
-        oldest = ", ".join(f"{e['id']} ({e['question'][:60]!r}, {str(e.get('at', ''))[:10]})" for e in entries[:3])
+        oldest = ", ".join(f"{e['id']} ({_copyable(e['question'])}, {str(e.get('at', ''))[:10]})" for e in entries[:3])
         return False, (f"you have {len(entries)} settled entries, the most this list holds, so a new one was "
                        "not added. Nothing was changed. To make room, reopen one that no longer needs holding (its "
                        f"id and reopen='true'); the longest held are {oldest}. Do not put this answer under a "
@@ -255,7 +258,7 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                           "that holds." if close else ""))
     entries = entries + [new]
     ok, msg = _commit(instance, entries, nxt + 1, {"op": "settle", "id": new["id"], "to": new, "why": why}, now,
-                      f"settled {new['id']}: {question[:120]!r} -> {answer[:200]!r}. It is shown to you at the "
+                      f"settled {new['id']}: {_copyable(question)} -> {answer[:200]!r}. It is shown to you at the "
                       "start of every beat. To change it later, settle the same question again (with its id, if you like).")
     if ok and close:
         # WHAT THE EARLIER ONE SAYS, NOT ONLY ITS QUESTION. sprout-being 11-07: s101 was settled 2.5 h after s100,
@@ -266,7 +269,7 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
                          for c in near)
         # "WITH THE ANSWER THAT HOLDS", NOT "YOUR NEWEST" (legion's review of #661): followed literally on the
         # s100/s101 shape, "settle id=s1 with your newest answer" replaced the true entry with the false one
-        msg += (f" It reads close to {close['id']} ({close['question'][:120]!r}). Your earlier "
+        msg += (f" It reads close to {close['id']}. Your earlier "
                 f"answer{'s' if len(near) > 1 else ''}: {said}. If they are the same question, keep one: reopen "
                 f"{new['id']}, then settle id={close['id']}, question {_copyable(close['question'])} word for word, with the "
                 "answer that holds. If they differ, both stay, and each beat marks them with \u2248.")

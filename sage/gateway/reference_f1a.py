@@ -547,6 +547,68 @@ def _not_python(content: str, before: str) -> str:
             f"{line.strip()[:100]!r}. Appending it would not make the file parse either.")
 
 
+
+def _inside_a_string_literal(before: str, edit_line: int) -> bool:
+    """Is the line this edit replaces inside a string literal (a docstring) already?
+
+    This is the ONLY reason to accept a replacement that is not Python: a line inside a
+    docstring IS prose, and refusing an ordinary docstring edit to prevent a rarer mistake is
+    the friction that gets a guard routed around.
+
+    It replaces a first-SyntaxError comparison, which GPT's review of #188 correctly refused:
+    comparing only the FIRST error lets a new defect be planted anywhere BELOW an existing
+    one, and the file being repaired is almost always already broken -- so that escape was
+    open nearly all the time, which is the opposite of what it was for. Asking where the edit
+    lands answers the real question and has no such hole.
+    """
+    import io as _io
+    import tokenize as _tok
+    try:
+        for t in _tok.generate_tokens(_io.StringIO(before).readline):
+            if t.type == _tok.STRING and t.start[0] <= edit_line <= t.end[0]:
+                return True
+    except (_tok.TokenError, IndentationError, SyntaxError):
+        # An unreadable file cannot vouch for the edit; fall back to refusing.
+        return False
+    return False
+
+
+def _first_changed_line(before: str, after: str) -> int:
+    """Where the edit landed, from the two versions -- no extra plumbing through both modes."""
+    b, a = before.splitlines(), after.splitlines()
+    for i in range(min(len(b), len(a))):
+        if b[i] != a[i]:
+            return i + 1
+    return min(len(b), len(a)) + 1
+
+
+def _changed_lines(before: str, after: str) -> str:
+    """The whole lines of `after` that differ from `before` (first to last differing line)."""
+    b, a = before.splitlines(keepends=True), after.splitlines(keepends=True)
+    i = 0
+    while i < min(len(b), len(a)) and b[i] == a[i]:
+        i += 1
+    j = 0
+    while j < min(len(b), len(a)) - i and b[-1 - j] == a[-1 - j]:
+        j += 1
+    return "".join(a[i:len(a) - j])
+
+
+def _is_unfinished_code(src: str) -> bool:
+    """True when `src` fails to compile only because it is not finished yet: an unclosed
+    bracket or string, or input that ends where more was expected. Prose such as
+    "[remove these lines]" fails as invalid syntax instead, and is not covered."""
+    import textwrap as _tw
+    try:
+        compile(_tw.dedent(src), "<edit>", "exec")
+    except SyntaxError as e:
+        msg = str(e.msg or "")
+        return any(k in msg for k in ("was never closed", "unexpected EOF", "unterminated",
+                                      "expected an indented block"))
+    except ValueError:
+        return False
+    return False
+
 def _first_syntax_error(src: str) -> Optional[SyntaxError]:
     """The compiler's FIRST stop in `src`, or None if it parses. compile() executes nothing."""
     try:
@@ -2102,7 +2164,7 @@ class ReferenceF1aDispatcher:
                             + "".join(lines[s1:]))
                 what = (f"replaced 1 occurrence inside lines {s0}-{s1} (your old was part of the "
                         f"range, and appears there once)")
-                return self._commit_edit(p, path, text, new_text, what, "")
+                return self._commit_edit(p, path, text, new_text, what, "", replacement=new)
             if old and inner > 1:
                 where = f"line {s0}" if s0 == s1 else f"lines {s0}-{s1}"
                 return ResultEnvelope(ok=False, error=(
@@ -2125,7 +2187,7 @@ class ReferenceF1aDispatcher:
             gone = f" The lines removed were:\n{_head_and_tail(removed)}" + _defs_removed(removed)
             if str(p).endswith(".py") and not _parses(new_text):
                 gone = _spaces_verdict(lines, s0, s1, removed, new) + gone
-            return self._commit_edit(p, path, text, new_text, what, gone)
+            return self._commit_edit(p, path, text, new_text, what, gone, replacement=new)
         hits = text.count(old)
         if hits == 0 and len(new.strip()) >= 40 and new not in old and _whole_lines_once(text, new):
             # ALREADY MADE. Measured 2026-10-07 10:20Z: cbp-being's pandas-import edit landed
@@ -2255,11 +2317,46 @@ class ReferenceF1aDispatcher:
                 f"start_line={at} end_line={at}, old set to that line, and new set to the "
                 f"line you want."))
         return self._commit_edit(p, path, text, text.replace(old, new, 1),
-                                 "replaced 1 occurrence", "")
+                                 "replaced 1 occurrence", "", replacement=new)
 
     def _commit_edit(self, p, path: str, text: str, new_text: str, what: str,
-                     gone: str) -> ResultEnvelope:
-        """Write an edit atomically and say what it did. Shared by the text and line modes."""
+                     gone: str, replacement: Optional[str] = None) -> ResultEnvelope:
+        """Write an edit atomically and say what it did. Shared by the text and line modes.
+
+        THE SAME CHECK AS THE APPEND PATH, BECAUSE THE PATTERN WALKED TO THIS DOOR. Guarding
+        memory_write alone worked -- measured on cbp-being at 11:22Z, two label appends were
+        refused and it used memory_edit twice instead, both landing. Half an hour later it
+        replaced lines 974-976 with the text "[remove these lines]". The replacement did the
+        deletion it wanted AND wrote a fresh defect in the same act: prose standing at column
+        0 in the middle of a program, which is the very thing the append guard exists to stop.
+        A guard on one verb moves the behaviour to the other verb, it does not end it.
+
+        An EMPTY replacement is the deletion path and is always allowed -- that is how lines
+        are removed, and refusing it would take away the repair along with the mistake."""
+        if (replacement is not None and replacement.strip()
+                and str(p).endswith(".py") and not _parses(new_text)):
+            # Judge the whole lines the edit changed, not a raw fragment: a text-mode edit of
+            # part of a line ("foo(a" -> "foo(b") is not Python on its own and must not be
+            # refused for that. And an edit that leaves the file parsing cannot have planted
+            # prose at column 0, so it is never refused here (ported 2026-11-09; the 09-26
+            # version predates the in-line replacement mode).
+            why = _not_python(_changed_lines(text, new_text) or replacement, text)
+            # ...unless the line being replaced is inside a docstring, where prose is the
+            # correct content. Anything else that is not Python is refused.
+            if why and _inside_a_string_literal(text, _first_changed_line(text, new_text)):
+                why = ""
+            # Incomplete code is not prose. An edit that opens a bracket or a block it has not
+            # closed yet ("x = (") is a repair in progress: it lands, and the receipt below says
+            # the edit is what stopped the file parsing and how to undo it (2026-10 design,
+            # SAGE #427). Only text Python reads as invalid, not as unfinished, is refused.
+            if why and _is_unfinished_code(_changed_lines(text, new_text) or replacement):
+                why = ""
+            if why:
+                return ResultEnvelope(ok=False, error=(
+                    f"memory_edit refused, nothing was changed in {p.name}. {why} A note about "
+                    f"the work belongs in a .md file under notes/; to DELETE these lines, give "
+                    f"an empty replacement instead of text describing the deletion."))
+
         # AN IDENTICAL REPLACEMENT IS NOT AN EDIT. 2026-09-24 10:42 cbp-being replaced line 2686
         # with the exact text already there, and the receipt said "This changed the file on
         # disk"; its closing note then listed line 2686 as fixed. Again 2026-09-28 10:08Z: line
