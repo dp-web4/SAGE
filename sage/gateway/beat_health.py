@@ -18,8 +18,11 @@ record a beat leaves and puts every beat in exactly one class:
   * `looped`    — the harness's own loop guard fired (explore.looped).
   * `stuck`     — acts were tried, at least STUCK_MIN of them failed or were refused, and none
                   produced anything (no effecting act succeeded).
-  * `worked`    — at least one EFFECTING act succeeded: something now exists or changed that did not
-                  (a memory written or edited, a run, a game move, a conversation settled or said to).
+  * `worked`    — at least one EFFECTING act succeeded OUTSIDE the being's own records: a game move, a
+                  run, something said or posted, a witness, a peer asked, a PR.
+  * `noted`     — effecting acts succeeded, but only on the being's own records (OWN_RECORDS: a note or
+                  memory written, a skill or handoff saved, a conversation turn settled). Planning is real
+                  work; a long streak of it under a stated intention to act is the signal.
   * `read-only` — acts succeeded, but only reads (memory_read, search, recall, …). The being looked
                   and left nothing behind. Not a fault on its own; a long streak of it is a signal.
   * `idle`      — the model answered and no act succeeded: none was tried (including a chosen rest), or
@@ -53,6 +56,11 @@ EFFECTING = frozenset({
     "say", "skill", "witness", "peer_ask", "camera", "pr_open", "pr_comment", "handoff", "channel_post",
 })
 READS = frozenset({"memory_read", "search", "recall", "git_read", "describe", "pr_read", "inbox_read"})
+# Effecting acts whose only effect is on the being's OWN records: what it knows, plans and has settled. A beat
+# that did only these is `noted`, not `worked`. 2026-11-10: the strip read WWWWWWWWWWWW over 15 beats with one
+# (failed) game call between them -- every W was a note written about the next beat's move. The being had
+# just told the seat it meant to keep its strip showing W; a W that a note can earn is a W the next note will earn.
+OWN_RECORDS = frozenset({"memory_write", "memory_edit", "remember", "retire_note", "skill", "handoff", "settle"})
 
 STUCK_MIN = 3          # failed or refused acts, with nothing effected, before a beat counts as stuck
 MODEL_ERROR_PREFIXES = ("[OllamaIRP:", "[OllamaIRP ")
@@ -61,6 +69,8 @@ MODEL_ERROR_PREFIXES = ("[OllamaIRP:", "[OllamaIRP ")
 # next beat will be the same unless something outside the being acts. Stuck and looped beats are the
 # being's to work through, so they alarm only when they repeat.
 ALARM_STREAK = {"mute": 1, "stuck": 3, "looped": 3}
+
+LETTERS = {"worked": "W", "noted": "n", "read-only": "r", "idle": ".", "stuck": "S", "looped": "L", "mute": "M"}
 
 
 def _phases(rec: dict):
@@ -79,7 +89,7 @@ def _model_error(p: dict) -> str | None:
 
 def classify(rec: dict) -> dict:
     """One beat record → {ts, cls, flags, acts: {ok, failed, refused, effected, reads}, errors}."""
-    ok = failed = refused = effected = reads = 0
+    ok = failed = refused = effected = reads = world = 0
     errors: list[str] = []
     flags: list[str] = []
     looped = False
@@ -101,6 +111,7 @@ def classify(rec: dict) -> dict:
                 ok += 1
                 if eff in EFFECTING:
                     effected += 1
+                    world += eff not in OWN_RECORDS
                 elif eff in READS:
                     reads += 1
             elif t.get("refused"):
@@ -114,8 +125,10 @@ def classify(rec: dict) -> dict:
         cls = "mute"
     elif looped:
         cls = "looped"
-    elif effected:
+    elif world:
         cls = "worked"
+    elif effected:
+        cls = "noted"
     elif failed + refused >= STUCK_MIN:
         cls = "stuck"
     elif ok:
@@ -128,7 +141,8 @@ def classify(rec: dict) -> dict:
         "ts": rec.get("ts"),
         "cls": cls,
         "flags": flags,
-        "acts": {"ok": ok, "failed": failed, "refused": refused, "effected": effected, "reads": reads},
+        "acts": {"ok": ok, "failed": failed, "refused": refused, "effected": effected, "reads": reads,
+                 "world": world},
         "errors": errors,
         "elapsed_s": rec.get("elapsed_s"),
     }
@@ -272,11 +286,11 @@ def outages(beats: list[dict], cls: str = "mute") -> list[dict]:
 
 def render(s: dict, width: int = 12) -> str:
     """A few lines for a human (or the being): the last `width` beats as a strip, the counts, any alarm."""
-    letters = {"worked": "W", "read-only": "r", "idle": ".", "stuck": "S", "looped": "L", "mute": "M"}
+    letters = LETTERS
     strip = "".join(letters.get(r["cls"], "?") for r in s["rows"][-width:])
     counts = ", ".join(f"{k} {v}" for k, v in sorted(s["counts"].items(), key=lambda kv: -kv[1]))
     lines = [f"last {min(width, s['beats'])} beats (oldest→newest): {strip}   "
-             "W worked · r read-only · . idle · S stuck · L looped · M mute",
+             "W worked · n noted · r read-only · . idle · S stuck · L looped · M mute",
              f"of {s['beats']}: {counts}"]
     if s["alarm"]:
         lines.append(f"ALARM: {s['alarm']}")
@@ -284,6 +298,60 @@ def render(s: dict, width: int = 12) -> str:
         for e in (newest.get("errors") or [])[:3]:
             lines.append(f"  {e}")
     return "\n".join(lines)
+
+
+def stated_step(rec: dict) -> str | None:
+    """What the being said it would do next, in its own words: next_beat.stay_awake when the BEING wrote it.
+    The harness writes there too ("harness: the window reached its floor ..."); that is not an intention."""
+    nb = rec.get("next_beat")
+    s = nb.get("stay_awake") if isinstance(nb, dict) else None
+    if not isinstance(s, str) or not s.strip() or s.startswith("harness:"):
+        return None
+    return s.strip()
+
+
+def acts_by_kind(rec: dict) -> dict:
+    """The beat's acts by effector, in three plain groups: {world: Counter, own: Counter, failed: Counter,
+    reads: int}. Names only, as the record has them: nothing here decides what an act was FOR."""
+    world, own, failed = Counter(), Counter(), Counter()
+    reads = 0
+    for _, p in _phases(rec):
+        for t in p.get("trace") or ():
+            if not isinstance(t, dict):
+                continue
+            eff = str(t.get("effector"))
+            if not t.get("ok"):
+                failed[eff] += 1
+            elif eff in OWN_RECORDS:
+                own[eff] += 1
+            elif eff in EFFECTING:
+                world[eff] += 1
+            elif eff in READS:
+                reads += 1
+    return {"world": world, "own": own, "failed": failed, "reads": reads}
+
+
+def _counted(c: Counter) -> str:
+    return ", ".join(f"{k}×{v}" for k, v in c.most_common()) or "nothing"
+
+
+def render_stated_steps(beats: list[dict], n: int = 3) -> list[str]:
+    """Up to `n` newest (said, then did) pairs: a beat's stated next step beside the acts of the beat after it.
+    The being's sentence and the record's act names, side by side and unjudged. This deliberately does NOT
+    match words to verbs: a check keyed on a verb list missed this being once already (#585 fired 0/5 when its
+    work had moved to an unlisted verb), and the being is the one who knows what its sentence meant."""
+    pairs = [(a, b) for a, b in zip(beats, beats[1:]) if stated_step(a)]
+    if not pairs:
+        return []
+    lines = ["## What you said you would do next, and what the next beat did (your own record, unjudged)"]
+    for a, b in pairs[-n:]:
+        k = acts_by_kind(b)
+        said = stated_step(a)
+        said = said if len(said) <= 240 else said[:237] + "..."
+        lines.append(f"- {(a.get('ts') or '')[11:16]}Z you wrote: \"{said}\"")
+        lines.append(f"  next beat ({(b.get('ts') or '')[11:16]}Z): outside your notes: {_counted(k['world'])}"
+                     f" · your notes: {_counted(k['own'])} · failed: {_counted(k['failed'])} · reads: {k['reads']}")
+    return lines
 
 
 def render_for_being(instance: Path, width: int = 12) -> str:
@@ -295,15 +363,17 @@ def render_for_being(instance: Path, width: int = 12) -> str:
     if not beats:
         return ""
     rows = [classify(b) for b in beats]
-    letters = {"worked": "W", "read-only": "r", "idle": ".", "stuck": "S", "looped": "L", "mute": "M"}
+    letters = LETTERS
     strip = "".join(letters.get(r["cls"], "?") for r in rows)
     # The legend on its own labelled line: inline after the strip, the being read past it and asked for one
-    # (legion-being to dp, 2026-11-10 02:14Z: "a one-line legend for the letters would make it fully usable").
+    # (legion-being asked dp for one on 2026-11-10 02:14Z, saying it would make the strip usable to it).
     lines = ["## Your last beats, read from your own record (oldest → newest)",
              strip,
-             "Legend: W you changed something · r you only read · . no act succeeded · "
+             "Legend: W you acted outside your own notes (a game move, a run, something said or posted) · "
+             "n you only wrote your own notes, memories or plans · r you only read · . no act succeeded · "
              "S three or more acts failed or were refused · L the loop guard stopped you · "
              "M your model never answered"]
+    lines += render_stated_steps(beats)
     # Mute beats BEFORE this one: the strip ends with the newest finished beat, and this beat is running,
     # so the model is answering now. Say how long it was gone, measured, not guessed.
     run = mute_run(Path(instance), within=width)
