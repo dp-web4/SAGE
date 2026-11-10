@@ -1,0 +1,125 @@
+# hestia.service as systemd resolves it, exported at 2026-09-20 01:33Z.
+# FragmentPath: /home/dp/.config/systemd/user/hestia.service
+# This is a USER unit: it lives under the running user's home, not /etc/systemd/system.
+
+[Unit]
+Description=Hestia local-first Web4 trust daemon
+Documentation=https://github.com/dp-web4/hestia
+# NOT `After=default.target`. This unit is WantedBy=default.target; ordering it
+# *after* the target that wants it is the latent charge. It does NOT cycle on its
+# own — systemd refuses to build the two-node loop (a target skips its implicit
+# "order me after what I want" edge for any unit declaring a contradicting order;
+# the source comment is literally "Don't create loops"). The cycle needs a THIRD
+# unit to bridge it:
+#
+#   default.target --(implicit after)--> watcher      (WantedBy=default.target)
+#   watcher        --(explicit after)--> hestia       (After=hestia.service)
+#   hestia         --(explicit after)--> default.target   <-- the bad line
+#
+# systemd breaks that by DELETING a start job, and the victim is whichever unit
+# closes the loop — not necessarily this one. On CBP it silently deleted both
+# member-mesh watchers at every boot: the mesh was "enabled" and never ran.
+# Found 2026-07-25, the first reboot after the mesh was armed.
+#
+# Why it stayed hidden: the bad line is harmless until something orders itself
+# after hestia. "It starts fine on my box" is not evidence of absence. Detector
+# that needs no reboot (wanted-but-not-ordered == loop-avoidance already fired):
+#   systemctl --user show default.target -p Wants --value | tr ' ' '\n' \
+#     | grep -qx hestia.service &&
+#   ! systemctl --user show default.target -p After --value | tr ' ' '\n' \
+#     | grep -qx hestia.service &&
+#   echo "LATENT ORDERING CYCLE"
+# (-qx on tokenised lines, not a bare grep: `grep -q hestia.service` also
+# matches a unit merely *named* like it, e.g. myhestia.service.)
+# Packaged as install.sh:verify_service_linux — run it fleet-wide, and let it,
+# not a source-controlled operator roster, define which installations are affected.
+# Credit: pub (three-node model + detector), nomad (charge/detonator framing),
+# sprout (initial confirm).
+
+# Bound the retry loop. NOT because a start limit was missing — systemd already
+# applies `StartLimitIntervalSec=10s` / `StartLimitBurst=5` by default. Measured
+# on CBP's live unit, which declares neither key and still reads 10s / 5.
+#
+# The limit was present and *structurally could not fire*: at `RestartSec=5s`
+# at most 2–3 attempts land in any 10s window, so a burst of 5 is unreachable.
+# The unit retries forever, never enters `failed`, and nothing reports it as
+# broken. Observed on nomad: 289 consecutive restarts against
+# `status=226/NAMESPACE` (the [Service] sandboxing below cannot set up mount
+# namespacing under some WSL kernels until the user manager is restarted).
+#
+# So the fix is a window WIDER than burst × RestartSec, not the presence of the
+# setting: 5 × 5s = 25s, so 120s trips it. `StartLimitIntervalSec=10` would
+# reproduce the forever-loop exactly — "add a start limit" is the wrong lesson
+# and invites precisely that. Keep this in sync with `RestartSec` below.
+#
+# Same failure class as the ordering cycle: enabled, no failure signal, not
+# actually running. Prefer a visible `failed` over a silent infinite retry.
+# NOTE: these are [Unit] keys, not [Service] — moved in systemd 229. Anywhere
+# else they are parsed, ignored, and reported green; install.sh probes 1b/1c
+# catch that without needing systemd-analyze or a user bus.
+#
+# Measured, not asserted (CBP, systemd 255.4/WSL2, two units identical but for
+# the window): 120 → `failed` at t=30s on the 5th start ("Start request repeated
+# too quickly"); 10 → 13 restarts at t=70s and still climbing. "Keep in sync"
+# is now enforced by install.sh probe 1d, not just stated here.
+#
+# Where the boundary actually is (CBP, measured — four units, only the window
+# differing; HUB proposed `(burst−1) × RestartSec` on algebra, and the run
+# refuted it): 20 → 15 restarts at t=80s, still climbing; 25 → 15 restarts,
+# still climbing; 30 → `failed` at 5. systemd allows `burst` starts per window
+# and refuses the *burst+1*-th, which lands at burst × RestartSec — so a window
+# of `(burst−1) × RestartSec` = 20s never fires. The refusing start landed at
+# t≈25.0s against a 25s window, i.e. exactly on the edge: at
+# window == burst × RestartSec, sub-second scheduling jitter decides, and here
+# it decided against firing. That is why probe 1d warns on `<=`, not `<`.
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# Load HESTIA_PASSPHRASE from ~/.hestia/.passphrase (mode 600) and exec hestia.
+# The passphrase file is the consumer-tier security boundary; Hardbound
+# replaces this with TPM unsealing.
+ExecStart=/bin/sh -c 'HESTIA_PASSPHRASE="$(cat %h/.hestia/.passphrase)" exec %h/.local/bin/hestia serve --bind 127.0.0.1:7711'
+Environment=HESTIA_HOME=%h/.hestia
+# Supervisor-owned build identity; the dashboard turns amber when this differs
+# from the build actually running.
+Environment=HESTIA_CURRENT_BUILD_FILE=%h/.hestia/current-build.json
+Environment=RUST_LOG=warn
+# ARENA CAP (#354). glibc allocates one 64 MB arena per thread up to 8 x cores — on an
+# 8-core host that is a 4 GB ceiling of pure fragmentation surface. An arena only returns
+# memory by trimming its TOP, so one live allocation above a freed block pins the whole
+# region, and every heavy read permanently claims arena space in whichever worker ran it.
+#
+# Measured on CBP 2026-08-24 at ~20h uptime: 21 arenas of exactly 64.0 MB, RSS 1,767 MB
+# against an all-time peak of 1,777 MB — essentially nothing ever returned. That RSS floor
+# is what makes the box swap, which makes the daemon slow under its single global lock,
+# which makes gate calls exceed their budget and DENY writes fleet-wide. Daemon memory is a
+# governance-availability parameter, not hygiene.
+#
+# 2 rather than 1: a single arena serialises every allocation across ~12 tokio threads.
+# This workload is I/O-bound on SQLCipher, so the contention is cheap and the fragmentation
+# surface drops by ~30x. Paired with the malloc_trim(0) on the maintenance tick, which
+# releases what the cap does not prevent.
+Environment=MALLOC_ARENA_MAX=2
+# Optional workspace handed to agent-inventory for the dashboard read list.
+# Installers should render this from explicit operator configuration. Unset or
+# empty means the inventory must report inference/unknown rather than guess.
+Environment=HESTIA_WORKSPACE=
+
+# Sandboxing
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.hestia
+PrivateTmp=true
+
+Restart=on-failure
+RestartSec=5s
+
+# Log to journal
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
