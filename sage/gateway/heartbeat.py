@@ -4767,6 +4767,11 @@ def main(argv=None) -> int:
                                     cfg=instance_config(instance))
     # EXPECT TRIAL (2026-10-10; private-context legion/egai/PREREG-expect.md): `expect` on game is
     # offered on ON beats only, so its effect can be compared; the arm is recorded on every beat.
+    # per instance (RESEARCH_GENERALIZATION_RULE): `tool_offer: "by_use"` lists a verb the being has not
+    # called lately by name, one line and parameter names; still callable, and `describe` brings it back
+    _by_name = _toolset.by_name_verbs(instance, instance_config(instance))
+    if _by_name:
+        _explore_specs = _toolset.offer_by_name(_explore_specs, _by_name)
     _expect_arm = trial_arm(instance, instance / "heartbeats.jsonl", "expect_trial")
     if _expect_arm["arm"] != "on":
         for _sp in _explore_specs:
@@ -4778,6 +4783,9 @@ def main(argv=None) -> int:
     _explore_tools = [t["function"]["name"] for t in _explore_specs]
     _schema_measured = _schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief",
                                          cfg=instance_config(instance))
+    if _by_name:
+        # measured on the specs that are SENT: _schema_chars_for rebuilds them without the by-name cut
+        _schema_measured = len(json.dumps(_explore_specs))
     _schema_chars = (_schema_measured if _schema_measured is not None
                      else _schema_chars_fallback(_explore_tools))
     _state_head = f"# Your own state\n\n"
@@ -5379,6 +5387,7 @@ def main(argv=None) -> int:
         # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
         "conversation_settled_turns": _settled_turns,
         "tool_descriptions": _tool_desc_mode,
+        "tool_offer": {"mode": "by_use", "by_name": list(_by_name)} if _by_name else None,
         "decline_closing": decline_closing_for(instance_config(instance)),
         "no_result_line": no_result_line_for(instance_config(instance)),
         "answered_run_wake": answered_run_wake_for(instance_config(instance)),
