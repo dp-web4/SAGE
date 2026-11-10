@@ -107,6 +107,20 @@ What this does and does not show:
 - It shows the being takes up a pending ask when the ask is in view, and that it reads the strip the way it was meant.
 - It does not show that the window fix alone would have done it: the seat's turn was an explicit ask. The next outage will be the clean test, and the dead-time window is now live for it.
 
+## The repair, fired in anger (2026-11-10 02:33–02:41Z)
+
+Everything above was dry-run or replayed. So the seat injected a real fault: at 02:33:55Z it stopped `ollama.service` through its unit, one minute into a fresh beat, and touched nothing else.
+
+- The model was unreachable, so each beat failed fast and the successor re-armed at once: **8 mute beats in 7 minutes**, each under a minute.
+- The watchdog's next tick in a gap, 02:40:45Z, read the record: `ALARM: 8 mute beat(s) in a row`. It probed the model (no answer), restarted the unit through `sudo -n systemctl restart ollama.service`, probed again (200), and exited 3.
+- A live beat started at 02:41:04Z.
+
+Outage 7 minutes, found and repaired by the timer with no one watching. Against the week it replaces, that is the number this note exists for.
+
+Two things it also showed:
+- A dead model does not produce one long mute beat; it produces a burst of short ones. Streak-based alarms handle that; a "one beat = one failure" reading would overcount.
+- The between-beats path is the one that fired here, because a stopped service refuses connections instantly. The during-beat path (two 10-minute timeouts in the ollama log) is for the wedged-runner case, where calls hang instead. That one has only been replayed from the 11-02 log, never fired live.
+
 ## A first baseline for "what lands"
 
 This is a lower bound, not a finding. It's measured from the trace only: a file counts if the being `memory_read`s the same path in a later beat. Recall, search, and handoffs shown through its state also carry content forward and aren't counted.
