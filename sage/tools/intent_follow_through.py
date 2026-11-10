@@ -72,6 +72,20 @@ def pairs(beats: list[dict]) -> list[dict]:
     return out
 
 
+def coverage(beats: list[dict], since: str = "", until: str = "9999") -> dict:
+    """How many beats the rate can see. The rate counts only beats where the BEING wrote its next step; a beat
+    the harness ended at the window floor states none. If the floor share moves between two measurements, the
+    rate is drawn from a different slice of beats, so report both, side by side."""
+    c = Counter()
+    for rec in beats:
+        if not since <= (rec.get("ts") or "") < until:
+            continue
+        c["beats"] += 1
+        c["stated"] += bool(bh.stated_step(rec))
+        c["floor_ended"] += bh.floor_ended(rec)
+    return dict(c)
+
+
 def rates(ps: list[dict]) -> dict:
     by_kind = {k: Counter() for k in KINDS}
     by_month = defaultdict(Counter)
@@ -98,6 +112,7 @@ def main(argv=None) -> int:
     beats = bh.read_beats(Path(a.instance))
     ps = [p for p in pairs(beats) if a.since <= (p["ts"] or "") < a.until]
     r = rates(ps)
+    r["coverage"] = coverage(beats, a.since, a.until)
     if a.sample:
         random.seed(a.seed)
         for p in random.sample(ps, min(a.sample, len(ps))):
@@ -107,6 +122,9 @@ def main(argv=None) -> int:
         print(json.dumps(r))
         return 0
     print(f"stated steps: {r['stated_steps']}  ({a.since or 'start'} .. {a.until if a.until != '9999' else 'now'})")
+    cv = r["coverage"]
+    print(f"  of {cv.get('beats', 0)} beats: {cv.get('stated', 0)} with a step the being wrote, "
+          f"{cv.get('floor_ended', 0)} ended by the window floor (no step written)")
     for k, c in r["by_kind"].items():
         n = c["named"]
         print(f"  {k:5} named {n:4}   done next beat {c['next']:4} ({c['next'] / n:.0%})"

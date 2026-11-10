@@ -291,6 +291,18 @@ def stated_step(rec: dict) -> str | None:
     return s.strip()
 
 
+FLOOR_PREFIX = "harness: the window reached its floor"
+
+
+def floor_ended(rec: dict) -> bool:
+    """True when the harness, not the being, ended this beat at its window floor. Such a beat has no stated step
+    (the being never got to write one), and in November most beats ended this way: 71 of the 107 that recorded
+    any stay_awake. Leaving them out of the stated-step view hid the commonest case."""
+    nb = rec.get("next_beat")
+    s = nb.get("stay_awake") if isinstance(nb, dict) else None
+    return isinstance(s, str) and s.startswith(FLOOR_PREFIX)
+
+
 def acts_by_kind(rec: dict) -> dict:
     """The beat's acts by effector, in plain groups: {world, own, refused, failed: Counter; reads: int}. Names
     only, as the record has them: nothing here decides what an act was FOR. A REFUSED act (the gate or the
@@ -325,15 +337,19 @@ def render_stated_steps(beats: list[dict], n: int = 3) -> list[str]:
     The being's sentence and the record's act names, side by side and unjudged. This deliberately does NOT
     match words to verbs: a check keyed on a verb list missed this being once already (#585 fired 0/5 when its
     work had moved to an unlisted verb), and the being is the one who knows what its sentence meant."""
-    pairs = [(a, b) for a, b in zip(beats, beats[1:]) if stated_step(a)]
+    pairs = [(a, b) for a, b in zip(beats, beats[1:]) if stated_step(a) or floor_ended(a)]
     if not pairs:
         return []
     lines = ["## What you said you would do next, and what the next beat did (your own record, unjudged)"]
     for a, b in pairs[-n:]:
         k = acts_by_kind(b)
         said = stated_step(a)
-        said = said if len(said) <= 240 else said[:237] + "..."
-        lines.append(f"- {(a.get('ts') or '')[11:16]}Z you wrote: \"{said}\"")
+        if said:
+            said = said if len(said) <= 240 else said[:237] + "..."
+            lines.append(f"- {(a.get('ts') or '')[11:16]}Z you wrote: \"{said}\"")
+        else:
+            lines.append(f"- {(a.get('ts') or '')[11:16]}Z the window floor ended this beat before you wrote a "
+                         "next step (the harness wrote scratch/handoff.md)")
         lines.append(f"  next beat ({(b.get('ts') or '')[11:16]}Z): outside your notes: {_counted(k['world'])}"
                      f" · your notes: {_counted(k['own'])} · refused: {_counted(k['refused'])}"
                      f" · failed: {_counted(k['failed'])} · reads: {k['reads']}")

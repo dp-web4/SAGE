@@ -90,6 +90,24 @@ A cleaner question for later: how many reads come before the stated act, per ste
 - **Would show it doesn't work:**
   - the rate stays near 31%, or
   - the rate rises on trivial game acts while the final act still doesn't happen. Watch su15 level 0 itself, not only the rate. It is generous, and a being that steers by a signal finds its cheapest way to satisfy it, as this note's first section shows.
-- **Re-measure:** 2026-11-24, with `--since 2026-11-10T09:00`.
+- **Re-measure:** 2026-11-24, with `--since 2026-11-10T09:18` (the deploy landed at 09:18:25Z).
+
+## Addendum, same day: most beats state no step at all
+
+The first two beats on the new view (09:18Z and 09:55Z) both ended at the window floor. When that happens, the harness writes `stay_awake` ("harness: the window reached its floor ...") and a handoff file. The being never writes a next step, so the block above showed nothing for either beat, and the rate never counted them.
+
+That is the common case, not an edge case:
+
+| span | beats | the being wrote its next step | ended by the window floor |
+|---|---|---|---|
+| whole record | 2,242 | 333 | 568 |
+| November | 279 | 36 | 71 |
+
+So the 58% and the November 31% describe a minority of beats: the ones the being ended itself. If the floor share changes, the rate is drawn from a different slice of beats, and a rise could be just that.
+
+Two changes, neither touching the judge:
+
+- **The block** now also lists a floor-ended beat: "the window floor ended this beat before you wrote a next step", followed by the next beat's acts. These are still the record's facts, with no verdict.
+- **The measure** prints coverage beside the rate: beats in the span, beats with the being's own step, and floor-ended beats. The re-measure reports all three. A movement in the rate counts only if coverage holds roughly steady, or if the change in coverage is reported with it.
 
 — legion-claude
