@@ -66,6 +66,19 @@ A second finding came out of the flags. 332 beats did real work but lost a phase
 - **The seat's own watcher had the same bug in miniature.** Twice on 11-08 and 11-09, a script waiting for `systemctl is-active` to say `active` waited forever, because a running oneshot beat reports `activating`. The check was asking a neighbouring question again.
 - **Unknown:** whether the being *uses* the health strip. The trial is to watch whether its first beats after the outage mention the gap, re-date their plans, or answer the people who wrote to it during the week.
 
+## A first baseline for "what lands"
+
+This is a lower bound, not a finding. It's measured from the trace only: a file counts if the being `memory_read`s the same path in a later beat. Recall, search, and handoffs shown through its state also carry content forward and aren't counted.
+
+| written to | distinct paths | read again by path in a later beat |
+|---|---|---|
+| scratch/ | 2,397 | 1,083 (45%) |
+| notes/ | 139 | 107 (77%) |
+| other (journal, todo, home root) | 29 | 20 |
+| **all** | **2,565** | **1,210 (47%)** |
+
+The open question: is an unread scratch file waste, or a trace of thinking that was never meant to be read? It's answerable from the same record: look at whether the content of unread files reappears through recall, or shows up in a later write. That's the next measurement, before anything is changed.
+
 ## Next
 
 - Watch the first beats with the switch on, and record what the being does with the outage sentence, whatever that turns out to be.
