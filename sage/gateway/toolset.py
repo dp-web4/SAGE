@@ -224,6 +224,96 @@ def brief_description(name: str, desc: str) -> str:
     return f"{first} (Full text: {DESCRIBE} {name}.)"
 
 
+# OFFER BY USE (opt-in per instance, `tool_offer: "by_use"`; dp, 2026-11-10: "try by-name verbs on legion").
+# Measured on legion-being that day: the opening prompt was ~19.7k of 32.8k tokens and left ~6k tokens for
+# a beat's work (median 8 steps). The verb schemas, already brief, were the largest block at 23.9k chars; in
+# its last 74 beats it had called 12 of 41 verbs, and the other 29 cost ~14.3k chars, about two thirds of
+# that working room. In this mode a verb the being has not called in its last OFFER_WINDOW_BEATS working
+# beats keeps its NAME, one short line and its parameter NAMES, so it is still offered and still callable
+# (dp, 2026-09-29: every being is offered the whole toolset). Its parameter descriptions and enums are one
+# `describe` away, and a verb the being describes counts as used: it is back in full from the next beat.
+# Per instance (RESEARCH_GENERALIZATION_RULE): measured on one being.
+OFFER_WINDOW_BEATS = 100
+OFFER_MIN_BEATS = 10          # a record shorter than this says nothing about use: offer everything in full
+BY_NAME_DESC_CHARS = 90
+ALWAYS_FULL = frozenset({DESCRIBE, "stay_awake", "rest"})   # how it finds the rest, keeps going, and stops
+BY_NAME_NOTE = (" Verbs you have not called in your last {n} working beats are listed with one line and "
+                "parameter names only; describe one and it is back in full from your next beat.")
+
+
+def tool_offer_mode(cfg: Optional[dict]) -> str:
+    """instance.json `tool_offer`: "by_use" opts in; anything else offers every verb in the same form."""
+    return "by_use" if str((cfg or {}).get("tool_offer", "")).strip().lower() == "by_use" else "full"
+
+
+def recently_called(instance, beats: int = OFFER_WINDOW_BEATS) -> Optional[set]:
+    """Verbs the being CALLED in its last `beats` working beats, whatever the outcome (a refused or failed
+    call is still a verb it reached for), plus every verb it asked `describe` about. A beat with no act at
+    all (an outage: the model never answered) is not a working beat and does not use up the window. None
+    when the record holds fewer than OFFER_MIN_BEATS working beats."""
+    from sage.gateway import beat_health as bh
+    called, working = set(), 0
+    for rec in bh.iter_beats_newest_first(instance):
+        acted = False
+        for _, phase in bh._phases(rec):
+            for t in phase.get("trace") or ():
+                if not isinstance(t, dict) or not t.get("effector"):
+                    continue
+                acted = True
+                called.add(str(t["effector"]))
+                if t["effector"] == DESCRIBE and isinstance(t.get("args"), dict):
+                    called.add(str(t["args"].get("verb") or "").strip())
+        working += acted
+        if working >= beats:
+            break
+    called.discard("")
+    return called if working >= OFFER_MIN_BEATS else None
+
+
+def by_name_verbs(instance, cfg: Optional[dict]) -> Optional[List[str]]:
+    """The verbs to list by name this beat, or None when the instance has not opted in or its record is too
+    short to say. Never a verb in ALWAYS_FULL."""
+    if tool_offer_mode(cfg) != "by_use":
+        return None
+    try:
+        called = recently_called(instance)
+    except Exception:
+        return None                                  # fail open: a broken reading costs the being nothing
+    if called is None:
+        return None
+    return [n for n in canonical_toolset() if n not in called and n not in ALWAYS_FULL]
+
+
+def offer_by_name(tool_specs: List[dict], names) -> List[dict]:
+    """`tool_specs` with each verb in `names` cut to its name, one short line and its parameter names. The
+    verb stays callable and its required keys stay. A verb that cannot work on this machine already carries
+    one line and its reason, and is left as it is. `describe` says once how the rest comes back."""
+    import copy
+    import re
+    names = set(names or ())
+    out = []
+    for spec in tool_specs:
+        fn = spec.get("function") or {}
+        name = fn.get("name")
+        if name == DESCRIBE and names:
+            spec = copy.deepcopy(spec)
+            spec["function"]["description"] = fn.get("description", "") + BY_NAME_NOTE.format(n=OFFER_WINDOW_BEATS)
+        elif name in names and "ON THIS MACHINE IT CANNOT WORK" not in fn.get("description", ""):
+            desc = re.sub(r"\s*\(Full text: .*?\)\s*$", "", fn.get("description", "").strip())
+            m = re.match(r"(.+?[.!?])(\s|$)", desc, re.S)
+            first = m.group(1) if m else desc
+            if len(first) > BY_NAME_DESC_CHARS:
+                first = first[:BY_NAME_DESC_CHARS - 1].rstrip() + "…"
+            params = fn.get("parameters") or {}
+            spec = {"type": "function", "function": {
+                "name": name, "description": f"{first} ({DESCRIBE} {name})",
+                "parameters": {"type": "object",
+                               "properties": {k: {"type": "string"} for k in (params.get("properties") or {})},
+                               "required": list(params.get("required") or [])}}}
+        out.append(spec)
+    return out
+
+
 def full_text(name: str, cfg: Optional[dict] = None) -> str:
     """What `describe` answers: the verb's whole description and each parameter's, from the schema table,
     as this seat offers it (here)."""
