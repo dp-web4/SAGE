@@ -202,6 +202,25 @@ def mute_run(instance: Path, within: int | None = None) -> dict | None:
     return {"n": n, "first": first, "last": last, "error": error, "ongoing": ongoing}
 
 
+def dead_seconds_since(instance: Path, ts_iso: str) -> float:
+    """Clock time since `ts_iso` that the being did not live through: the summed duration of MUTE beats that
+    started at or after it. A window measured in hours (unanswered(): "after max_age_h an unanswered turn is a
+    choice the being made") must subtract this, or an outage longer than the window files every waiting turn
+    as history. 11-09: dp's 11-08 turn was selected to be answered in 163 mute beats, then aged out 27 h later
+    in the first live beat, which marked it seen with no reply."""
+    dead = 0.0
+    for rec in iter_beats_newest_first(instance):
+        ts = rec.get("ts") or ""
+        if ts < ts_iso:
+            break
+        if classify(rec)["cls"] == "mute":
+            try:
+                dead += float(rec.get("elapsed_s") or 0.0)
+            except (TypeError, ValueError):
+                pass
+    return dead
+
+
 def streak(classes: list[str]) -> tuple[str | None, int]:
     """The class of the newest beat and how many beats in a row (newest backwards) share it."""
     if not classes:

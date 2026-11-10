@@ -582,6 +582,29 @@ def test_an_old_unanswered_turn_is_a_choice_not_a_debt():
     assert c.unanswered(inst, "dp", "b") == [], "silence that has lasted is an answer; do not nag"
 
 
+def test_an_outage_does_not_age_a_waiting_turn_out_of_the_window():
+    """11-09: dp's 11-08 20:50Z turn was selected for an answer in 163 mute beats (the model never
+    answered), then at 27 h old the first live beat found it past max_age_h and marked it seen with no
+    reply. Dead time is not choosing time."""
+    import json, tempfile
+    from datetime import datetime, timezone, timedelta
+    from pathlib import Path
+    from sage.gateway import conversations as c
+    inst = Path(tempfile.mkdtemp(prefix="deadtime-"))
+    c.create(inst, "dp", title="t", participants=["dp", "b"], writable_by=["dp", "b"])
+    ts = (datetime.now(timezone.utc) - timedelta(hours=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    (inst / "conversations" / "dp.jsonl").write_text(
+        json.dumps({"ts": ts, "seq": 1, "from": "dp", "text": "how are you doing?"}) + "\n")
+    assert c.unanswered(inst, "dp", "b") == [], "30 h on the clock: past the window"
+    seen = []
+    def dead(t):
+        seen.append(t)
+        return 20 * 3600.0                      # 20 h of it was mute beats
+    assert [t["text"] for t in c.unanswered(inst, "dp", "b", dead_s_of=dead)] == ["how are you doing?"]
+    assert seen == [ts], "the dead time is asked for since the turn itself"
+    assert c.unanswered(inst, "dp", "b", dead_s_of=lambda t: 3600.0) == [], "1 h dead: still past"
+
+
 def test_non_object_and_malformed_turns_do_not_crash_readers_or_drop_valid_turns():
     """SAGE #652: Conversation readers must handle non-object JSON values (arrays, scalars),
     malformed JSON, and records missing required fields without crashing (AttributeError on .get)
