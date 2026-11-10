@@ -164,6 +164,9 @@ def test_a_healthy_record_shows_the_strip_and_no_outage(tmp_path):
     _write(tmp_path, [beat(explore=phase("", [act("memory_write")]))] * 3)
     text = bh.render_for_being(tmp_path)
     assert "WWW" in text and "never reached your model" not in text
+    lines = text.split("\n")
+    assert lines[1] == "WWW", "the strip stands alone on its line"
+    assert lines[2].startswith("Legend: W you changed something"), "the legend is its own labelled line (the being asked)"
 
 
 def test_no_record_renders_nothing(tmp_path):
