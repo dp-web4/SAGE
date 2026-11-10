@@ -450,7 +450,8 @@ def awaiting(instance: Path, conv_id: str, me: str) -> list[dict]:
     return turns[last_mine + 1:]
 
 
-def unanswered(instance: Path, conv_id: str, me: str, max_age_h: float = 24.0) -> list[dict]:
+def unanswered(instance: Path, conv_id: str, me: str, max_age_h: float = 24.0,
+               dead_s_of=None) -> list[dict]:
     """Turns after `me` last spoke, when the last word is someone else's and RECENT.
 
     `awaiting` answers "what has it not been SHOWN". This answers "what has it not ANSWERED",
@@ -462,6 +463,11 @@ def unanswered(instance: Path, conv_id: str, me: str, max_age_h: float = 24.0) -
     Bounded by age on purpose. Answering is optional, and an ask that repeats forever is
     pressure, not an invitation: after `max_age_h` an unanswered turn is a choice the being
     made, and the channel still shows it whenever the being looks.
+
+    The age is the being's LIVE age. `dead_s_of(ts)` gives the seconds since `ts` the being did
+    not live through (beat_health.dead_seconds_since: beats whose model never answered), and
+    they are subtracted. A week-long outage is not a week of choosing not to answer: on 11-09
+    dp's turn, selected for an answer in 163 mute beats, aged out in the first live one.
     """
     from datetime import datetime, timezone, timedelta
     turns = recent(instance, conv_id, limit=200)
@@ -477,7 +483,8 @@ def unanswered(instance: Path, conv_id: str, me: str, max_age_h: float = 24.0) -
         if not ts_str:
             return []
         newest = datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-        if datetime.now(timezone.utc) - newest > timedelta(hours=max_age_h):
+        dead = timedelta(seconds=float(dead_s_of(ts_str))) if dead_s_of else timedelta(0)
+        if datetime.now(timezone.utc) - newest - dead > timedelta(hours=max_age_h):
             return []
     except Exception:
         return []

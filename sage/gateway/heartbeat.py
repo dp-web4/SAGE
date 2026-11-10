@@ -2986,6 +2986,17 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
             census_block, census_todo = "", ""
     if census_block:
         parts.append(census_block)
+    # ITS LAST BEATS, MEASURED (beat_health, operator switch `beat_health`): what each beat did, read from
+    # heartbeats.jsonl — and after an outage, that the beats in it never reached the model, so a plan
+    # from before is exactly as far along as it says. Fail-open: an error adds nothing.
+    if _bp.value(instance, "beat_health", False):
+        try:
+            from sage.gateway import beat_health as _bh
+            _health = _bh.render_for_being(instance)
+        except Exception:
+            _health = ""
+        if _health:
+            parts.append(_health)
     # Conversations first among the channels: a turn addressed to the being and unanswered
     # is the one thing in its state that is waiting on IT, and it should never have to infer
     # that from a wall of notes. Both directions live in one ordered record.
@@ -3423,11 +3434,19 @@ def pending_turns(instance: Path, member: str) -> list:
     from sage.gateway import conversations as _conv
     ids = [m["id"] for m in _conv.listing(instance) if isinstance(m, dict) and member in (m.get("participants") or [])]
     pend = []
+    # The unanswered window is measured in the being's LIVE time: beats whose model never answered do
+    # not count against it (11-09: a 163-beat outage aged dp's turn out of the window, and the first live
+    # beat marked it seen with no reply). Fail-open: without the record, the clock is the window.
+    try:
+        from sage.gateway import beat_health as _bh
+        _dead_s_of = lambda ts: _bh.dead_seconds_since(instance, ts)   # noqa: E731
+    except Exception:
+        _dead_s_of = None
     for cid in ids:
         # unseen first; failing that, the recent UNANSWERED tail — a turn marked seen
         # without a reply must not silence the ask (2026-09-19, dp's 03:51Z turn)
         for t in (_conv.awaiting(instance, cid, member)
-                  or _conv.unanswered(instance, cid, member))[-PENDING_TURNS:]:
+                  or _conv.unanswered(instance, cid, member, dead_s_of=_dead_s_of))[-PENDING_TURNS:]:
             if isinstance(t, dict):
                 pend.append((cid, t))
     # ORDER BY WHEN IT WAS SAID, not by list construction. `listing()` is newest-
