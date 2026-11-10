@@ -26,6 +26,8 @@ reflect. Same words, same tools, different order; a presentation, not a fork (Le
 """
 from __future__ import annotations
 
+from typing import List, Optional
+
 from sage.gateway.fleet_paths import forum_dir as _fleet_forum_dir
 import argparse
 import json
