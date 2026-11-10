@@ -205,3 +205,17 @@ def test_an_outage_older_than_the_strip_is_not_raised_again(tmp_path):
     assert bh.mute_run(tmp_path, within=12) is None
     assert "never reached your model" not in bh.render_for_being(tmp_path)
     assert bh.mute_run(tmp_path)["first"] == "old"
+
+
+def test_dead_seconds_counts_only_mute_beats_since_the_turn(tmp_path):
+    w = lambda ts: beat(ts=ts, explore=phase("", [act("memory_write")]), elapsed_s=100.0)  # noqa: E731
+    m = lambda ts, s: beat(ts=ts, explore=phase(TIMEOUT), elapsed_s=s)  # noqa: E731
+    _write(tmp_path, [m("2026-11-01T00:00:00Z", 4000.0), w("2026-11-02T00:00:00Z"),
+                      m("2026-11-03T00:00:00Z", 4202.0), m("2026-11-04T00:00:00Z", 4202.0), w("2026-11-05T00:00:00Z")])
+    assert bh.dead_seconds_since(tmp_path, "2026-11-02T12:00:00Z") == 8404.0
+    assert bh.dead_seconds_since(tmp_path, "2026-11-05T00:00:00Z") == 0.0
+    assert bh.dead_seconds_since(tmp_path, "2026-10-01T00:00:00Z") == 12404.0
+
+
+def test_dead_seconds_without_a_record_is_zero(tmp_path):
+    assert bh.dead_seconds_since(tmp_path, "2026-11-01T00:00:00Z") == 0.0

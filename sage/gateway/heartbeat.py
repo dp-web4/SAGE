@@ -3432,11 +3432,19 @@ def pending_turns(instance: Path, member: str) -> list:
     from sage.gateway import conversations as _conv
     ids = [m["id"] for m in _conv.listing(instance) if isinstance(m, dict) and member in (m.get("participants") or [])]
     pend = []
+    # The unanswered window is measured in the being's LIVE time: beats whose model never answered do
+    # not count against it (11-09: a 163-beat outage aged dp's turn out of the window, and the first live
+    # beat marked it seen with no reply). Fail-open: without the record, the clock is the window.
+    try:
+        from sage.gateway import beat_health as _bh
+        _dead_s_of = lambda ts: _bh.dead_seconds_since(instance, ts)   # noqa: E731
+    except Exception:
+        _dead_s_of = None
     for cid in ids:
         # unseen first; failing that, the recent UNANSWERED tail — a turn marked seen
         # without a reply must not silence the ask (2026-09-19, dp's 03:51Z turn)
         for t in (_conv.awaiting(instance, cid, member)
-                  or _conv.unanswered(instance, cid, member))[-PENDING_TURNS:]:
+                  or _conv.unanswered(instance, cid, member, dead_s_of=_dead_s_of))[-PENDING_TURNS:]:
             if isinstance(t, dict):
                 pend.append((cid, t))
     # ORDER BY WHEN IT WAS SAID, not by list construction. `listing()` is newest-
