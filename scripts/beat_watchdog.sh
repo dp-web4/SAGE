@@ -54,41 +54,72 @@ next="$(systemctl --user list-timers "$TIMER" --no-pager 2>/dev/null | sed -n 2p
 # MUTE beats: woken on time, and the model never answered. 2026-11-02 → 11-09 the lid closed mid-inference,
 # the ollama runner resumed wedged, and 163 beats in a row recorded "[OllamaIRP: Error: timed out]" in every
 # phase while this switch said OK every ten minutes — it only asked whether the being was WOKEN. The being
-# cannot repair this (what is broken is what it thinks with), so the switch does: between beats, when the
-# newest beat was mute, ask the model for ten tokens; if it cannot answer, restart ollama through its unit
-# (never by hand), and say so loudly either way.
+# cannot repair this (what is broken is what it thinks with), so the switch does, by two signals:
+#
+#   * DURING a beat: ollama's own log. Two /api/chat calls in a row that end "500 | 10m0s" (the client gave
+#     up) with no success between mean the runner is wedged. Beats run back to back — in the outage each
+#     one lasted 4,202s of a ~4,245s spacing — so a check that waits for a gap between beats would land in
+#     one about 7% of the time. Measured over ollama's log 10-17 → 11-09: 1,066 such pairs inside the
+#     outage, 0 outside it.
+#   * BETWEEN beats: when the newest beat record is mute (beat_health), ask the model for ten tokens.
+#
+# Either one restarts ollama through its unit (never by hand), and says so loudly.
 REPO="${SAGE_REPO:-/home/dp/ai-workspace/SAGE}"
 MODEL="${SAGE_BEAT_MODEL:-qwen38-heretic:q3km-vl}"
 OLLAMA="${OLLAMA_URL:-http://localhost:11434}"
+OLLAMA_UNIT="${OLLAMA_UNIT:-ollama.service}"
 PY="${SAGE_PY:-/home/dp/miniforge3/bin/python3}"
 mute_fault=0
-if [ "$running" != "active" ] && [ "$running" != "activating" ]; then
+probe() {
+    curl -s -m 120 -o /dev/null -w '%{http_code}' "$OLLAMA/api/generate" \
+        -d "{\"model\":\"$MODEL\",\"prompt\":\"ok\",\"stream\":false,\"think\":false,\"keep_alive\":-1,\"options\":{\"num_predict\":10}}"
+}
+# repair WHY POST_PROBE: restart the model's unit, optionally probe after, notify, mark the fault.
+repair() {
+    mute_fault=1
+    if [ "$DRY" = "1" ]; then
+        say "MUTE: dry run, not restarting ${OLLAMA_UNIT}"
+        return
+    fi
+    say "MUTE: restarting ${OLLAMA_UNIT}"
+    local after="not probed (a beat is running; its next call will tell)"
+    if sudo -n systemctl restart "$OLLAMA_UNIT" 2>/dev/null; then
+        if [ "$2" = "probe" ]; then
+            sleep 5
+            after="probe $(probe)"
+        fi
+        say "MUTE: restarted; ${after}"
+    else
+        after="could not restart (sudo -n refused) — an operator must"
+        say "MUTE: ${after}"
+    fi
+    command -v notify-send >/dev/null && notify-send -u critical "legion-being is MUTE" "$1 — ${after}" 2>/dev/null
+}
+if [ "$running" = "active" ] || [ "$running" = "activating" ]; then
+    # SAGE_WATCHDOG_OLLAMA_LOG: a file standing in for the journal (tests, and replaying a past outage).
+    if [ -n "${SAGE_WATCHDOG_OLLAMA_LOG:-}" ]; then
+        ollama_log() { cat "$SAGE_WATCHDOG_OLLAMA_LOG"; }
+    else
+        ollama_log() { journalctl -u "$OLLAMA_UNIT" --since "-30min" -o cat --no-pager 2>/dev/null; }
+    fi
+    last2="$(ollama_log | grep -E 'POST +"/api/chat"' | tail -2)"
+    if [ "$(printf '%s\n' "$last2" | grep -cE '\| 500 \| +10m0s \|')" -eq 2 ]; then
+        say "MUTE: the being's last two model calls both failed at the 10-minute timeout (ollama log):"
+        printf '%s\n' "$last2" | while IFS= read -r l; do say "MUTE:   $l"; done
+        repair "two model calls in a row timed out at 10m during a beat" running
+    fi
+else
     health="$(cd "$REPO" && "$PY" -m sage.gateway.beat_health --instance "$INSTANCE" --last 12 --check 2>&1)"
     hrc=$?
     if [ "$hrc" -eq 3 ] && printf '%s' "$health" | grep -q '^ALARM: [0-9]* mute'; then
-        say "MUTE: $(printf '%s' "$health" | grep '^ALARM')"
-        probe() {
-            curl -s -m 120 -o /dev/null -w '%{http_code}' "$OLLAMA/api/generate" \
-                -d "{\"model\":\"$MODEL\",\"prompt\":\"ok\",\"stream\":false,\"think\":false,\"keep_alive\":-1,\"options\":{\"num_predict\":10}}"
-        }
+        alarm="$(printf '%s' "$health" | grep '^ALARM')"
+        say "MUTE: ${alarm}"
         code="$(probe)"
         if [ "$code" = "200" ]; then
             say "MUTE: the model answers now (probe 200) — the outage has cleared; the next beat should speak"
-        elif [ "$DRY" = "1" ]; then
-            say "MUTE: the model does not answer (probe '${code}'); dry run, not restarting ollama"
-            mute_fault=1
         else
-            say "MUTE: the model does not answer (probe '${code}'); restarting ollama.service"
-            if sudo -n systemctl restart ollama.service 2>/dev/null; then
-                sleep 5
-                code="$(probe)"
-                say "MUTE: after restart the probe reads '${code}'"
-            else
-                say "MUTE: could not restart ollama.service (sudo -n refused) — an operator must"
-            fi
-            mute_fault=1
-            command -v notify-send >/dev/null && notify-send -u critical "legion-being is MUTE" \
-                "Its newest beat never reached the model. Probe after repair: ${code}. $(printf '%s' "$health" | grep '^ALARM')" 2>/dev/null
+            say "MUTE: the model does not answer (probe '${code}')"
+            repair "${alarm}; probe ${code}" probe
         fi
     elif [ "$hrc" -ne 0 ] && [ "$hrc" -ne 3 ]; then
         say "MUTE: could not read beat health (rc ${hrc}): $(printf '%s' "$health" | tail -1)"
@@ -97,7 +128,7 @@ fi
 
 if [ "$running" = "active" ] || [ "$running" = "activating" ]; then
     say "OK: a beat is running now (quiet ${quiet}s; the being is working)"
-    exit 0
+    exit $(( mute_fault ? 3 : 0 ))
 fi
 if [ "$quiet" -lt "$limit" ]; then
     say "OK: quiet ${quiet}s, under the ${limit}s limit; next wake: ${next:-unknown}"
