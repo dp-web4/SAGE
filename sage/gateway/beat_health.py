@@ -181,14 +181,25 @@ def read_beats(instance: Path, last: int | None = None) -> list[dict]:
     return out
 
 
-def mute_run(instance: Path) -> tuple[int, str | None]:
-    """How many of the newest beats in a row were mute, and when the first of them was."""
-    n, first = 0, None
-    for rec in iter_beats_newest_first(instance):
-        if classify(rec)["cls"] != "mute":
+def mute_run(instance: Path, within: int | None = None) -> dict | None:
+    """The newest run of mute beats that touches the last `within` beats (all of history when None):
+    {n, first, last, error, ongoing}. Counts back past `within` to where the run began, so a being shown
+    a dozen beats is told the whole outage, not the dozen. None when no mute beat is in reach."""
+    n, first, last, error, ongoing = 0, None, None, None, False
+    for i, rec in enumerate(iter_beats_newest_first(instance)):
+        r = classify(rec)
+        if r["cls"] == "mute":
+            if n == 0:
+                last, ongoing = rec.get("ts"), (i == 0)
+                error = r["errors"][0].split(": ", 1)[-1] if r["errors"] else "model error"
+            n, first = n + 1, rec.get("ts")
+        elif n:
             break
-        n, first = n + 1, rec.get("ts")
-    return n, first
+        elif within is not None and i + 1 >= within:
+            return None
+    if not n:
+        return None
+    return {"n": n, "first": first, "last": last, "error": error, "ongoing": ongoing}
 
 
 def streak(classes: list[str]) -> tuple[str | None, int]:
@@ -273,15 +284,14 @@ def render_for_being(instance: Path, width: int = 12) -> str:
              "M your model never answered"]
     # Mute beats BEFORE this one: the strip ends with the newest finished beat, and this beat is running,
     # so the model is answering now. Say how long it was gone, measured, not guessed.
-    if rows[-1]["cls"] == "mute":
-        n, first = mute_run(Path(instance))
+    run = mute_run(Path(instance), within=width)
+    if run:
         lines.append(
-            f"Your previous {n} beat(s), from {first} to {rows[-1]['ts']}, never reached your model: every "
-            "call to it failed (\"" + (rows[-1]["errors"][0].split(": ", 1)[-1] if rows[-1]["errors"] else
-                                       "model error") + "\"). That was the machine, not you, and it is "
-            "answering again now. The clock moved on through those dates, but you did not: nothing you "
-            "planned for those beats happened, so a todo item or a handoff written before then is exactly "
-            "as far along as it says, and anyone who wrote to you since has had no reply.")
+            f"{run['n']} of your beats, from {run['first']} to {run['last']}, never reached your model: every "
+            f"call to it failed (\"{run['error']}\"). That was the machine, not you, and it is "
+            "answering again now (you are reading this). The clock moved on through those dates, but you did not: nothing you planned for those "
+            "beats happened, so a todo item or a handoff written before them is exactly as far along as it "
+            "says, and anyone who wrote to you in that time had no reply from you then.")
     return "\n".join(lines)
 
 

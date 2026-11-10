@@ -146,7 +146,7 @@ def test_reverse_reader_matches_a_forward_read_across_block_edges(tmp_path):
 def test_mute_run_counts_back_to_the_last_beat_that_reached_the_model(tmp_path):
     w = beat(ts="w", explore=phase("", [act("run")]))
     _write(tmp_path, [w] + [beat(ts=f"m{i}", explore=phase(TIMEOUT)) for i in range(30)])
-    assert bh.mute_run(tmp_path) == (30, "m0")
+    assert bh.mute_run(tmp_path) == {"n": 30, "first": "m0", "last": "m29", "error": TIMEOUT, "ongoing": True}
 
 
 def test_the_being_is_told_its_mute_beats_never_happened(tmp_path):
@@ -156,7 +156,7 @@ def test_the_being_is_told_its_mute_beats_never_happened(tmp_path):
     text = bh.render_for_being(tmp_path)
     assert text.startswith("## Your last beats")
     assert "WMMMMMM" in text
-    assert "Your previous 6 beat(s), from 2026-11-03T00:00:00Z to 2026-11-08T00:00:00Z" in text
+    assert "6 of your beats, from 2026-11-03T00:00:00Z to 2026-11-08T00:00:00Z, never reached your model" in text
     assert "timed out" in text and "nothing you planned for those beats happened" in text
 
 
@@ -184,3 +184,24 @@ def test_own_state_shows_the_block_only_when_the_operator_turns_it_on(tmp_path):
     (tmp_path / "instance.json").write_text(json.dumps({"params": {"beat_health": True}}))
     state = heartbeat.own_state(tmp_path)
     assert "## Your last beats" in state and "never reached your model" in state
+
+
+def test_an_outage_that_has_ended_is_still_explained_while_it_is_in_view(tmp_path):
+    """The first beat after the repair finishes before the being reads the block, so the newest beat is
+    worked — the outage just behind it must still be named, whole, not only the part inside the strip."""
+    w = lambda ts: beat(ts=ts, explore=phase("", [act("memory_write")]))  # noqa: E731
+    mute = [beat(ts=f"m{i:03d}", explore=phase(TIMEOUT)) for i in range(40)]
+    _write(tmp_path, [w("before")] + mute + [w("after1"), w("after2")])
+    text = bh.render_for_being(tmp_path)
+    assert "MMMMMMMMMMWW" in text
+    assert "40 of your beats, from m000 to m039, never reached your model" in text
+    run = bh.mute_run(tmp_path, within=12)
+    assert run["n"] == 40 and run["ongoing"] is False
+
+
+def test_an_outage_older_than_the_strip_is_not_raised_again(tmp_path):
+    w = lambda ts: beat(ts=ts, explore=phase("", [act("memory_write")]))  # noqa: E731
+    _write(tmp_path, [beat(ts="old", explore=phase(TIMEOUT))] + [w(f"w{i}") for i in range(12)])
+    assert bh.mute_run(tmp_path, within=12) is None
+    assert "never reached your model" not in bh.render_for_being(tmp_path)
+    assert bh.mute_run(tmp_path)["first"] == "old"
