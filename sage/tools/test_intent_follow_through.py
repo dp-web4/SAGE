@@ -36,3 +36,12 @@ def test_rates_by_kind_and_month():
     assert r["by_kind"]["game"] == {"named": 3, "next": 2, "within2": 2}
     assert r["by_month"]["2026-10"]["game_next"] == 2 and r["by_month"]["2026-11"]["game_next"] == 0
     json.dumps(r)
+
+
+def test_coverage_counts_the_beats_the_rate_cannot_see():
+    """A floor-ended beat states no step: the rate is drawn only from beats the being ended itself, so the
+    share of each is reported beside it (11-10: the first two beats on #685 were both floor-ended)."""
+    beats = [_beat("2026-11-10T01:00Z", "click to win"),
+             _beat("2026-11-10T01:20Z", "harness: the window reached its floor at step 8; continue"),
+             _beat("2026-11-10T01:40Z", None), _beat("2026-11-09T00:00Z", "LOOK")]
+    assert ift.coverage(beats, since="2026-11-10") == {"beats": 3, "stated": 1, "floor_ended": 1}

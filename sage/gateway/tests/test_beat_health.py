@@ -271,6 +271,16 @@ def test_a_harness_sentence_is_not_the_beings_stated_step(tmp_path):
     _write(tmp_path, [_said("2026-11-10T07:41:00Z", "harness: the window reached its floor at step 7", act("game")),
                       beat(ts="2026-11-10T08:00:00Z", explore=phase("", [act("game")]))])
     assert bh.stated_step(bh.read_beats(tmp_path)[0]) is None
+    text = bh.render_for_being(tmp_path)
+    assert "you wrote:" not in text, "the harness's words are never shown as the being's"
+    assert "07:41Z the window floor ended this beat before you wrote a next step" in text
+    assert "next beat (08:00Z): outside your notes: game×1" in text
+
+
+def test_another_harness_sentence_is_not_shown_as_a_floor_or_a_step(tmp_path):
+    _write(tmp_path, [_said("2026-11-10T07:41:00Z", "harness: stopped by the loop guard", act("game")),
+                      beat(ts="2026-11-10T08:00:00Z", explore=phase("", [act("game")]))])
+    assert not bh.floor_ended(bh.read_beats(tmp_path)[0])
     assert "What you said" not in bh.render_for_being(tmp_path)
 
 
