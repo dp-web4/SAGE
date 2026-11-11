@@ -28,6 +28,14 @@ todo bytes and settled entries it previewed, valid for five minutes in this proc
 consumes it. It is coordination evidence that the selection was looked at, not a grant: the gate still
 decides the act.
 
+A REFUSED CONFIRMATION SAYS WHICH SLIP IT WAS (nomad-claude on #619, from nomad-being's 11-04 trace).
+gemma4:e2b's three confirm calls that day failed three different ways (a token from an earlier beat, a
+reworded reason, a leading `_` dropped from a token_urlsafe value) and all three read "unknown, mistyped
+or expired", so it could not tell what to fix and stopped. The value is now hex (nothing a model reads as
+markdown), and the refusal names the case: not this beat's, already used, expired, not the shape a
+preview prints, or which of words / reason / source differs. The rule is unchanged: one use, bound to
+words, reason and exact source, five minutes, and the value itself is never echoed back.
+
 ONLY QUESTION AND ANSWER SELECT A SETTLED ENTRY. Evidence explains how a conclusion was supported; a
 shared citation or tool name does not make every conclusion about that topic (NOVA, item 1).
 
@@ -57,7 +65,9 @@ STOPWORDS = frozenset({"the", "and", "for", "with", "this", "that", "from"})
 _PREVIEW_TTL = 300.0
 _PREVIEW_CAP = 128
 _preview_lock = threading.Lock()
-_previews: Dict[str, Tuple[str, float]] = {}   # one-use, in-process; never authority or durable proof
+_previews: Dict[str, Tuple[Dict[str, str], float]] = {}  # one-use, in-process; never authority or proof
+_spent: Dict[str, str] = {}    # token -> "used" | "expired", so a refusal can say which; capped like _previews
+_TOKEN_RE = re.compile(r"[0-9a-f]{32}")
 
 
 def _stamp(now: Optional[float]) -> datetime:
@@ -166,38 +176,60 @@ def _broad(kept, moved, entries, gone) -> bool:
             or (len(gone) >= 2 and len(gone) * 2 > len(entries)))
 
 
-def _binding(instance: Path, words: List[str], reason: str, entries, nxt) -> str:
-    """The full source state a confirmation is bound to: exact todo bytes and every settled entry."""
+def _binding(instance: Path, words: List[str], reason: str, entries, nxt) -> Dict[str, str]:
+    """What a confirmation is bound to, in three parts so a mismatch can say which one differs: the
+    words, the reason, and the full source state (home, exact todo bytes, every settled entry)."""
     raw = _todo_bytes(instance)
-    return hashlib.sha256(json.dumps(
-        {"home": os.path.realpath(instance), "words": [w.lower() for w in words], "reason": reason,
-         "todo": base64.b64encode(raw).decode("ascii") if raw is not None else None,
-         "entries": entries, "next": nxt}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    h = lambda o: hashlib.sha256(json.dumps(o, sort_keys=True, ensure_ascii=False).encode()).hexdigest()  # noqa: E731
+    return {"words": h([w.lower() for w in words]), "reason": h(reason),
+            "source": h({"home": os.path.realpath(instance),
+                         "todo": base64.b64encode(raw).decode("ascii") if raw is not None else None,
+                         "entries": entries, "next": nxt})}
 
 
-def _issue(binding: str) -> str:
+def _forget(token: str, why: str) -> None:
+    """Remember that a token existed and how it ended (caller holds _preview_lock)."""
+    _spent[token] = why
+    while len(_spent) > _PREVIEW_CAP:
+        del _spent[next(iter(_spent))]
+
+
+def _issue(binding: Dict[str, str]) -> str:
     now = time.monotonic()
     with _preview_lock:
         for k, (_, exp) in list(_previews.items()):
             if exp <= now:
                 del _previews[k]
+                _forget(k, "expired")
         while len(_previews) >= _PREVIEW_CAP:
+            _forget(next(iter(_previews)), "expired")
             del _previews[next(iter(_previews))]
-        token = secrets.token_urlsafe(16)       # 22 characters, 128 random bits
+        # Hex, 128 random bits. Not token_urlsafe: one value in 32 starts with '_' or '-', and a small
+        # model drops a leading '_' as markdown (nomad-being, 11-04 04:32Z).
+        token = secrets.token_hex(16)
         _previews[token] = (binding, now + _PREVIEW_TTL)
     return token
 
 
-def _consume(token, binding: str) -> str:
+def _consume(token, binding: Dict[str, str]) -> str:
+    """accepted | missing | malformed | not_issued | used | expired | words | reason | source."""
     if token is None:
         return "missing"
-    if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{22}", token.strip()):
-        return "unknown"
+    t = token.strip().strip("'\"`").lower() if isinstance(token, str) else ""
+    if not _TOKEN_RE.fullmatch(t):
+        return "malformed"
     with _preview_lock:
-        rec = _previews.pop(token.strip(), None)
-    if not rec or rec[1] <= time.monotonic():
-        return "unknown"
-    return "accepted" if secrets.compare_digest(rec[0], binding) else "changed"
+        rec = _previews.pop(t, None)
+        if rec is None:
+            return _spent.get(t, "not_issued")
+        if rec[1] <= time.monotonic():
+            _forget(t, "expired")
+            return "expired"
+        _forget(t, "used")
+    for part in ("words", "reason", "source"):
+        if not secrets.compare_digest(rec[0][part], binding[part]):
+            return part
+    return "accepted"
 
 
 def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "") -> Tuple[bool, str, bool]:
@@ -238,9 +270,17 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
                 why = {"missing": f"This retire takes most of a list ({len(moved)} of {len(moved) + len(kept)} "
                                   f"open items, {len(gone)} of {len(entries)} settled), so it needs the "
                                   f"confirmation a preview with the same words and reason returns.",
-                       "unknown": "That confirmation is unknown, mistyped or expired (five minutes, this beat).",
-                       "changed": "Your todo, settled list, words or reason changed since that preview; the "
-                                  "confirmation is used up."}[status]
+                       "malformed": "That is not a confirmation as a preview prints it (32 characters, "
+                                    "digits and the letters a to f); copy the whole value.",
+                       "not_issued": "That confirmation was not issued by a preview in this beat. One from an "
+                                     "earlier beat no longer works.",
+                       "used": "That confirmation was already used; each one works once.",
+                       "expired": "That confirmation expired: it is more than five minutes old.",
+                       "words": "The words differ from the ones you previewed; the confirmation is used up.",
+                       "reason": "The reason differs from the one you previewed with, even if it means the same; "
+                                 "the confirmation is used up. Keep the reason word for word.",
+                       "source": "Your todo or settled list changed since that preview; the confirmation is "
+                                 "used up."}[status]
                 return False, (f"{why} Preview again with preview='true' and the same reason, then retire with "
                                f"the confirmation it gives. Nothing was changed."), False
         topic = ", ".join(words)
@@ -383,10 +423,14 @@ def _preview(instance: Path, words: List[str], reason: str = "") -> Tuple[bool, 
     lines += [f"- STAYS: {t[:140]}" for t, _ in kept[:10]]
     if _broad(kept, moved, entries, gone):
         if reason:
-            lines.append(f"This takes most of a list, so it needs this confirmation: "
-                         f"{_issue(_binding(instance, words, reason, entries, nxt))} -- retire with the same "
-                         f"words and reason and confirmation='<it>' in this beat, within five minutes. It is "
+            tok = _issue(_binding(instance, words, reason, entries, nxt))
+            lines.append(f"This takes most of a list, so it needs this confirmation: {tok} -- retire with the "
+                         f"same words and reason and this confirmation in this beat, within five minutes. It is "
                          f"used once, and any change to your todo or settled list before then voids it.")
+            # The whole next call on one line: a small model copies a call more reliably than it fills a
+            # slot (nomad-being, 11-03: three retires with no confirmation argument at all).
+            lines.append(f"Next call, exactly: retire_thread(words={topic!r}, reason={reason!r}, "
+                         f"confirmation={tok!r})")
         else:
             lines.append("This takes most of a list: preview again WITH the reason to get a confirmation.")
     return True, "\n".join(lines), False
