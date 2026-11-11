@@ -932,17 +932,23 @@ def test_a_long_gap_says_the_seat_may_be_away_not_that_the_probe_is_right(tmp_pa
 
 
 def test_a_signal_the_sandbox_reports_as_128_plus_n_is_named():
-    # bwrap returns 128+N when signal N ends the run (measured: a script that pkills its own
+    # bwrap (or a shell) returns 128+N when signal N ends the run (measured: a script that pkills its own
     # command line exits 143 under bwrap, -15 under a bare Popen); the note named neither
     from sage.gateway.hestia_dispatch import _run_note
     selfterm = _run_note(143, "", ["example.py"])
-    assert selfterm.startswith("Exit 143: the sandbox reports a run ended by signal 15 (SIGTERM)")
+    assert selfterm.startswith("Exit 143: a run, or a shell inside it, reports signal 15 (SIGTERM)")
     assert "unless your code chose 143 itself" in selfterm
-    assert "the sandbox did not send it" in selfterm and "example.py" in selfterm
-    # the sandbox's own stop is not denied: it wrote its [stopped: ...] line
+    assert "stderr has no [stopped: ...] line" in selfterm and "example.py" in selfterm
+    # no stop line is an observation, never "the sandbox did not send it": the kernel enforces
+    # the file cap as SIGXFSZ (measured rc 153) and writes no line, so the cap is stated as design
+    fsize = _run_note(153, "File size limit exceeded", ["example.py"])
+    assert "signal 25 (SIGXFSZ)" in fsize and "at 512 MiB" in fsize, fsize
+    assert "did not send" not in fsize and "did not send" not in selfterm
+    assert "512 MiB" not in selfterm
+    # the seat's own stop wrote its [stopped: ...] line, so the note does not say it is missing
     ours = _run_note(137, "[stopped: your code was still running after 60s (budget)]", ["example.py"])
-    assert ours.startswith("Exit 137: the sandbox reports a run ended by signal 9 (SIGKILL)")
-    assert "did not send it" not in ours
+    assert ours.startswith("Exit 137: a run, or a shell inside it, reports signal 9 (SIGKILL)")
+    assert "no [stopped:" not in ours
     # an ordinary exit code above zero and up to 128 is only a number
     assert _run_note(2, "", ["example.py"]).startswith("Exit 2, nothing on stderr")
     assert _run_note(128, "", ["example.py"]).startswith("Exit 128, nothing on stderr")

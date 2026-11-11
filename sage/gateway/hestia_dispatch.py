@@ -5593,15 +5593,25 @@ def _run_ended(rc: int, stderr: str) -> str:
     --unshare-pid gives 143, and under a bare Popen gives -15, which this note already named.
 
     The decoding is arithmetic, not a guess about the cause. A script can still exit with 143
-    itself, so the note says so. Whether the sandbox sent the signal is observed: its own stops
-    always write a [stopped: ...] line to stderr."""
+    itself, so the note says so. NO STOP LINE IS NOT "THE SANDBOX DID NOT SEND IT": only the
+    seat's own stops (time, memory, disk) write [stopped: ...]. The kernel enforces the prlimit
+    caps (--fsize gives SIGXFSZ, 153) and an OOM kill gives SIGKILL, and neither writes a line
+    (legion-claude, review of #694, measured rc 153 under RLIMIT_FSIZE). So the note states the
+    absence as an observation, and the file cap as design, never a cause."""
+    import signal
+    from sage.gateway.being_gate_client import RUN_FSIZE_BYTES
     if rc < 0:
         return f"Ended by signal {-rc} ({_signal_name(-rc)})"
     if 128 < rc <= 128 + 64:
-        sent = ("" if "[stopped:" in stderr else
-                "; the sandbox did not send it, since its own stops always say so in stderr")
-        return (f"Exit {rc}: the sandbox reports a run ended by signal {rc - 128} "
-                f"({_signal_name(rc - 128)}) as {rc}, unless your code chose {rc} itself{sent}")
+        sig = rc - 128
+        seen = ("" if "[stopped:" in stderr else
+                "; stderr has no [stopped: ...] line, which the seat writes when it stops a run "
+                "for time, memory or disk")
+        if sig == signal.SIGXFSZ:
+            seen += ("; the sandbox caps every file the run writes, its output included, at "
+                     f"{RUN_FSIZE_BYTES >> 20} MiB")
+        return (f"Exit {rc}: a run, or a shell inside it, reports signal {sig} "
+                f"({_signal_name(sig)}) as {rc}, unless your code chose {rc} itself{seen}")
     return f"Exit {rc}"
 
 
