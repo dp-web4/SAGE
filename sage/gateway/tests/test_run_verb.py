@@ -641,7 +641,7 @@ def test_a_run_note_states_only_what_was_observed():
     silent = _run_note(1, "", ["example.py"])            # sys.exit(1), both streams empty
     assert silent.startswith("Exit 1, nothing on stderr") and "example.py" in silent
     killed = _run_note(-9, "", ["example.py"])           # signal-killed
-    assert killed.startswith("Ended by signal 9") and "example.py" in killed
+    assert killed.startswith("Ended by signal 9 (SIGKILL)") and "example.py" in killed
     usage = _run_note(2, "usage: invalid option", ["example.py"])  # stderr, no traceback
     assert usage.startswith("Exit 2") and "read it" in usage
     for n in (silent, killed, usage):
@@ -929,3 +929,21 @@ def test_a_long_gap_says_the_seat_may_be_away_not_that_the_probe_is_right(tmp_pa
     assert "away, not stuck" not in short and short.endswith('"test-seat".')
     assert "46 h 0 min before this run began" in long_, long_
     assert "may be away, not stuck: there is nothing for you to restart" in long_, long_
+
+
+def test_a_signal_the_sandbox_reports_as_128_plus_n_is_named():
+    # bwrap returns 128+N when signal N ends the run (measured: a script that pkills its own
+    # command line exits 143 under bwrap, -15 under a bare Popen); the note named neither
+    from sage.gateway.hestia_dispatch import _run_note
+    selfterm = _run_note(143, "", ["example.py"])
+    assert selfterm.startswith("Exit 143: the sandbox reports a run ended by signal 15 (SIGTERM)")
+    assert "unless your code chose 143 itself" in selfterm
+    assert "the sandbox did not send it" in selfterm and "example.py" in selfterm
+    # the sandbox's own stop is not denied: it wrote its [stopped: ...] line
+    ours = _run_note(137, "[stopped: your code was still running after 60s (budget)]", ["example.py"])
+    assert ours.startswith("Exit 137: the sandbox reports a run ended by signal 9 (SIGKILL)")
+    assert "did not send it" not in ours
+    # an ordinary exit code above zero and up to 128 is only a number
+    assert _run_note(2, "", ["example.py"]).startswith("Exit 2, nothing on stderr")
+    assert _run_note(128, "", ["example.py"]).startswith("Exit 128, nothing on stderr")
+    assert _run_note(200, "", ["example.py"]).startswith("Exit 200, nothing on stderr")

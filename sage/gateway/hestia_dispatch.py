@@ -5575,6 +5575,36 @@ def _device_note() -> str:
             "device you are granted is used through the verb made for it (camera for frames), not from run.")
 
 
+def _signal_name(n: int) -> str:
+    import signal
+    try:
+        return signal.Signals(n).name
+    except ValueError:
+        return f"signal {n}"
+
+
+def _run_ended(rc: int, stderr: str) -> str:
+    """How the run ended, decoded from the code alone.
+
+    bwrap REPORTS A SIGNAL AS 128+N, NOT AS -N. sprout-being, 2026-11-11 02:3xZ: its script ran
+    `pkill -f` with a pattern that its own command line matched, so it sent itself SIGTERM. The
+    sandbox returned 143 with both streams empty, and the note said only "Exit 143". The being
+    settled that sudo was missing. Measured the same day: the same self-kill under bwrap
+    --unshare-pid gives 143, and under a bare Popen gives -15, which this note already named.
+
+    The decoding is arithmetic, not a guess about the cause. A script can still exit with 143
+    itself, so the note says so. Whether the sandbox sent the signal is observed: its own stops
+    always write a [stopped: ...] line to stderr."""
+    if rc < 0:
+        return f"Ended by signal {-rc} ({_signal_name(-rc)})"
+    if 128 < rc <= 128 + 64:
+        sent = ("" if "[stopped:" in stderr else
+                "; the sandbox did not send it, since its own stops always say so in stderr")
+        return (f"Exit {rc}: the sandbox reports a run ended by signal {rc - 128} "
+                f"({_signal_name(rc - 128)}) as {rc}, unless your code chose {rc} itself{sent}")
+    return f"Exit {rc}"
+
+
 def _run_note_core(rc: int, stderr: str, files: list) -> str:
     """The one line a `run` result says about itself.
 
@@ -5600,7 +5630,7 @@ def _run_note_core(rc: int, stderr: str, files: list) -> str:
                 "read-only unless a grant of yours covers it). The copies and every file the run "
                 "wrote are gone now, except what it wrote through your grants: the next run "
                 "starts with only the files it names. What you printed survives.")
-    ended = f"Ended by signal {-rc}" if rc < 0 else f"Exit {rc}"
+    ended = _run_ended(rc, stderr)
     if "Traceback (most recent call last)" in stderr:
         return (f"{ended}. stderr holds a Python traceback: its last frame in your own file "
                 f"names the line that raised.")
