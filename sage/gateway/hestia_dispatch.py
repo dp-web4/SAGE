@@ -3591,12 +3591,13 @@ class HestiaF1aDispatcher:
                 "answered."))
         try:
             return self._run_staged(stage, staged, cmd, budget, bound_by,
-                                    grant_mounts=run_grant_mounts(ctx))
+                                    grant_mounts=run_grant_mounts(ctx),
+                                    run_key=_run_key(intent.args, staged))
         finally:
             _release_stage_lock(lock_path, lock_fd)
 
     def _run_staged(self, stage, staged, cmd, budget, bound_by,
-                    grant_mounts=((), (), False)) -> ResultEnvelope:
+                    grant_mounts=((), (), False), run_key: str = "") -> ResultEnvelope:
         """The staged part of `run`, called only with the stage's lock held (see _do_run).
         `grant_mounts` is run_grant_mounts' answer for the line in `cmd`, for the receipt."""
         import os
@@ -3740,6 +3741,13 @@ class HestiaF1aDispatcher:
                 if not complete:
                     result["changed_in_your_grants_scan"] = (
                         f"stopped after {RUN_SCAN_MAX_ENTRIES} entries; later changes are not listed")
+        if run_key:
+            try:
+                same = _run_seen_note(self.memory_root, run_key, rc, f"{out}\n{errtxt}")
+            except Exception:
+                same = ""
+            if same:
+                result["same_as_before"] = same
         return ResultEnvelope(ok=True, witness_id=action_id, result=result)
 
 
@@ -5573,6 +5581,65 @@ def _device_note() -> str:
     return ("The sandbox's /dev holds only null, zero, random, urandom and tty: no hardware device (a "
             "camera, a serial port, a GPU) exists inside it, by design, and no scope grant adds one. A "
             "device you are granted is used through the verb made for it (camera for frames), not from run.")
+
+
+# A RERUN OF THE SAME BYTES SAID NOTHING ABOUT THE FIRST. sprout-being, 2026-11-11: at 04:15Z it settled why
+# a script of its own ended with exit 143, and at 15:10Z it ran the same file, unchanged since 02:40Z, twice
+# more. Both runs ended the same way, and each receipt read as a first run, so the being took the result as
+# new evidence and wrote a new cause for it. request_run has said UNCHANGED for the same bytes since
+# September; run had no memory at all. This is that observation for run: the files named and the arguments
+# are byte-for-byte those of an earlier run, and how that one ended. It says nothing of what the files read
+# through grants, which the key does not cover.
+RUN_LOG = "run_log.jsonl"
+RUN_LOG_READ_BYTES = 256 * 1024
+
+
+def _run_key(args: dict, staged: list) -> str:
+    """One digest of what a run was given: its arguments and every named file's bytes, in order."""
+    h = hashlib.sha256(json.dumps(args or {}, sort_keys=True, default=str).encode())
+    for base, data in staged:
+        h.update(b"\0" + base.encode() + b"\0" + hashlib.sha256(data).digest())
+    return h.hexdigest()
+
+
+def _run_seen_note(home, key: str, rc: int, said: str, now: Optional[float] = None) -> str:
+    """Look the key up in the home's run log, append this run, and say what an earlier run of the same
+    bytes did. Empty when these bytes never ran before."""
+    now = time.time() if now is None else now
+    p = Path(home) / RUN_LOG
+    said_h = hashlib.sha256(said.encode(errors="replace")).hexdigest()[:16]
+    prev, runs = None, 0
+    try:
+        with open(p, "rb") as fh:
+            size = fh.seek(0, 2)
+            fh.seek(max(0, size - RUN_LOG_READ_BYTES))
+            tail = fh.read().decode(errors="replace").splitlines()
+        for line in tail[1:] if size > RUN_LOG_READ_BYTES else tail:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if r.get("key") == key:
+                prev, runs = r, runs + 1
+    except OSError:
+        pass
+    try:
+        with open(p, "a") as fh:
+            fh.write(json.dumps({"t": round(now, 1), "key": key, "exit": rc, "said": said_h}) + "\n")
+    except OSError:
+        pass
+    if not prev:
+        return ""
+    when = time.strftime("%Y-%m-%d %H:%MZ", time.gmtime(prev["t"]))
+    mins = max(0, int((now - prev["t"]) // 60))
+    ago = f"{mins // 60} h {mins % 60} min" if mins >= 60 else f"{mins} min"
+    ended = (f"ended the same way, exit {rc}" if prev.get("exit") == rc else
+             f"ended with exit {prev.get('exit')}, and this one with exit {rc}")
+    printed = ("printed the same" if prev.get("said") == said_h else "printed something different")
+    times = f" ({runs + 1} runs of these bytes in this log)" if runs > 1 else ""
+    return (f"The same run as at {when} ({ago} ago){times}: every file you named, and the arguments, "
+            f"are byte-for-byte what they were then. That run {ended}, and {printed}. "
+            f"Files read through your grants are not part of this comparison.")
 
 
 def _signal_name(n: int) -> str:

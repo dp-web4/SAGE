@@ -961,3 +961,35 @@ def test_sigxfsz_names_the_file_cap_on_both_paths():
     assert "512 MiB" in _run_note(-25, "", ["example.py"])
     assert "512 MiB" in _run_note(153, "", ["example.py"])
     assert "MiB" not in _run_note(-15, "", ["example.py"])
+
+
+def test_a_rerun_of_the_same_bytes_says_when_they_ran_before(tmp_path):
+    # sprout-being 11-11: the same unchanged file ran at 15:10Z hours after it settled why it ends as it
+    # does, and the receipt read as a first run
+    from sage.gateway.hestia_dispatch import _run_key, _run_seen_note
+    k = _run_key({"path": "scratch/a.py"}, [("a.py", b"print(1)\n")])
+    assert _run_seen_note(tmp_path, k, 143, "", now=1000.0) == ""          # first run: nothing to say
+    again = _run_seen_note(tmp_path, k, 143, "", now=1000.0 + 3 * 3600 + 120)
+    assert again.startswith("The same run as at 1970-01-01 00:16Z (3 h 2 min ago)")
+    assert "ended the same way, exit 143" in again and "printed the same" in again
+    assert "grants are not part of this comparison" in again
+    third = _run_seen_note(tmp_path, k, 0, "ok", now=1000.0 + 4 * 3600)
+    assert "(3 runs of these bytes in this log)" in third
+    assert "ended with exit 143, and this one with exit 0" in third and "printed something different" in third
+    # one changed byte, a changed argument or a renamed file is a different run
+    assert _run_key({"path": "scratch/a.py"}, [("a.py", b"print(2)\n")]) != k
+    assert _run_key({"path": "scratch/a.py", "args": ["1"]}, [("a.py", b"print(1)\n")]) != k
+    assert _run_key({"path": "scratch/b.py"}, [("b.py", b"print(1)\n")]) != k
+
+
+@needs_sandbox
+def test_run_receipt_carries_same_as_before_on_an_unchanged_rerun(tmp_path):
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "two.py").write_text("print(2)\n")
+    first = d._do_run(BeingIntent("run", {"path": "scratch/two.py"}))
+    assert first.ok and "same_as_before" not in first.result, first.result
+    second = d._do_run(BeingIntent("run", {"path": "scratch/two.py"}))
+    assert second.ok and "ended the same way, exit 0" in second.result["same_as_before"]
+    (home / "scratch" / "two.py").write_text("print(3)\n")
+    changed = d._do_run(BeingIntent("run", {"path": "scratch/two.py"}))
+    assert changed.ok and "same_as_before" not in changed.result
