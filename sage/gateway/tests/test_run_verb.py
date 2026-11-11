@@ -953,3 +953,11 @@ def test_a_signal_the_sandbox_reports_as_128_plus_n_is_named():
     assert _run_note(2, "", ["example.py"]).startswith("Exit 2, nothing on stderr")
     assert _run_note(128, "", ["example.py"]).startswith("Exit 128, nothing on stderr")
     assert _run_note(200, "", ["example.py"]).startswith("Exit 200, nothing on stderr")
+
+
+def test_sigxfsz_names_the_file_cap_on_both_paths():
+    # legion on #694: seatbelt's child gets SIGXFSZ directly (rc -25), bwrap's shell reports 153
+    from sage.gateway.hestia_dispatch import _run_note
+    assert "512 MiB" in _run_note(-25, "", ["example.py"])
+    assert "512 MiB" in _run_note(153, "", ["example.py"])
+    assert "MiB" not in _run_note(-15, "", ["example.py"])

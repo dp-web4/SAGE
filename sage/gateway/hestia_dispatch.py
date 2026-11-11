@@ -5600,16 +5600,18 @@ def _run_ended(rc: int, stderr: str) -> str:
     absence as an observation, and the file cap as design, never a cause."""
     import signal
     from sage.gateway.being_gate_client import RUN_FSIZE_BYTES
+    cap = ("; the sandbox caps every file the run writes, its output included, at "
+           f"{RUN_FSIZE_BYTES >> 20} MiB")
     if rc < 0:
-        return f"Ended by signal {-rc} ({_signal_name(-rc)})"
+        # seatbelt sets the cap on the child itself, so SIGXFSZ arrives here as -25 (legion on #694)
+        return f"Ended by signal {-rc} ({_signal_name(-rc)})" + (cap if -rc == signal.SIGXFSZ else "")
     if 128 < rc <= 128 + 64:
         sig = rc - 128
         seen = ("" if "[stopped:" in stderr else
                 "; stderr has no [stopped: ...] line, which the seat writes when it stops a run "
                 "for time, memory or disk")
         if sig == signal.SIGXFSZ:
-            seen += ("; the sandbox caps every file the run writes, its output included, at "
-                     f"{RUN_FSIZE_BYTES >> 20} MiB")
+            seen += cap
         return (f"Exit {rc}: a run, or a shell inside it, reports signal {sig} "
                 f"({_signal_name(sig)}) as {rc}, unless your code chose {rc} itself{seen}")
     return f"Exit {rc}"
