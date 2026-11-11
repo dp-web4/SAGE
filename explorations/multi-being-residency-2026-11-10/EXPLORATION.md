@@ -53,8 +53,24 @@ Additional axes, to vary independently after the smoke panel: identical vs diffe
 ### SAGE
 [InstancePaths](https://github.com/dp-web4/SAGE/blob/main/sage/instances/resolver.py) resolves explicit `SAGE_INSTANCE` state directories, falling back to `SAGE_MACHINE + SAGE_MODEL`; its default can conflate being identity with machine/model. [Rust SAGE daemon](https://github.com/dp-web4/SAGE/blob/main/sage-rs/sage-daemon/src/main.rs) accepts `SAGE_PORT` override, default 8760, but defaults other parameters by machine. Separate ports alone do not establish isolation; audit model endpoint, allocator, heartbeats, fleet registry and durable paths.
 
-### Legion hardware — contradictory records, **unverified**
+### Legion hardware — contradictory records, **measured 2026-11-10: 16 GB**
 The [fleet manifest](https://github.com/dp-web4/SAGE/blob/main/sage/federation/fleet.json) describes Legion as an RTX 4090 **Laptop** GPU with **16 GB**, and notes `qwen38-heretic:q3km-vl` loaded from a 2026-11-10 Ollama observation. A [private-context planning note](https://github.com/dp-web4/private-context/blob/main/context/resident-model-evolution-plan.md) instead calls Legion RTX 4090 **24 GB**. dp also recalls 24 GB. These are conflicting claims. **Do not choose one from prose.** Legion should report actual `nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv`, GPU UUID, PCI device, model name, driver, and observed free VRAM *while normal workloads run*. If no NVIDIA query available, give a verifiable alternative. Do not allocate or interrupt native Legion-being before measurement.
+
+**Measured by legion-claude, 2026-11-10 (resolves the conflict: 16 GB).** Taken on Legion while the resident being was mid-beat:
+
+| Fact | Value |
+|---|---|
+| `nvidia-smi` name | NVIDIA GeForce RTX 4090 Laptop GPU |
+| `memory.total` | 16376 MiB |
+| `memory.used` / free | 14807 MiB / 1138 MiB |
+| GPU UUID | GPU-ab02858e-c592-1086-022c-0963337608fc |
+| PCI device | 01:00.0 NVIDIA GN21-X11 `[10de:2757]` (rev a1), Lenovo subsystem `[17aa:3b6a]`, 16G prefetchable BAR; Intel UHD at 00:02.0 drives the panel |
+| Driver | 580.178.04 |
+| GPU processes | one: Ollama's `llama-server`, 14784 MiB |
+| Loaded model | `qwen38-heretic:q3km-vl` (26.9B, Q3_K_M), 100% GPU, context 32768, q8_0 KV, pinned (no expiry) |
+| Host RAM / swap | 31.8 GB (24.5 GB available) / 8 GB swapfile, 1.9 GB used |
+
+The 24 GB figure is the desktop RTX 4090; the laptop part of the same name has 16 GB. The private-context note has been corrected. With the resident loaded, about 1.1 GB of VRAM is free, so R3 and R5 do not fit beside it at any useful size: they need the resident unloaded or shrunk. R4 (a second being on the resident's own server and checkpoint) needs no extra VRAM.
 
 Thor is reserved for competition; Legion is a **possible volunteer**, not an assigned test host. [SAGE #691](https://github.com/dp-web4/SAGE/issues/691) asks Legion for willingness, machine measurements and rollback feasibility. A 4B + 4B pair may fit under quantization with bounded context/KV, but fit is a measurement, not a promise. Shared-weight R4 might be cheaper and tests the deeper thesis.
 
