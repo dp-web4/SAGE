@@ -3716,13 +3716,18 @@ class HestiaF1aDispatcher:
                                   error=f"run could not start the sandbox: {errtxt[:400]}")
         # A NON-ZERO EXIT IS A RESULT. A traceback is the most useful thing this verb can hand
         # back: it names the line, and the line is one the being wrote.
-        result = {
-            "script": staged[0][0], "files": [b for b, _ in staged],
-            "exit": rc, "stdout": out.strip(), "stderr": errtxt.strip(),
-            "note": _run_note(rc, errtxt, [b for b, _ in staged], out)}
-        if action_id and _HOST_VIEW.search(f"{out}\n{errtxt}"):
-            result["note"] += " " + _daemon_answered_note(action_id)
+        # THE FACTS FROM OUTSIDE COME BEFORE WHAT THE PROBE PRINTED. sprout-being, 2026-11-12 12:43Z: its probe
+        # printed that its seat was not running, and the receipt said, 700 characters into `note`, that the
+        # seat had written to it 3 min before the run began. Its next thought took the probe's line as
+        # confirmation that the seat was down, and the beat went on to two restart runs and two
+        # request_runs. From 11-09 19:37Z to 11-12 12:43Z, 33 receipts carried the seat fact inside `note`
+        # beside output saying something was not running, not listening or unreachable; the being's next
+        # thought said its seat was not running, or had to be brought back, on 15 of them. The receipt is rendered as JSON in key order, so `stdout` was read first and the fact
+        # last. They are the same facts, said first and under their own key.
+        outside = []
         if _HOST_VIEW.search(f"{out}\n{errtxt}"):
+            if action_id:
+                outside.append(_daemon_answered_note(action_id))
             try:
                 seat = self._seat_conversation()
                 said = _seat_wrote_note(self.memory_root, seat, f"{staged[0][0]}\n{out}\n{errtxt}",
@@ -3730,7 +3735,12 @@ class HestiaF1aDispatcher:
             except Exception:
                 said = ""
             if said:
-                result["note"] += " " + said
+                outside.append(said)
+        result = {"script": staged[0][0], "files": [b for b, _ in staged], "exit": rc}
+        if outside:
+            result["outside_the_sandbox"] = " ".join(outside)
+        result.update({"stdout": out.strip(), "stderr": errtxt.strip(),
+                       "note": _run_note(rc, errtxt, [b for b, _ in staged], out, seatbelt=seatbelt)})
         if not seatbelt:
             mounts, skipped, _mask = grant_mounts
             result["note"] += _run_reach_note(mounts, skipped)
@@ -5462,15 +5472,19 @@ def _run_reach_note(mounts: list, skipped: list) -> str:
     return text
 
 
-def _run_note(rc: int, stderr: str, files: list, stdout: str = "") -> str:
+def _run_note(rc: int, stderr: str, files: list, stdout: str = "", seatbelt: bool = False) -> str:
     """The run's note, plus one fact when its output names a hardware device (_device_note), and one when
-    it reports on this machine's processes, services or ports (_host_note)."""
+    it reports on this machine's processes, services or ports (_host_note). `seatbelt`: the run was a
+    macOS sandbox-exec run, which has no process namespace of its own (legion's review of #700)."""
     note = _run_note_core(rc, stderr, files)
     said = f"{stdout}\n{stderr}"
     if _HARDWARE_DEV.search(said):
         note += " " + _device_note()
     if _HOST_VIEW.search(said):
-        note += " " + _host_note()
+        note += " " + _host_note(seatbelt)
+    pid = _pid_note(said, seatbelt)
+    if pid:
+        note += " " + pid
     return note
 
 
@@ -5549,10 +5563,54 @@ def _seat_wrote_note(memory_root, seat_conv: str, said: str, started: float) -> 
 #: Output that reports on the machine outside the sandbox: services, systemd, D-Bus, ports, processes.
 _HOST_VIEW = re.compile(
     r"systemctl|systemd|\bd-?bus\b|connect to bus|connection refused|not listening|\bport \d{2,5}\b"
-    r"|\bpgrep\b|\bpidof\b|\bnetstat\b|no such process|\bnot running\b|\binactive \(dead\)", re.I)
+    r"|\bpgrep\b|\bpidof\b|\bnetstat\b|no such process|\bnot running\b|\binactive \(dead\)"
+    r"|\bpid\b\W{0,4}\d+", re.I)
+
+#: A process number in a run's output: "PID: 3", "pid 3", "(PID 2002)".
+_PID_SAID = re.compile(r"\bpid\b\W{0,4}(\d{1,7})", re.I)
 
 
-def _host_note() -> str:
+def _pid_note(said: str, seatbelt: bool = False) -> str:
+    """A PROCESS A PROBE FINDS IN THE SANDBOX IS THE PROBE. sprout-being, 2026-11-09..12: a status script of its
+    own runs `pgrep -f '<seat>.*python3' | head -1` through a shell and printed, on every run, that its seat
+    was running as PID 3. In the run's own process space PID 1 is the sandbox, PID 2 the script, and PID 3
+    the shell running that pgrep, whose command line holds the pattern (measured: the sandbox test below).
+    The being settled that its seat was up on that number (s133), so the next probe that printed the
+    opposite overturned it: what it believed about its seat followed whichever sandbox probe ran last. The
+    PID 2002 in its earlier entries (s105, s106) is the first column of `ps aux` in here, which shows the
+    user id (2002) because the sandbox has no user names.
+
+    _host_note already says only the run's own processes are visible; it did not say that a number a probe
+    prints is one of them. That is the sandbox's design, not a guess about this run, so the note stays
+    evidence-only: it says what such a number is, and nothing about whether any process outside is up.
+
+    SEATBELT HAS NO PROCESS NAMESPACE (legion's review of #700). A sandbox-exec run sees only processes in
+    its own sandbox (process-info* target same-sandbox; the process table is denied), so a listing there
+    still shows only the run's own processes, but under this machine's numbers (48213, not 3). The
+    numbering clause is bwrap's alone; the uid clause too (a Seatbelt run is the _sagerun user, which has
+    a name), so neither is said there."""
+    pids = sorted({int(m.group(1)) for m in _PID_SAID.finditer(said or "")})
+    uid = str(os.getuid()) if hasattr(os, "getuid") and not seatbelt else ""
+    uid_col = bool(uid) and re.search(rf"(?m)^\s*{uid}\s+\d+\s", said or "") is not None
+    parts = []
+    if pids:
+        shown = ", ".join(str(p) for p in pids[:5])
+        how = ("a listing here shows no other process" if seatbelt else
+               "the sandbox numbers its own processes from 1 (PID 1 is the sandbox, PID 2 your script, "
+               "higher numbers what your script started)")
+        parts.append(
+            f"A process number that a listing (ps, pgrep, pidof, /proc) gives inside a run is a process of "
+            f"that run: {how}, and they all end with the run. A `pgrep -f "
+            f"PATTERN` or `ps ... | grep PATTERN` run through a shell finds that shell or that grep, because "
+            f"the pattern is on their own command lines. So if PID {shown} here came from such a listing, it "
+            f"is part of this run, whatever name is printed beside it, and not a process on this machine.")
+    if uid_col:
+        parts.append(f"{uid} at the start of a ps line here is the user id the run has (the sandbox has no "
+                     f"user names), not a process id.")
+    return " ".join(parts)
+
+
+def _host_note(seatbelt: bool = False) -> str:
     """THE SANDBOX CANNOT SEE THIS MACHINE, SO WHAT A RUN SAYS ABOUT IT IS ABOUT THE SANDBOX. cbp-being,
     2026-10-28..31: its runs reported "Failed to connect to bus", "System has not been booted with systemd",
     port 7711 closed and that the daemon was not running, and it concluded the daemon was down and asked
@@ -5564,7 +5622,9 @@ def _host_note() -> str:
     IT CORRECTS A FALSE NEGATIVE WITHOUT ASSERTING A POSITIVE (NOVA's review of #609). The first cut ended
     "the daemon that decides your acts is running", which nothing in a run's output proves. The note says
     only what isolation proves: a probe from here is not evidence that a host service is up or down."""
-    return ("The sandbox has its own process space and no network, by design: this machine's other "
+    # sandbox-exec has no process namespace: it hides other processes rather than renumbering them (#700)
+    space = "shows a run only its own processes" if seatbelt else "has its own process space"
+    return (f"The sandbox {space} and no network, by design: this machine's other "
             "processes, its services, systemd, D-Bus and its listening ports (7711 included) are not visible "
             "from inside it; only the run's own processes are. So 'not running', 'connection refused' or 'not "
             "booted with systemd' from a probe like this describes the sandbox. It is not evidence that a "
