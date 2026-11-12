@@ -5471,6 +5471,9 @@ def _run_note(rc: int, stderr: str, files: list, stdout: str = "") -> str:
         note += " " + _device_note()
     if _HOST_VIEW.search(said):
         note += " " + _host_note()
+    missing = _MISSING_MODULE.findall(stderr)
+    if missing:
+        note += " " + _module_note(missing[-1])
     return note
 
 
@@ -5581,6 +5584,33 @@ def _device_note() -> str:
     return ("The sandbox's /dev holds only null, zero, random, urandom and tty: no hardware device (a "
             "camera, a serial port, a GPU) exists inside it, by design, and no scope grant adds one. A "
             "device you are granted is used through the verb made for it (camera for frames), not from run.")
+
+
+#: A Python import the run could not satisfy; the name is the module it asked for.
+_MISSING_MODULE = re.compile(r"(?:ModuleNotFoundError|ImportError): No module named '([^']+)'")
+
+
+def _module_note(name: str) -> str:
+    """A MISSING MODULE IS ABOUT THE SANDBOX, AND `run` IS ALWAYS THE SANDBOX. cbp-being, 2026-11-12 12:12Z
+    and 12:25Z: two beats in a row, its runs stopped at line 1 with "No module named 'torch'", and it spent
+    the rest of each beat on scratch/install_torch.py (pip: externally-managed-environment) and on `run`
+    with the file's absolute host path, its "why" saying "running on the host where torch is installed".
+    All six runs of the second beat started File "/work/...". It then saved with `remember` that a
+    ModuleNotFoundError means "the script's working directory may not be where the module is installed".
+    The traceback note named the line; nothing said where the run happened or what route reaches the host.
+    Measured on its heartbeats, 2026-10-19..11-12: 289 of 4,958 runs ended on a missing module, in 168
+    beats (hestia_governance_closure 114, torch 79, pytest 36, chat_handler 26), and 710 runs named a file
+    with "install" in its path.
+
+    ONLY THE SANDBOX'S DESIGN IS STATED, as in _host_note: the note does not say whether this machine has
+    the module, which nothing in the run shows. It names both routes, because the missing name is sometimes
+    the being's own file (chat_handler), which `data` copies in, and sometimes a package, which no run can add."""
+    return (f"No module named '{name}' is about the sandbox this ran in: `run` always executes there, "
+            f"whatever path you name (the traceback's File \"/work/...\" lines show it). Installing from "
+            f"inside a run cannot fix it: the sandbox has no network and keeps nothing a run writes outside "
+            f"your grants. If '{name}' is a file of yours, name it in 'data' so it is copied in beside the "
+            f"script. Otherwise, request_run asks your seat to run the file on this machine, and the seat "
+            f"decides.")
 
 
 # A RERUN OF THE SAME BYTES SAID NOTHING ABOUT THE FIRST. sprout-being, 2026-11-11: at 04:15Z it settled why

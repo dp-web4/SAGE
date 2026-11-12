@@ -692,6 +692,30 @@ def test_a_run_that_reports_on_this_machine_is_told_the_sandbox_cannot_see_it():
         assert said not in _run_note(0, "", ["t.py"], benign), benign
 
 
+def test_a_missing_module_names_the_sandbox_and_both_routes():
+    """cbp-being, 2026-11-12: two beats of "No module named 'torch'" went into install scripts and into `run`
+    on the absolute host path, then into a saved lesson about working directories. The note now says the
+    run was the sandbox, that installing inside a run cannot help, and names `data` and request_run. It
+    never says whether this machine has the module."""
+    from sage.gateway.hestia_dispatch import _run_note
+    tb = ('Traceback (most recent call last):\n  File "/work/m.py", line 1, in <module>\n'
+          "    import torch\nModuleNotFoundError: No module named 'torch'")
+    note = _run_note(1, tb, ["m.py"])
+    assert note.startswith("Exit 1. stderr holds a Python traceback")
+    assert "No module named 'torch' is about the sandbox" in note
+    assert "whatever path you name" in note and "'data'" in note and "request_run" in note
+    low = note.lower()
+    assert "is installed" not in low and "has torch" not in low, note
+    # the last missing name is the one the run stopped on
+    two = "ImportError: No module named 'a'\nduring handling\nModuleNotFoundError: No module named 'b.c'"
+    assert "'b.c' is about the sandbox" in _run_note(1, two, ["m.py"])
+    for benign in ("Traceback (most recent call last):\nValueError: shapes (10,) and (100,)",
+                   "", "warning: module named 'x' is deprecated"):
+        assert "is about the sandbox" not in _run_note(1, benign, ["m.py"]), benign
+    # stdout is the program's own text; only stderr carries the interpreter's import failure
+    assert "is about the sandbox" not in _run_note(0, "", ["m.py"], "No module named 'torch' (expected)")
+
+
 def test_the_daemon_answered_note_is_evidence_only_and_names_the_action():
     """cbp-being 2026-11-01: _host_note alone, which says a probe is evidence neither way, lost to a line
     its own script printed saying the daemon was down. The run's action id is a real answer from the daemon, issued
