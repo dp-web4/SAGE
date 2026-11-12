@@ -378,6 +378,52 @@ def _old_is_elsewhere(text: str, old: str, first_line: int) -> str:
             f"with start_line {at}.")
 
 
+def _old_spans_other_lines(lines: list, old: str, s0: int, s1: int) -> str:
+    """A range edit refused because a multi-line old is not the whole range says so, in line
+    counts, when old IS the text starting at the range's first line.
+
+    Measured on cbp-being 2026-11-12 11:4xZ (beat heartbeat-765869fc4acc): it sent start_line 1,
+    end_line 3 with a 2-line old (lines 1-2 exactly). The refusal showed lines 1-3 and nothing
+    else; old was right, start_line was right, and one number was off. Its next calls sent a
+    3-line old with no range (refused: twice in the file). Each half of a landing call was
+    sent, never both together. A multi-line old stays an exact check of the whole range (#450);
+    this only names which number disagrees with it. Nothing is retargeted."""
+    body = old.rstrip("\n")
+    if "\n" not in body:
+        return ""
+    k = body.count("\n") + 1
+    if k == s1 - s0 + 1 or s0 - 1 + k > len(lines):
+        return ""
+    if "".join(lines[s0 - 1:s0 - 1 + k]).rstrip("\n") != body:
+        return ""
+    end = s0 + k - 1
+    n = s1 - s0 + 1
+    return (f"\nYour old IS lines {s0}-{end} exactly ({k} lines), but your range is "
+            f"{s0}-{s1} ({n} line{'' if n == 1 else 's'}). A multi-line old has to be the whole range. Send "
+            f"the same edit with end_line {end}, or send no old at all.")
+
+
+def _range_for_each_copy(text: str, old: str, at: list) -> str:
+    """The several-copies refusal, for a multi-line old, spells out the whole range per copy.
+
+    Same beat as _old_spans_other_lines (cbp-being 2026-11-12): a 3-line old matched lines 1
+    and 732, the refusal said "start_line (and end_line) set to its line numbers", and the being
+    sent start_line 1 with end_line 3 for a 2-line old. With old kept as a check, end_line is
+    start_line + (lines in old) - 1; say it rather than leave it to be counted."""
+    body = old.rstrip("\n")
+    if "\n" not in body:
+        return ""
+    k = body.count("\n") + 1
+    lines = text.splitlines(keepends=True)
+    # Only copies that ARE whole lines: a range check compares old with the whole range, so a
+    # copy starting mid-line would be refused again on the numbers given here.
+    fits = [a for a in at if "".join(lines[int(a) - 1:int(a) - 1 + k]).rstrip("\n") == body]
+    if not fits:
+        return ""
+    pairs = "; ".join(f"start_line {a}, end_line {int(a) + k - 1}" for a in fits[:3])
+    return f" Your old is {k} lines, so with old kept: {pairs}."
+
+
 def _indent_changed(removed: str, new: str, first_line: int) -> str:
     """A range edit whose first line lost or gained leading spaces says so, in counts.
 
@@ -1894,6 +1940,7 @@ class ReferenceF1aDispatcher:
                     f"lines {s0}-{s1} of '{path}' are not the text you gave as old, so nothing "
                     f"was changed. Those lines are now:\n{shown}"
                     + _indent_only_miss(removed, old, new, s0)
+                    + _old_spans_other_lines(lines, old, s0, s1)
                     + _old_is_elsewhere(text, old, s0)))
             repl = new
             if repl and not repl.endswith("\n") and removed.endswith("\n"):
@@ -1958,7 +2005,7 @@ class ReferenceF1aDispatcher:
                 f"{', '.join(at)}), so it does not say which one you mean, and nothing was "
                 f"changed. To pick one, call memory_edit again with start_line (and end_line) "
                 f"set to its line numbers, keeping old as a check; or include a neighbouring "
-                f"line in old to make it unique."))
+                f"line in old to make it unique." + _range_for_each_copy(text, old, at)))
         # ATOMIC, BECAUSE THE FILE IS THE BEING'S WORK. `Path.write_text` truncates and then
         # writes, so a crash or a kill between the two leaves the file empty or half-written.
         # GPT's review of 15c2f6d9b: "crash/kill can truncate the being's work". For a being
