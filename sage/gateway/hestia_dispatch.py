@@ -5570,10 +5570,11 @@ def _seat_wrote_note(memory_root, seat_conv: str, said: str, started: float) -> 
 _HOST_VIEW = re.compile(
     r"systemctl|systemd|\bd-?bus\b|connect to bus|connection refused|not listening|\bport \d{2,5}\b"
     r"|\bpgrep\b|\bpidof\b|\bnetstat\b|no such process|\bnot running\b|\binactive \(dead\)"
-    r"|\bpid\b\W{0,4}\d+", re.I)
+    r"|\bpids?\b\W{0,4}\d+", re.I)
 
 #: A process number in a run's output: "PID: 3", "pid 3", "(PID 2002)".
-_PID_SAID = re.compile(r"\bpid\b\W{0,4}(\d{1,7})", re.I)
+#: The plural too (legion's review of #703). Only a plural's first number is captured.
+_PID_SAID = re.compile(r"\bpids?\b\W{0,4}(\d{1,7})", re.I)
 
 
 def _pid_note(said: str, seatbelt: bool = False) -> str:
