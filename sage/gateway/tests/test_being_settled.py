@@ -555,3 +555,48 @@ def test_the_replace_receipt_shows_the_question_copyable(tmp_path):
     _s(tmp_path, question=held, answer="yes")
     ok, msg, _ = _s(tmp_path, id="s1", question=held, answer="no")
     assert ok and "\u00ab" + held + "\u00bb" in msg, msg
+
+
+def test_an_entry_naming_a_process_number_gets_the_runs_numbering_beside_it_in_the_block(tmp_path):
+    # sprout-being 11-05..12: 13 of 170 settled answers cited a PID that a listing inside a run gave (its user id,
+    # or pgrep's own shell), both ways about whether its seat was alive; s140 headed the block at a relapse
+    import os
+    uid = str(os.getuid())
+    _s(tmp_path, question="Is the test gizmo running?", answer=f"yes, PID {uid} on port 9")
+    _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    _s(tmp_path, question="Does the gizmo restart itself?", answer="yes (PID 3), at boot")
+    shown = st.render(tmp_path)
+    assert "(s3, s1 name a process number." in shown, shown
+    assert "numbers its own processes from 1" in shown and "finds that shell or that grep itself" in shown
+    assert f"{uid} at the start of a ps line there is the run's user id" in shown
+    assert "says nothing about a process on this machine, running or not" in shown
+    # the entries themselves are untouched: the harness never rewords one
+    assert "yes (PID 3), at boot" in shown and "s2 name" not in shown
+
+
+def test_no_process_number_no_fact_and_no_uid_clause_without_the_uid(tmp_path):
+    _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    assert "process number" not in st.render(tmp_path)
+    _s(tmp_path, question="Is the test gizmo running?", answer="yes, pid: 48213")
+    shown = st.render(tmp_path)
+    assert "(s2 names a process number." in shown and "user id" not in shown, shown
+
+
+def test_settling_an_answer_with_a_process_number_says_where_such_numbers_come_from(tmp_path):
+    ok, msg, changed = _s(tmp_path, question="Is the test gizmo running?", answer="Running (PID 3).")
+    assert ok and changed and "This answer names a process number." in msg, msg
+    ok, msg, changed = _s(tmp_path, question="Is the test gizmo running?", answer="Running (PID 3).")
+    assert not changed and "process number" not in msg       # unchanged: nothing new to say
+    ok, msg, _ = _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    assert "process number" not in msg
+
+
+def test_the_block_stays_in_budget_when_every_entry_names_a_process_number(tmp_path):
+    (tmp_path / st.SETTLED_FILE).write_text(json.dumps({"next": 131, "entries": [
+        {"id": f"s{101 + i}", "question": (f"Can the gizmo daemon be restarted, case {i}? " + "w" * 200)[:st.QUESTION_MAX_CHARS],
+         "answer": ("PID 2002 " + "a" * st.ANSWER_MAX_CHARS)[:st.ANSWER_MAX_CHARS],
+         "evidence": "e" * st.EVIDENCE_MAX_CHARS, "at": "2026-11-09T00:00:00Z"}
+        for i in range(st.MAX_ENTRIES)]}))
+    shown = st.render(tmp_path)
+    assert len(shown) <= st.RENDER_CHARS, len(shown)
+    assert "(s130, s129, s128, s127 +26 name a process number." in shown, shown[:900]
