@@ -1042,3 +1042,10 @@ def test_a_seatbelt_run_gets_no_bwrap_numbering_and_no_uid_clause():
     linux = _run_note(0, "", ["a.py"], "found PID 3")
     assert "PID 1 is the sandbox" in linux and "own process space" in linux
     assert "PID 1 is the sandbox" not in _run_note(0, "", ["a.py"], "found PID 3", seatbelt=True)
+
+
+def test_a_plural_pid_a_probe_prints_is_said_to_be_part_of_the_run():
+    # legion's review of #703: "PIDs 1 and 2" (bwrap's own) was read as a daemon being alive
+    from sage.gateway.hestia_dispatch import _run_note
+    note = _run_note(0, "", ["a.py"], "daemon: PIDs 1 and 2 confirmed")
+    assert "if PID 1 here came from such a listing" in note and "own process space" in note, note

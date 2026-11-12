@@ -62,7 +62,9 @@ _UNCHANGED = "unchanged: "
 #: the block when the being, 3 h after it had concluded from a #700 receipt that the seat was away and there was
 #: nothing to restart, opened a beat by repeating s140 and asked for the restart again (22:22Z).
 #: Evidence only: the fact is conditional, and which entry holds stays the being's.
-_PID_SAID = re.compile(r"\bpid\b\W{0,4}(\d{1,7})", re.I)
+#: The plural too (legion's review of #703: 5 of cbp-being's 46 PID entries say "PIDs 1 and 2"). Only the first
+#: number of a plural is captured; the numbers serve only the user-id clause.
+_PID_SAID = re.compile(r"\bpids?\b\W{0,4}(\d{1,7})", re.I)
 
 
 def _pid_fact(subject: str, numbers) -> str:

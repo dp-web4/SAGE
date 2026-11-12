@@ -600,3 +600,10 @@ def test_the_block_stays_in_budget_when_every_entry_names_a_process_number(tmp_p
     shown = st.render(tmp_path)
     assert len(shown) <= st.RENDER_CHARS, len(shown)
     assert "(s130, s129, s128, s127 +26 name a process number." in shown, shown[:900]
+
+
+def test_the_plural_is_a_process_number_too(tmp_path):
+    # legion's review of #703: cbp-being settled "PIDs 1 and 2" (bwrap's own) as a daemon being alive
+    ok, msg, _ = _s(tmp_path, question="Is the test daemon alive?", answer="Yes, PIDs 1 and 2 confirmed.")
+    assert "This answer names a process number." in msg, msg
+    assert "(s1 names a process number." in st.render(tmp_path)
