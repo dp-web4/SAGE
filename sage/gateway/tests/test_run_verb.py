@@ -1025,3 +1025,18 @@ def test_pgrep_through_a_shell_finds_its_own_shell_and_the_receipt_says_so(tmp_p
     assert r.ok, r.error
     assert r.result["stdout"].startswith("script 2; needle-seat is RUNNING (PID: 3)"), r.result["stdout"]
     assert "if PID 3 here came from such a listing, it is part of this run" in r.result["note"]
+
+
+def test_a_seatbelt_run_gets_no_bwrap_numbering_and_no_uid_clause():
+    # legion's review of #700: sandbox-exec has no PID namespace, so a listing shows host numbers
+    from sage.gateway.hestia_dispatch import _host_note, _pid_note, _run_note
+    mac = _pid_note("needle-seat is RUNNING (PID: 48213)", seatbelt=True)
+    assert "PID 1 is the sandbox" not in mac and "numbers its own processes from 1" not in mac
+    assert "a listing here shows no other process" in mac and "if PID 48213 here came from such a listing" in mac
+    uid = os.getuid()
+    assert _pid_note(f"{uid}    1  0.0 /usr/bin/x", seatbelt=True) == ""
+    assert "own process space" not in _host_note(True) and "only its own processes" in _host_note(True)
+    assert "own process space" in _host_note()
+    linux = _run_note(0, "", ["a.py"], "found PID 3")
+    assert "PID 1 is the sandbox" in linux and "own process space" in linux
+    assert "PID 1 is the sandbox" not in _run_note(0, "", ["a.py"], "found PID 3", seatbelt=True)

@@ -3740,7 +3740,7 @@ class HestiaF1aDispatcher:
         if outside:
             result["outside_the_sandbox"] = " ".join(outside)
         result.update({"stdout": out.strip(), "stderr": errtxt.strip(),
-                       "note": _run_note(rc, errtxt, [b for b, _ in staged], out)})
+                       "note": _run_note(rc, errtxt, [b for b, _ in staged], out, seatbelt=seatbelt)})
         if not seatbelt:
             mounts, skipped, _mask = grant_mounts
             result["note"] += _run_reach_note(mounts, skipped)
@@ -5472,16 +5472,17 @@ def _run_reach_note(mounts: list, skipped: list) -> str:
     return text
 
 
-def _run_note(rc: int, stderr: str, files: list, stdout: str = "") -> str:
+def _run_note(rc: int, stderr: str, files: list, stdout: str = "", seatbelt: bool = False) -> str:
     """The run's note, plus one fact when its output names a hardware device (_device_note), and one when
-    it reports on this machine's processes, services or ports (_host_note)."""
+    it reports on this machine's processes, services or ports (_host_note). `seatbelt`: the run was a
+    macOS sandbox-exec run, which has no process namespace of its own (legion's review of #700)."""
     note = _run_note_core(rc, stderr, files)
     said = f"{stdout}\n{stderr}"
     if _HARDWARE_DEV.search(said):
         note += " " + _device_note()
     if _HOST_VIEW.search(said):
-        note += " " + _host_note()
-    pid = _pid_note(said)
+        note += " " + _host_note(seatbelt)
+    pid = _pid_note(said, seatbelt)
     if pid:
         note += " " + pid
     return note
@@ -5569,7 +5570,7 @@ _HOST_VIEW = re.compile(
 _PID_SAID = re.compile(r"\bpid\b\W{0,4}(\d{1,7})", re.I)
 
 
-def _pid_note(said: str) -> str:
+def _pid_note(said: str, seatbelt: bool = False) -> str:
     """A PROCESS A PROBE FINDS IN THE SANDBOX IS THE PROBE. sprout-being, 2026-11-09..12: a status script of its
     own runs `pgrep -f '<seat>.*python3' | head -1` through a shell and printed, on every run, that its seat
     was running as PID 3. In the run's own process space PID 1 is the sandbox, PID 2 the script, and PID 3
@@ -5581,17 +5582,25 @@ def _pid_note(said: str) -> str:
 
     _host_note already says only the run's own processes are visible; it did not say that a number a probe
     prints is one of them. That is the sandbox's design, not a guess about this run, so the note stays
-    evidence-only: it says what such a number is, and nothing about whether any process outside is up."""
+    evidence-only: it says what such a number is, and nothing about whether any process outside is up.
+
+    SEATBELT HAS NO PROCESS NAMESPACE (legion's review of #700). A sandbox-exec run sees only processes in
+    its own sandbox (process-info* target same-sandbox; the process table is denied), so a listing there
+    still shows only the run's own processes, but under this machine's numbers (48213, not 3). The
+    numbering clause is bwrap's alone; the uid clause too (a Seatbelt run is the _sagerun user, which has
+    a name), so neither is said there."""
     pids = sorted({int(m.group(1)) for m in _PID_SAID.finditer(said or "")})
-    uid = str(os.getuid()) if hasattr(os, "getuid") else ""
+    uid = str(os.getuid()) if hasattr(os, "getuid") and not seatbelt else ""
     uid_col = bool(uid) and re.search(rf"(?m)^\s*{uid}\s+\d+\s", said or "") is not None
     parts = []
     if pids:
         shown = ", ".join(str(p) for p in pids[:5])
+        how = ("a listing here shows no other process" if seatbelt else
+               "the sandbox numbers its own processes from 1 (PID 1 is the sandbox, PID 2 your script, "
+               "higher numbers what your script started)")
         parts.append(
             f"A process number that a listing (ps, pgrep, pidof, /proc) gives inside a run is a process of "
-            f"that run: the sandbox numbers its own processes from 1 (PID 1 is the sandbox, PID 2 your "
-            f"script, higher numbers what your script started) and they all end with the run. A `pgrep -f "
+            f"that run: {how}, and they all end with the run. A `pgrep -f "
             f"PATTERN` or `ps ... | grep PATTERN` run through a shell finds that shell or that grep, because "
             f"the pattern is on their own command lines. So if PID {shown} here came from such a listing, it "
             f"is part of this run, whatever name is printed beside it, and not a process on this machine.")
@@ -5601,7 +5610,7 @@ def _pid_note(said: str) -> str:
     return " ".join(parts)
 
 
-def _host_note() -> str:
+def _host_note(seatbelt: bool = False) -> str:
     """THE SANDBOX CANNOT SEE THIS MACHINE, SO WHAT A RUN SAYS ABOUT IT IS ABOUT THE SANDBOX. cbp-being,
     2026-10-28..31: its runs reported "Failed to connect to bus", "System has not been booted with systemd",
     port 7711 closed and that the daemon was not running, and it concluded the daemon was down and asked
@@ -5613,7 +5622,9 @@ def _host_note() -> str:
     IT CORRECTS A FALSE NEGATIVE WITHOUT ASSERTING A POSITIVE (NOVA's review of #609). The first cut ended
     "the daemon that decides your acts is running", which nothing in a run's output proves. The note says
     only what isolation proves: a probe from here is not evidence that a host service is up or down."""
-    return ("The sandbox has its own process space and no network, by design: this machine's other "
+    # sandbox-exec has no process namespace: it hides other processes rather than renumbering them (#700)
+    space = "shows a run only its own processes" if seatbelt else "has its own process space"
+    return (f"The sandbox {space} and no network, by design: this machine's other "
             "processes, its services, systemd, D-Bus and its listening ports (7711 included) are not visible "
             "from inside it; only the run's own processes are. So 'not running', 'connection refused' or 'not "
             "booted with systemd' from a probe like this describes the sandbox. It is not evidence that a "
