@@ -71,10 +71,16 @@ SEAT_QUIET_S = 3 * 3600
 
 
 #: What a long silence from the seat does and does not mean, said wherever the being meets it.
-_SEAT_AWAY = ("A seat that has not written for hours may be away, not stuck: there is nothing for you to "
-              "restart. Your requests stay in this conversation, and it can answer them when it is back.")
-_SEAT_AWAY_REQUEST = ("A quiet seat may be away, not stuck: there is nothing for you to restart from "
-                      "this request. Your requests stay here, and it can answer them when it is back.")
+#: SAID BY THE RECEIPT, NOT THE SEAT (11-12 19:34Z): the first run receipt carrying this after #700 was read as
+#: the seat's own reply to the restart request, though the seat had written nothing for 6 h 51 min.
+#: A conclusion that rests on a reply that was never sent can fall the first time the being looks for that
+#: reply, so each says whose words they are.
+_SEAT_AWAY = ("(From this receipt, not from the seat.) A seat that has not written for hours may be away, "
+              "not stuck: there is nothing for you to restart. Your requests stay in this conversation, and it "
+              "can answer them when it is back.")
+_SEAT_AWAY_REQUEST = ("(From this receipt, not from the seat.) A quiet seat may be away, not stuck: there is "
+                      "nothing for you to restart from this request. Your requests stay here, and it can answer "
+                      "them when it is back.")
 
 
 def _seat_quiet(turns, member: str, seat_conv: str, truncated: bool, now=None):

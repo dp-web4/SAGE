@@ -934,6 +934,8 @@ def test_a_long_gap_says_the_seat_may_be_away_not_that_the_probe_is_right(tmp_pa
     assert "away, not stuck" not in short and short.endswith('"test-seat".')
     assert "46 h 0 min before this run began" in long_, long_
     assert "may be away, not stuck: there is nothing for you to restart" in long_, long_
+    # whose words: the receipt's, not a reply from the seat (11-12 19:34Z)
+    assert "(From this receipt, not from the seat.) A seat that has not written" in long_, long_
 
 
 def test_a_signal_the_sandbox_reports_as_128_plus_n_is_named():
