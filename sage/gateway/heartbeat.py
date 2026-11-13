@@ -233,7 +233,14 @@ def _offered_explore_tools_before_the_canonical_toolset(body_reading: Optional[d
 # written only in the journal did not reach the next beat (being_settled, measured on Sprout 10-14..27).
 # It is item 3's alternative in REFLECT, not a fourth item: the routine writes fill --reflect-steps (3)
 # exactly, so a fourth would be unreachable, and a fourth step would cost every being a generate a beat.
-REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "settle", "skill", "say", "stay_awake"]
+# `tune` is offered here because reflection is the one turn whose prompt is small enough to survive a
+# window the being made too small itself. nomad-being, 2026-11-13: it tuned num_ctx 16384 -> 8192
+# at 10:26Z, meaning to prevent window halts; from the next beat explore (13,582 tokens) and posture
+# (15,418) were refused at preflight, while reflect (about 2,600) ran. In that reflect it recorded
+# that it should tune back to 16384, and could not: tune was not offered here, so the door it
+# needed only existed in the turns its own setting had closed.
+REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "settle", "skill", "say", "stay_awake",
+                 "tune"]
 
 # The OPERATOR's own channel, distinct from the seat's (dp console, Legion 2026-09-07).
 # Seat-owned: the being reads it and cannot write it (reference_f1a.SEAT_OWNED_NOTES).
