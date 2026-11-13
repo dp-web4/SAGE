@@ -123,6 +123,7 @@ def test_a_seat_quiet_through_the_beings_asks_is_named_on_the_receipt(monkeypatc
     q = r.result["seat_quiet"]
     assert "has said nothing in this conversation since" in q and "through 2 of your requests" in q
     assert "away, not stuck" in q and "nothing for you to restart" in q
+    assert "(From this receipt, not from the seat.)" in q
     # this repeat woke nobody (its run was already woken for): the note says so, and still points at the quiet
     assert "no wake was sent" in r.result["note"] and "asked and woken" not in r.result["note"]
     assert "can answer" in r.result["note"] and "it answers them" not in q

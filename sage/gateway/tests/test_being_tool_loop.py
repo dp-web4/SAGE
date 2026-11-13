@@ -1692,6 +1692,45 @@ def test_a_think_only_generate_that_stopped_cleanly_also_retries_without_thinkin
     assert llm.think is True, "thinking must be restored for later turns of the beat"
 
 
+def test_a_think_only_stop_after_acting_ends_the_turn_without_a_nudge():
+    """Acted, then stopped, is done (nomad-being, gemma4:e2b, 11-05..11-12).
+
+    539 of its 652 kept empty turns were thinking that said, in words, that the calls were
+    already made and the task was complete, then a clean stop. Each got "[harness] Your
+    previous attempt returned thinking without a reply ... Act now: one tool call", which it
+    answered by witnessing its own "failure" and apologizing to its seat for it. A turn that
+    already ran a tool and then stops cleanly is the being ending its turn: no retry.
+    """
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    seen = []
+
+    class FakeLLM:
+        max_response_tokens = 3000
+        num_ctx = 16384
+        num_predict_override = None
+        think = True
+
+        def get_chat_response(self, messages, tools=None):
+            seen.append(str(messages[-1].get("content", "")))
+            if len(seen) == 1:
+                return {"content": "", "tool_calls": [{"function": {"name": "witness", "arguments": {"event": "x"}}}],
+                        "raw": {"done_reason": "stop", "prompt_eval_count": 2500, "eval_count": 60, "message": {}}}
+            return {"content": "", "tool_calls": [],
+                    "raw": {"done_reason": "stop", "prompt_eval_count": 2581, "eval_count": 154,
+                            "message": {"content": "",
+                                        "thinking": "I have already executed these calls and received their "
+                                                    "results. The task is complete. I will stop here."}}}
+
+    llm = FakeLLM()
+    r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])
+
+    assert len(seen) == 2, f"no retry after an act and a clean stop, got {len(seen)} generates"
+    assert not any("thinking without a reply" in s for s in seen)
+    assert [i.effector for i, _ in r.trace] == ["witness"], "the one act stands, nothing added"
+    assert r.reply == ""
+    assert llm.think is True
+
+
 def test_an_empty_stop_with_no_thinking_is_left_alone():
     """Only the think-only shape gets the new door.
 

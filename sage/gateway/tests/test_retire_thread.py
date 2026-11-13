@@ -8,6 +8,7 @@ import json
 import os
 import re
 import tempfile
+import time
 from pathlib import Path
 
 from sage.gateway import being_settled as st
@@ -44,7 +45,7 @@ def _go(h, args, now=None):
     """Preview with the same words and reason, then retire with the confirmation it returned (if any)."""
     ok, msg, _ = bt.retire_thread(h, dict(args, preview="true"), now=now)
     assert ok, msg
-    m = re.search(r"confirmation: ([A-Za-z0-9_-]{22})", msg)
+    m = re.search(r"confirmation: ([0-9a-f]{32})", msg)
     return bt.retire_thread(h, dict(args, **({"confirmation": m.group(1)} if m else {})), now=now)
 
 
@@ -167,7 +168,7 @@ def test_no_path_outside_the_declared_set_is_opened_for_writing(tmp_path, monkey
     assert thread_paths({"words": "widget", "preview": "true"}, {"memory_root": str(h)}) == []
     declared = _declared(h, args)
     ok, msg, _ = bt.retire_thread(h, dict(args, preview="true"))
-    token = re.search(r"confirmation: ([A-Za-z0-9_-]{22})", msg).group(1)
+    token = re.search(r"confirmation: ([0-9a-f]{32})", msg).group(1)
     w = _Writes(monkeypatch)
     assert bt.retire_thread(h, dict(args, confirmation=token))[0]
     assert os.path.realpath(h / f".{bt.archive_name(args)}.tmp") in w.paths, "the temp is exercised"
@@ -201,7 +202,7 @@ def test_a_failed_settled_commit_rolls_back_within_the_declared_paths(tmp_path, 
     declared = _declared(h, args)
     entries_before = (h / "settled.json").read_bytes()
     ok, msg, _ = bt.retire_thread(h, dict(args, preview="true"))
-    token = re.search(r"confirmation: ([A-Za-z0-9_-]{22})", msg).group(1)
+    token = re.search(r"confirmation: ([0-9a-f]{32})", msg).group(1)
     monkeypatch.setattr(st, "_commit", lambda *a, **k: (False, "could not write settled.json (OSError)"))
     w = _Writes(monkeypatch)
     ok, msg, changed = bt.retire_thread(h, dict(args, confirmation=token))
@@ -220,7 +221,7 @@ def test_the_verb_retires_and_witnesses():
     d = HestiaF1aDispatcher("sprout-being", str(root), mcp_factory=lambda ep, pid: FakeMcp(ep, pid))
     _home(root)
     pre = d(BeingIntent("retire_thread", {"words": "widget", "reason": "finished", "preview": "true"}), _ALLOW)
-    token = re.search(r"confirmation: ([A-Za-z0-9_-]{22})", pre.result).group(1)
+    token = re.search(r"confirmation: ([0-9a-f]{32})", pre.result).group(1)
     env = d(BeingIntent("retire_thread", {"words": "widget", "reason": "finished", "confirmation": token}), _ALLOW)
     assert env.ok and env.witness_id, env.error
     assert "Build a small neural net" in (root / "todo.md").read_text()
@@ -261,7 +262,7 @@ def test_a_broad_retire_without_confirmation_changes_nothing(tmp_path):
 def test_a_confirmation_is_used_once_and_bound_to_what_was_previewed(tmp_path):
     h = _home(tmp_path)
     args = {"words": "widget", "reason": "r"}
-    get = lambda: re.search(r"confirmation: ([A-Za-z0-9_-]{22})",  # noqa: E731
+    get = lambda: re.search(r"confirmation: ([0-9a-f]{32})",  # noqa: E731
                             bt.retire_thread(h, dict(args, preview="true"))[1]).group(1)
     tok = get()
     with open(h / "todo.md", "a") as f:                       # the source changes after the preview
@@ -269,11 +270,57 @@ def test_a_confirmation_is_used_once_and_bound_to_what_was_previewed(tmp_path):
     ok, msg, _ = bt.retire_thread(h, dict(args, confirmation=tok))
     assert not ok and "changed since that preview" in msg
     ok, msg, _ = bt.retire_thread(h, dict(args, confirmation=tok))
-    assert not ok and "unknown, mistyped or expired" in msg, "a consumed confirmation is gone"
+    assert not ok and "already used" in msg, "a consumed confirmation is gone, and says so"
     tok = get()
     ok, msg, _ = bt.retire_thread(h, dict(args, reason="other", confirmation=tok))
-    assert not ok and "changed since that preview" in msg, "the reason is part of what was previewed"
+    assert not ok and "reason differs" in msg, "the reason is part of what was previewed"
     assert bt.retire_thread(h, dict(args, confirmation=get()))[0]
+
+
+def test_each_confirm_slip_from_nomad_beings_11_04_trace_is_named(tmp_path, monkeypatch):
+    """nomad-being's three refused confirms on 11-04 all read "unknown, mistyped or expired", so it could
+    not tell what to fix. Each slip now gets its own refusal, and none echoes a token back."""
+    h = _home(tmp_path)
+    args = {"words": "widget", "reason": "r"}
+    preview = lambda: bt.retire_thread(h, dict(args, preview="true"))[1]  # noqa: E731
+    get = lambda: re.search(r"confirmation: ([0-9a-f]{32})", preview()).group(1)  # noqa: E731
+    # 03:28Z: a token from an earlier beat (this process never issued it).
+    old = "0123456789abcdef0123456789abcdef"
+    ok, msg, _ = bt.retire_thread(h, dict(args, confirmation=old))
+    assert not ok and "not issued by a preview in this beat" in msg and old not in msg
+    # 04:32Z: a leading character dropped. Hex has no '_' to lose, and a short value is named as such.
+    tok = get()
+    assert not tok.startswith(("_", "-"))
+    ok, msg, _ = bt.retire_thread(h, dict(args, confirmation=tok[1:]))
+    assert not ok and "not a confirmation as a preview prints it" in msg and tok[1:] not in msg
+    # The same value quoted or upper-cased is still that value.
+    assert bt.retire_thread(h, dict(args, confirmation=f"'{tok.upper()}'"))[0]
+    # Expired: past five minutes.
+    (tmp_path / "two").mkdir()
+    h2 = _home(tmp_path / "two")
+    tok = re.search(r"confirmation: ([0-9a-f]{32})",
+                    bt.retire_thread(h2, dict(args, preview="true"))[1]).group(1)
+    real = time.monotonic
+    monkeypatch.setattr(bt.time, "monotonic", lambda: real() + bt._PREVIEW_TTL + 1)
+    ok, msg, _ = bt.retire_thread(h2, dict(args, confirmation=tok))
+    assert not ok and "expired" in msg
+    monkeypatch.setattr(bt.time, "monotonic", real)
+    # Words changed between preview and confirm.
+    tok = re.search(r"confirmation: ([0-9a-f]{32})",
+                    bt.retire_thread(h2, dict(args, preview="true"))[1]).group(1)
+    ok, msg, _ = bt.retire_thread(h2, dict(args, words="widget, gadget", confirmation=tok))
+    assert not ok and "words differ" in msg
+
+
+def test_a_broad_preview_ends_with_the_exact_next_call(tmp_path):
+    """11-03: three retires with no confirmation argument at all. The preview now ends with the whole call."""
+    h = _home(tmp_path)
+    msg = bt.retire_thread(h, {"words": "widget", "reason": "the widget work is done", "preview": "true"})[1]
+    last = msg.splitlines()[-1]
+    tok = re.search(r"confirmation: ([0-9a-f]{32})", msg).group(1)
+    assert last == f"Next call, exactly: retire_thread(words='widget', reason='the widget work is done', " \
+                   f"confirmation='{tok}')"
+    assert bt.retire_thread(h, {"words": "widget", "reason": "the widget work is done", "confirmation": tok})[0]
 
 
 def test_a_preview_without_a_reason_says_how_to_get_a_confirmation(tmp_path):
@@ -297,7 +344,7 @@ def test_a_common_word_is_not_a_topic(tmp_path):
 def test_a_todo_write_failure_is_reported_as_possibly_partial(tmp_path, monkeypatch):
     h = _home(tmp_path)
     args = {"words": "widget", "reason": "r"}
-    tok = re.search(r"confirmation: ([A-Za-z0-9_-]{22})",
+    tok = re.search(r"confirmation: ([0-9a-f]{32})",
                     bt.retire_thread(h, dict(args, preview="true"))[1]).group(1)
     real = bt._write_atomic
 
@@ -378,7 +425,7 @@ def _confirmed(h, args):
     """The retire call main requires: the same args plus the confirmation its preview returned."""
     ok, msg, _ = bt.retire_thread(h, dict(args, preview="true"))
     assert ok, msg
-    m = re.search(r"confirmation: ([A-Za-z0-9_-]{22})", msg)
+    m = re.search(r"confirmation: ([0-9a-f]{32})", msg)
     return dict(args, **({"confirmation": m.group(1)} if m else {}))
 
 def test_a_failed_settled_rollback_preserves_recovery_evidence(tmp_path, monkeypatch):

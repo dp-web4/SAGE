@@ -2000,6 +2000,23 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             # deliberating, and handing it a bigger budget bought a longer silence.
             thought_only = (bool(str(msg.get("thinking") or "").strip())
                             and not str(msg.get("content") or "").strip())
+            # ACTED, THEN STOPPED, IS DONE (nomad-claude, 2026-11-12). A clean stop after this
+            # turn already ran tools is the being's turn ending, not a silence. The seed holds
+            # no tool messages, so one in `convo` means it acted in this turn. nomad-being
+            # (gemma4:e2b), measured on its kept empty turns 11-05..11-12: 539 of 652 thinkings
+            # say so in words ("I have already executed these calls ... the task is complete. I
+            # will stop here."); 531 of those stopped cleanly, median 181 output tokens of 3000.
+            # Each got "[harness] Your previous attempt returned thinking without a reply ...
+            # Act now: one tool call", which it obeyed with a witness of its own "failure",
+            # and its journal and seat messages filled with apologies for a fault it never
+            # had. The Sprout case above (zero acts, a person's question unanswered) has no
+            # tool message in convo, so it is still retried.
+            acted_then_stopped = bool(thought_only and raw.get("done_reason") == "stop"
+                                      and any(m.get("role") == "tool" for m in convo))
+            if acted_then_stopped:
+                thought_only = False
+                print("[tool-loop] acted, then stopped cleanly: the turn is done, no retry",
+                      file=_sys.stderr)
             # A THINK-ONLY TURN IS THE SAME DEFECT WHETHER OR NOT THE WINDOW CUT IT. The
             # discriminator above was computed and then used only inside `done_reason ==
             # "length"`, so the model that deliberated and stopped CLEANLY with an empty
