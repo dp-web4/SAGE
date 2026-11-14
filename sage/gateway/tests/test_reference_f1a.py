@@ -1931,3 +1931,43 @@ def test_a_line_that_only_parses_in_its_block_is_not_refused_when_the_file_parse
     r = disp(BeingIntent("memory_edit", {"path": "notes/e.py", "start_line": 3, "end_line": 3,
                                          "new": "elif y:"}), _ALLOW)
     assert r.ok, f"an edit that leaves the file parsing must not be refused: {r.error}"
+
+
+def test_memory_read_pages_a_directory_listing_by_start_line():
+    """cbp-being 2026-11-14 02:30Z: notes/inbox held 423 entries; start_line 420 end_line 423 came
+    back as the same first 50 names four times. start_line/end_line now page the sorted listing."""
+    disp, root = _disp()
+    inbox = Path(root) / "inbox"
+    inbox.mkdir()
+    for i in range(1, 124):
+        (inbox / f"n{i:03d}.md").write_text("x")
+    # unpaged: the first 50, and the call that reads on
+    r = disp(BeingIntent("memory_read", {"path": "inbox"}), _ALLOW)
+    assert r.ok and r.result.startswith("[directory: 'inbox' holds 123 entries]"), r.result
+    assert "- n050.md" in r.result and "- n051.md" not in r.result, r.result
+    assert "…and 73 more after entry 50" in r.result and "start_line=51" in r.result, r.result
+    assert "(entries" not in r.result
+    # the being's own call, string args as it sends them
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "start_line": "120", "end_line": "123"}),
+             _ALLOW)
+    assert "(entries 120-123 of 123, sorted by name)" in r.result, r.result
+    assert "- n120.md" in r.result and "- n123.md" in r.result and "- n001.md" not in r.result
+    assert "more after" not in r.result
+    # start alone: a page of 50, then the next call
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "start_line": 51}), _ALLOW)
+    assert "(entries 51-100 of 123" in r.result and "start_line=101" in r.result, r.result
+    # end_line alone, and a page asked larger than 50 is cut to 50
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "end_line": "1"}), _ALLOW)
+    assert "(entries 1-1 of 123" in r.result and "- n002.md" not in r.result, r.result
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "start_line": 1, "end_line": 500}), _ALLOW)
+    assert "(entries 1-50 of 123" in r.result, r.result
+    # past the end says so instead of showing an empty list as if the directory were empty
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "start_line": 400}), _ALLOW)
+    assert "past the end" in r.result and "holds 123 entries" in r.result, r.result
+    # a junk number falls back to the first page; find still says it did not run
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "start_line": "abc", "find": "x"}), _ALLOW)
+    assert "- n001.md" in r.result and "find was NOT run" in r.result, r.result
+    # empty directory keeps its answer
+    (Path(root) / "empty").mkdir()
+    r = disp(BeingIntent("memory_read", {"path": "empty", "start_line": 3}), _ALLOW)
+    assert "(empty directory)" in r.result, r.result
