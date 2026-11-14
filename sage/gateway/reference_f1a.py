@@ -1574,8 +1574,35 @@ class ReferenceF1aDispatcher:
                 witness_id=self._witness(f"memory_read {p.name} (does not exist)"))
         if p.is_dir():
             names = sorted(x.name + ("/" if x.is_dir() else "") for x in p.iterdir())
-            listing = "\n".join(f"- {n}" for n in names[:50])
-            more = f"\n…and {len(names) - 50} more" if len(names) > 50 else ""
+            # A LISTING PAST 50 HAD NO WAY ON. Measured 2026-11-14 02:30Z on cbp-being (beat
+            # heartbeat-3e41cd2a17ba): notes/inbox holds 423 entries, the listing showed the first
+            # 50 and "…and 373 more", and the being sent start_line 420 end_line 423 four times,
+            # end_line 1 once, and the bare path twice. All seven calls in that explore phase
+            # returned the same first 50 names, because start_line/end_line on a directory were
+            # dropped without a word. It then journaled "no 2026-11-14 entries found", which it
+            # had never seen. So start_line/end_line now page the name-sorted listing (1-based,
+            # at most 50 a page), and the "more" line names the call that reads on.
+            sl = str(intent.args.get("start_line") or "").strip()
+            el = str(intent.args.get("end_line") or "").strip()
+            try:
+                a = max(1, int(sl)) if sl else 1
+                b = int(el) if el else a + 49
+            except ValueError:
+                a, b = 1, 50
+            b = min(max(b, a), a + 49, len(names))
+            paged = bool(sl or el)
+            if paged and a > len(names):
+                listing = (f"(past the end: '{shown}' holds {len(names)} entries, so start_line={a} "
+                           f"shows nothing. Read from start_line=1.)")
+                more = ""
+            else:
+                window = names[a - 1:b]
+                head = (f"(entries {a}-{b} of {len(names)}, sorted by name)\n"
+                        if paged and names else "")
+                listing = head + "\n".join(f"- {n}" for n in window)
+                rest = len(names) - b
+                more = (f"\n…and {rest} more after entry {b}. To list them: memory_read with path "
+                        f"'{shown}' and start_line={b + 1}." if rest > 0 else "")
             # A find on a directory used to be dropped without a word: the listing came back as
             # if it were the answer. cbp-being sent memory_read {path: "notes", find: ...} three
             # times in one beat (2026-10-21 07:51Z) and once on the governance snapshot root,
