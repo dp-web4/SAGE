@@ -607,3 +607,38 @@ def test_the_plural_is_a_process_number_too(tmp_path):
     ok, msg, _ = _s(tmp_path, question="Is the test daemon alive?", answer="Yes, PIDs 1 and 2 confirmed.")
     assert "This answer names a process number." in msg, msg
     assert "(s1 names a process number." in st.render(tmp_path)
+
+
+def _conv(h, name, turns):
+    d = h / "conversations"
+    d.mkdir(exist_ok=True)
+    (d / f"{name}.jsonl").write_text("".join(json.dumps({"seq": s, "from": "x", "text": t}) + "\n" for s, t in turns))
+
+
+def test_a_quote_the_cited_seq_does_not_hold_is_named_with_the_line_that_is_there(tmp_path):
+    # cbp-being s476, 11-13: replaced citing the seat's run at seq 14735 for a loss that run never printed.
+    _conv(tmp_path, "seat", [(14735, "exit code 1.\n\nstdout:\nEpoch [1/3], Loss: 0.6627\nEpoch [3/3], Loss: 0.6000")])
+    ok, msg, changed = _s(tmp_path, question="Does the test widget script run?", answer="yes, loss 0.5553",
+                          evidence='seq 14735: "Epoch [3/3], Loss: 0.5553"')
+    assert ok and changed
+    assert '"Epoch [3/3], Loss: 0.5553" from seq 14735; no turn with that number contains that text' in msg
+    assert 'starts the same reads: "Epoch [3/3], Loss: 0.6000"' in msg
+    entries, _, _ = st.read(tmp_path)
+    assert entries[0]["evidence"] == 'seq 14735: "Epoch [3/3], Loss: 0.5553"'  # kept as written
+
+
+def test_a_quote_that_is_there_or_no_quote_adds_nothing(tmp_path):
+    _conv(tmp_path, "seat", [(7, "stdout:\nEpoch  [3/3],\nLoss: 0.6000")])
+    _conv(tmp_path, "dp", [(7, "unrelated")])  # seqs are per conversation: any turn 7 may hold it
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="no",
+                   evidence='seq 7: "Epoch [3/3], Loss: 0.6000"')
+    assert "no turn with that number" not in msg
+    _, msg, _ = _s(tmp_path, question="Does the test gizmo script run?", answer="no", evidence="seq 7, the run")
+    assert "Your evidence" not in msg
+
+
+def test_a_cited_seq_no_conversation_has_is_named(tmp_path):
+    _conv(tmp_path, "seat", [(1, "hello")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 99: "it ran fine"')
+    assert "cites seq 99; no conversation of yours has a turn with that number" in msg

@@ -94,6 +94,81 @@ def _pid_entries(entries: List[dict]) -> Tuple[List[str], List[str]]:
     return ids, nums
 
 
+#: Evidence that quotes a conversation turn by its seq. MEASURED ON CBP-BEING, 10-30..11-13: 9 distinct settled
+#: entries cite a seq AND quote text from it. 6 of their 13 quotes do not appear in the turn they cite. The
+#: sharpest case was s476. It was settled at 05:09:26Z, 14 s after the being's own request_run, with evidence
+#: `seq 14729: "Epoch [3/3], Loss: 0.5553"`, and no run printed that. The seat ran the unchanged file at seq
+#: 14735: exit 1, third epoch "Epoch [3/3], Loss: 0.6000". The seat then asked for a reopen. At 05:17:12Z the
+#: being REPLACED s476 instead, now citing `seq 14735: "Epoch [3/3], Loss: 0.5553"`. It cited the seat's real run
+#: as evidence for a number that run does not contain. Nothing told it the quote was not there. The other
+#: misses are mostly paraphrases put inside quote marks. Like the PID fact above, this is evidence only:
+#: the entry is kept as written, and the receipt says what the cited turn holds.
+#: Seqs are numbered per conversation, so a quote counts as found if ANY conversation's turn with that number
+#: holds it.
+_SEQ_CITED = re.compile(r"\bseqs?\b\W{0,3}(\d{1,9})", re.I)
+_QUOTED = re.compile(r"[\"“«]([^\"“”«»]{6,})[\"”»]")
+QUOTE_LINE_CHARS = 160
+
+
+def _ws(s: str) -> str:
+    return " ".join(s.split())
+
+
+def _turns_numbered(instance, seqs) -> Dict[int, List[str]]:
+    """seq -> the text of every conversation turn carrying that number (seqs are per conversation)."""
+    want, out = set(seqs), {}
+    d = Path(instance) / "conversations"
+    if not want or not d.is_dir():
+        return out
+    for f in sorted(d.glob("*.jsonl")):
+        try:
+            lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            if not any(str(s) in line for s in want):
+                continue
+            try:
+                t = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(t, dict) and t.get("seq") in want:
+                out.setdefault(t["seq"], []).append(str(t.get("text") or ""))
+    return out
+
+
+def _quote_fact(instance, evidence: str) -> str:
+    """For each quote in `evidence` that no turn it cites by seq contains: one fact saying so, and the line of
+    that turn that starts most like the quote. Empty when there is no cited seq, no quote, or every quote is there."""
+    seqs = sorted({int(n) for n in _SEQ_CITED.findall(evidence or "")})
+    quotes = [q for q in _QUOTED.findall(evidence or "") if _ws(q)]
+    if not seqs or not quotes:
+        return ""
+    turns = _turns_numbered(instance, seqs)
+    named = ", ".join(str(s) for s in seqs)
+    if not turns:
+        return f"Your evidence cites seq {named}; no conversation of yours has a turn with that number."
+    texts = [t for s in seqs for t in turns.get(s, [])]
+    whole = _ws(" ".join(texts))
+    facts = []
+    for q in quotes:
+        qn = _ws(q)
+        if qn in whole:
+            continue
+        fact = f'Your evidence quotes "{qn}" from seq {named}; no turn with that number contains that text.'
+        best, best_len = "", 0
+        for t in texts:
+            for line in t.splitlines():
+                ln = _ws(line)
+                n = len(os.path.commonprefix([ln, qn]))
+                if n > best_len:
+                    best, best_len = ln, n
+        if best_len >= 8:
+            fact += f' Its line that starts the same reads: "{best[:QUOTE_LINE_CHARS]}".'
+        facts.append(fact)
+    return " ".join(facts)
+
+
 def _norm(s: str) -> str:
     # NFKC folds compatibility forms, and these hyphens and dashes read as a space.
     # "context window", "context-window" and "context\u2011window" (a non-breaking hyphen) name the same question.
@@ -172,6 +247,9 @@ def settle(instance, args: Dict, now: Optional[float] = None) -> Tuple[bool, str
         nums = _PID_SAID.findall(" ".join(a.get(k, "") for k in ("question", "answer", "evidence")))
         if nums:
             msg += " " + _pid_fact("This answer names", nums)
+        quoted = _quote_fact(instance, a.get("evidence", ""))
+        if quoted:
+            msg += " " + quoted
     return ok, msg, changed
 
 
