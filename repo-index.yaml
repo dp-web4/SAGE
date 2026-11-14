@@ -34,6 +34,8 @@ canonical_entry_points:
   python_reference_loop: "sage/docs/UNIFIED_CONSCIOUSNESS_LOOP.md"
   governance_boundary: "sage/gateway/being_gate_client.py"
   state_conditioned_agency: "sage/docs/STATE_CONDITIONED_AGENCY.md"
+  inheritance_boundaries: "sage/docs/PRD_INHERITANCE_BOUNDARIES.md"
+  inheritance_pilot: "research/inheritance/README.md"
   documentation_hub: "docs/README.md"
 
 historical_entry_points:
