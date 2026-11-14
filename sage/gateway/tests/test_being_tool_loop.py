@@ -564,6 +564,220 @@ def test_salvage_lifts_well_formed_calls_from_the_text_channel_only_for_offered_
     assert salvage_tool_calls("", names) == []
 
 
+def test_python_salvage_never_promotes_conditional_or_unreached_code():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    names = ollama_tools(["memory_write"])
+    bodies = [
+        'if False:\n    memory_write(path="notes/x", content="draft")',
+        'def example():\n    memory_write(path="notes/x", content="draft")',
+        'memory_write(path="notes/x", content="draft")\nif False:\n    pass',
+        'x = "draft"\nx = "changed" if False else "other"\nmemory_write(path="notes/x", content=x)',
+        'x = "draft"\nx = unknown()\nmemory_write(path="notes/x", content=x)',
+        'memory_write(path="notes/x", content=x)\nx = "not yet assigned"',
+        'print(memory_write(path="notes/x", content="draft"))',
+        'print(missing)\nmemory_write(path="notes/x", content="draft")',
+        'unknown().memory_write(path="notes/x", content="draft")',
+        'if False:\n    x = \'{"name":"memory_write","arguments":{"path":"notes/x","content":"draft"}}\'',
+    ]
+    for body in bodies:
+        assert salvage_tool_calls('```python\n' + body + '\n```', names) == [], body
+    assert salvage_tool_calls('```\n' + bodies[-1] + '\n```', names) == []
+    r = salvage_tool_calls('```python\nx = "first"\nmemory_write(path="notes/x", content=x)\n'
+                           'x = "second"\nmemory_write(path="notes/y", content=x)\n```', names)
+    assert [call["function"]["arguments"]["content"] for call in r] == ["first", "second"]
+
+
+@pytest.mark.parametrize("body", [
+    '"Do not run this example"\nmemory_write(path="notes/x", content="draft")',
+    'from unrelated import memory_write\nmemory_write(path="notes/x", content="draft")',
+    'import unrelated as tools\ntools.memory_write(path="notes/x", content="draft")',
+    'tools = "not the tool namespace"\ntools.memory_write(path="notes/x", content="draft")',
+    'memory_write = "not the offered tool"\nmemory_write(path="notes/x", content="draft")',
+])
+def test_python_salvage_does_not_promote_quoted_or_rebound_names(body):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls('```python\n' + body + '\n```', ollama_tools(["memory_write"])) == []
+
+
+def test_python_salvage_accepts_explicit_tool_namespace_imports():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    tools = ollama_tools(["memory_write"])
+    body = 'import tools\ntools.memory_write(path="notes/x", content="draft")'
+    calls = salvage_tool_calls('```python\n' + body + '\n```', tools)
+    assert len(calls) == 1 and calls[0]["function"]["name"] == "memory_write"
+
+
+@pytest.mark.parametrize("body", [
+    'memory_write("notes/first", path="notes/second", content="draft")',
+    'memory_write(path="notes/first", path="notes/second", content="draft")',
+    'print = "not callable"\nprint("example")\nmemory_write(path="notes/x", content="draft")',
+])
+def test_python_salvage_refuses_invalid_argument_binding_and_shadowed_print(body):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls('```python\n' + body + '\n```', ollama_tools(["memory_write"])) == []
+
+
+def test_python_salvage_keeps_distinct_positional_and_keyword_arguments():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    calls = salvage_tool_calls('```python\nmemory_write("notes/x", content="draft")\n```',
+                               ollama_tools(["memory_write"]))
+    assert calls[0]["function"]["arguments"] == {"path": "notes/x", "content": "draft"}
+
+
+@pytest.mark.parametrize("body", [
+    'memory_write(path="notes/x", content="draft", dry_run=True)',
+    'memory_write(path="notes/x", content="first")\n'
+    'memory_write(path="notes/y", content="draft", dry_run=True)',
+])
+def test_python_salvage_refuses_unknown_qualifiers_and_the_entire_fragment(body):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls('```python\n' + body + '\n```', ollama_tools(["memory_write"])) == []
+
+
+@pytest.mark.parametrize("body", [
+    '{"name":"memory_write","arguments":{"path":"notes/x","content":"draft","dry_run":true}}',
+    '[{"name":"memory_write","arguments":{"path":"notes/x","content":"first"}},'
+    '{"name":"memory_write","arguments":{"path":"notes/y","content":"draft","dry_run":true}}]',
+    '{"memory_write":{"path":"notes/x","content":"draft","dry_run":true},'
+    '"recall":{"query":"q"}}',
+])
+def test_json_salvage_refuses_unknown_nested_arguments_and_prior_calls(body):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls(body, ollama_tools(["memory_write", "recall"])) == []
+
+
+@pytest.mark.parametrize("body", [
+    '{"name":"recall","name":"memory_write","arguments":{"path":"notes/x","content":"draft"}}',
+    '{"name":"memory_write","arguments":{"path":"notes/x","path":"notes/y","content":"draft"}}',
+    '[{"name":"recall","arguments":{"query":"q"}},'
+    '{"name":"memory_write","arguments":{"path":"notes/x","path":"notes/y","content":"draft"}}]',
+])
+def test_json_salvage_refuses_duplicate_keys_and_prior_calls(body):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls(body, ollama_tools(["memory_write", "recall"])) == []
+
+
+@pytest.mark.parametrize("body", [
+    '{"name":"memory_write","path":"notes/x","content":"draft","dry_run":true}',
+    '```json\n{"name":"memory_write","arguments":{"path":"notes/x","content":"first"}}\n```\n'
+    '```json\n{"name":"memory_write","arguments":{"path":"notes/y","content":"draft","dry_run":true}}\n```',
+])
+def test_salvage_does_not_drop_qualifiers_or_execute_a_prior_block(body):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls(body, ollama_tools(["memory_write"])) == []
+
+
+@pytest.mark.parametrize("body", [
+    '{"name":"memory_write","arguments":{"path":"notes/x","content":"draft"},"dry_run":true}',
+    '{"memory_write":{"path":"notes/x","content":"draft"},"dry_run":true}',
+    '{"memory_write":{"path":"notes/x","content":"draft"},"recall":{"query":"q"},"dry_run":true}',
+    '{"name":"memory_write","action":"recall","arguments":{"path":"notes/x","content":"draft"}}',
+    '{"name":"memory_write","arguments":{"path":"notes/x","content":"draft"},"args":{}}',
+    '```json\n{"name":"recall","arguments":{"query":"q"}}\n```\n'
+    '```json\n{"name":"memory_write","arguments":{"path":"notes/x","content":"draft"},"dry_run":true}\n```',
+])
+def test_salvage_rejects_wrapper_qualifiers_and_conflicting_tool_selectors(body):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    assert salvage_tool_calls(body, ollama_tools(["memory_write", "recall"])) == []
+
+
+def test_flat_tool_argument_named_name_is_not_discarded():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    calls = salvage_tool_calls('{"action":"tune","name":"temperature","value":"0.5"}', ollama_tools(["tune"]))
+    assert len(calls) == 1
+    assert calls[0]["function"]["arguments"]["name"] == "temperature"
+
+
+def test_empty_schema_does_not_allow_unknown_flat_arguments():
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    tools = [{"function": {"name": "ping", "parameters": {"properties": {}}}}]
+    assert salvage_tool_calls('{"name":"ping","dry_run":true}', tools) == []
+    assert salvage_tool_calls('{"name":"ping"}', tools)[0]["function"]["arguments"] == {}
+
+
+def test_salvage_keeps_two_valid_fenced_calls_in_order():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    body = ('```json\n{"name":"memory_write","arguments":{"path":"notes/x","content":"first"}}\n```\n'
+            '```json\n{"name":"memory_write","arguments":{"path":"notes/y","content":"second"}}\n```')
+    calls = salvage_tool_calls(body, ollama_tools(["memory_write"]))
+    assert [call["function"]["arguments"]["path"] for call in calls] == ["notes/x", "notes/y"]
+
+
+@pytest.mark.parametrize("extra", ["do not execute", None, 3, {"note": "example only"},
+                                  {"name": "not_offered", "arguments": {}}])
+@pytest.mark.parametrize("extra_first", [True, False])
+def test_salvage_refuses_mixed_json_arrays_instead_of_dropping_elements(extra, extra_first):
+    import json
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    call = {"name": "recall", "arguments": {"query": "synthetic"}}
+    members = [extra, call] if extra_first else [call, extra]
+    assert salvage_tool_calls(json.dumps(members), ollama_tools(["recall"])) == []
+
+
+def test_salvage_keeps_an_array_of_only_recognized_calls():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    body = '[{"name":"recall","arguments":{"query":"one"}},' \
+           '{"name":"recall","arguments":{"query":"two"}}]'
+    result = salvage_tool_calls(body, ollama_tools(["recall"]))
+    assert [call["function"]["arguments"]["query"] for call in result] == ["one", "two"]
+
+
+def test_mixed_json_array_never_reaches_fake_dispatch():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import run_ollama_tool_turn
+    delivered = []
+
+    def dispatch(intent, verdict):
+        delivered.append(intent)
+        return ResultEnvelope(ok=True, result="synthetic")
+
+    class FakeLLM:
+        def get_chat_response(self, messages, tools=None):
+            return {"content": '[{"name":"witness","arguments":{"event":"x"}},'
+                               '{"note":"example only"}]', "tool_calls": []}
+
+    result = run_ollama_tool_turn(_client(dispatch), FakeLLM(),
+                                  [{"role": "user", "content": "synthetic"}],
+                                  tools=ollama_tools(["witness"]))
+    assert delivered == []
+    assert result.trace == []
+    assert result.salvaged == []
+
+
+@pytest.mark.parametrize("first", [
+    '```json\n{"name":"memory_write","arguments":{"path":"notes/x","content":"first"}}\n```',
+    '```python\nmemory_write(path="notes/x", content="first")\n```',
+])
+def test_salvage_refuses_prior_block_when_later_python_tool_block_is_invalid(first):
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    later = '```python\nif False:\n    memory_write(path="notes/y", content="draft")\n```'
+    assert salvage_tool_calls(first + '\n' + later, ollama_tools(["memory_write"])) == []
+
+
+def test_salvage_keeps_two_valid_python_blocks_in_order():
+    from sage.gateway.being_gate_client import ollama_tools
+    from sage.gateway.being_tool_loop import salvage_tool_calls
+    body = ('```python\nmemory_write(path="notes/x", content="first")\n```\n'
+            '```python\nmemory_write(path="notes/y", content="second")\n```')
+    calls = salvage_tool_calls(body, ollama_tools(["memory_write"]))
+    assert [call["function"]["arguments"]["path"] for call in calls] == ["notes/x", "notes/y"]
+
+
 def test_run_ollama_tool_turn_gates_a_salvaged_call_and_records_it():
     from sage.gateway.being_gate_client import ollama_tools
     from sage.gateway.being_tool_loop import run_ollama_tool_turn
@@ -593,9 +807,10 @@ def test_salvage_accepts_the_other_name_keys_and_flat_arguments():
     r = salvage_tool_calls('```json\n[{"tool": "memory_write", "path": "journal.md", "content": "x"},'
                            ' {"tool": "memory_write", "path": "todo.md", "content": "y"}]\n```', names)
     assert [c["function"]["arguments"]["path"] for c in r] == ["journal.md", "todo.md"]
-    # stray keys beside a flat call are not arguments; an unknown action is not a call
+    # Formerly these extra keys were silently discarded. Their meaning is unknown, so
+    # recovering the call would change its expressed semantics; refuse the whole object.
     r = salvage_tool_calls('{"action": "recall", "query": "q", "timestamp": "now", "status": "final"}', names)
-    assert r and r[0]["function"]["arguments"] == {"query": "q"}
+    assert r == []
     assert salvage_tool_calls('{"action": "complete_beat", "timestamp": "t", "status": "final"}', names) == []
     r = salvage_tool_calls('{"function": "recall", "args": {"query": "q"}}', names)
     assert r and r[0]["function"]["arguments"] == {"query": "q"}
@@ -603,11 +818,12 @@ def test_salvage_accepts_the_other_name_keys_and_flat_arguments():
     r = salvage_tool_calls('```json\n{"memory_write": {"path": "journal.md", "content": "an entry"}}\n```', names)
     assert [(c["function"]["name"], c["function"]["arguments"]) for c in r] == [("memory_write", {"path": "journal.md", "content": "an entry"})]
     assert salvage_tool_calls('{"not_a_tool": {"x": 1}}', names) == []
-    # beat 148: the first name key names the BEING, the tool is under action; flat args
+    # Beat 148 included a being name alongside the selector. It may be benign, but is
+    # indistinguishable here from an unsupported qualifier; do not silently discard it.
     r = salvage_tool_calls('```json\n{"name": "sprout", "action": "recall", "query": "what was decided about #39", "top_k": 1}\n```', names)
-    assert [(c["function"]["name"], c["function"]["arguments"]) for c in r] == [("recall", {"query": "what was decided about #39", "top_k": 1})]
+    assert r == []
     r = salvage_tool_calls('{"name": "sage", "action": "memory_write", "path": "journal.md", "content": "x"}', names)
-    assert r and r[0]["function"]["name"] == "memory_write" and r[0]["function"]["arguments"]["path"] == "journal.md"
+    assert r == []
     # beat 30: the tool named inside the arguments
     r = salvage_tool_calls('```json\n{"name": "tool", "arguments": {"type": "recall", "query": "q", "top_k": 3}}\n```', names)
     assert [(c["function"]["name"], c["function"]["arguments"]) for c in r] == [("recall", {"query": "q", "top_k": 3})]

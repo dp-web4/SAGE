@@ -266,18 +266,34 @@ def run_tool_turn(client: BeingGateClient, generate: GenerateFn,
                           window_full=out.get("window_full"))
 
 
-_FENCE = re.compile(r"```[A-Za-z0-9_+-]*[ \t]*\n(.*?)```", re.S)
+_FENCE = re.compile(r"```([A-Za-z0-9_+-]*)[ \t]*\n(.*?)```", re.S)
 
 
 _NAME_KEYS = ("name", "tool", "action", "function", "tool_name")
 _ARGS_KEYS = ("arguments", "parameters", "args", "input", "params")
 
 
+class _DuplicateJsonKey(ValueError):
+    """Ambiguous JSON must not become an executable tool call."""
+
+
+class _UnsafeToolPayload(ValueError):
+    """A recognized tool payload is unsafe to partially recover."""
+
+
+def _unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateJsonKey(key)
+        result[key] = value
+    return result
+
+
 def _json_calls(text: str, names) -> List[dict]:
-    """`names`: the offered tool names (set) or {name: [param, ...]} (dict) for flat-form
-    argument filtering."""
+    """Recover recognized JSON forms without silently discarding fields."""
     known = names if isinstance(names, dict) else {n: [] for n in names}
-    out, dec, i = [], json.JSONDecoder(), 0
+    out, dec, i = [], json.JSONDecoder(object_pairs_hook=_unique_json_object), 0
     while True:
         starts = [k for k in (text.find("{", i), text.find("[", i)) if k >= 0]
         if not starts:
@@ -285,79 +301,122 @@ def _json_calls(text: str, names) -> List[dict]:
         j = min(starts)
         try:
             obj, end = dec.raw_decode(text, j)
+        except _DuplicateJsonKey:
+            raise _UnsafeToolPayload("duplicate JSON key")
         except ValueError:
             i = j + 1
             continue
         for o in (obj if isinstance(obj, list) else [obj]):
             if not isinstance(o, dict):
+                if isinstance(obj, list):
+                    raise _UnsafeToolPayload("unsupported member of JSON call array")
                 continue
-            # The name key varies by beat: {"name"}, {"tool"}, {"action"}, {"function"}
-            # (Sprout beat 29, 2026-09-05: "action": "peer_ask" and a list of {"tool":
-            # "memory_write", "path": ..., "content": ...} — 3 of 3 turns, 0 lifted).
-            # The FIRST name-shaped key may name the being, not the tool: {"name": "sprout",
-            # "action": "recall", ...} (beat 148, 2026-09-08: three well-formed calls lost,
-            # one of them a real recall about #39). Prefer the key whose value IS a tool.
-            cands = [o[k] for k in _NAME_KEYS if isinstance(o.get(k), str)]
-            name = next((c for c in cands if c in known), cands[0] if cands else None)
-            args = next((o[k] for k in _ARGS_KEYS if isinstance(o.get(k), dict)), None)
-            if name not in known and isinstance(args, dict):
-                # {"name": "tool", "arguments": {"type": "recall", ...}}: the tool named
-                # inside the arguments (Sprout beat 30, 2026-09-05)
-                inner = next((args[k] for k in ("type", "tool", "name", "action") if isinstance(args.get(k), str)), None)
-                if inner in known:
-                    name = inner
-                    args = {k: v for k, v in args.items() if k not in ("type", "tool", "name", "action")}
-            if name not in known:
-                # {"memory_write": {"path": ..., "content": ...}} — the tool name is the KEY and
-                # its arguments the value (measured 2026-09-09, several beats lost this way).
+            # More than one selector is ambiguous; neither is safe to discard.
+            selectors = [(k, o[k]) for k in _NAME_KEYS
+                         if isinstance(o.get(k), str) and o[k] in known]
+            if len(selectors) > 1:
+                raise _UnsafeToolPayload("conflicting tool selectors")
+            arg_keys = [k for k in _ARGS_KEYS if isinstance(o.get(k), dict)]
+            if len(arg_keys) > 1:
+                raise _UnsafeToolPayload("multiple argument objects")
+            name_key, name = selectors[0] if selectors else (None, None)
+            arg_key = arg_keys[0] if arg_keys else None
+            args = o[arg_key] if arg_key else None
+            if name is None and args is not None and o.get("name") == "tool":
+                # Retain the measured {"name":"tool","arguments":{"type":"recall",...}}
+                # form, consuming exactly one recognized inner selector.
+                inner_selectors = [(k, args[k]) for k in ("type", "tool", "name", "action")
+                                   if isinstance(args.get(k), str) and args[k] in known]
+                if len(inner_selectors) > 1:
+                    raise _UnsafeToolPayload("conflicting inner tool selectors")
+                if inner_selectors:
+                    inner_key, name = inner_selectors[0]
+                    name_key = "name"
+                    args = {k: v for k, v in args.items() if k != inner_key}
+            if name is None:
+                # A complete object can hold one or more tool-name keys in order.
                 inner = [(k, v) for k, v in o.items() if k in known and isinstance(v, dict)]
-                if len(inner) > 1:
-                    # ONE object holding a whole beat: {"say": {...}, "memory_write": {...}}.
-                    # Measured 2026-09-18T01:32:11Z — Sprout wrote exactly this, `say` to dp
-                    # FIRST, after two beats of composing an answer it could not send. The
-                    # len == 1 guard discarded every call in the object, so the being's own
-                    # decision to answer a person was dropped on the floor and the beat
-                    # recorded as having done nothing. Emit them all, in written order: dict
-                    # iteration preserves the order they appeared in the text, and that order
-                    # is the being's, not ours.
-                    for k, v in inner:
-                        out.append({"function": {"name": k, "arguments": dict(v)},
-                                    "_salvaged": "json"})
-                    i = max(end, j + 1)
+                if not inner:
+                    if isinstance(obj, list):
+                        raise _UnsafeToolPayload("unrecognized member of JSON call array")
                     continue
-                if len(inner) == 1:
-                    name, args = inner[0]
-                else:
-                    continue
-            if args is None:
-                # flat form: the arguments sit beside the name key; keep only schema params
-                # when the schema is known, so stray keys ("timestamp", "status") never
-                # become arguments of a call.
-                allowed = known.get(name) or []
-                args = {k: v for k, v in o.items()
-                        if k not in _NAME_KEYS and k not in _ARGS_KEYS and (not allowed or k in allowed)}
+                if set(o) != {k for k, _ in inner} or any(set(v) - set(known[k]) for k, v in inner):
+                    raise _UnsafeToolPayload("unsupported tool-map fields")
+                for k, v in inner:
+                    out.append({"function": {"name": k, "arguments": dict(v)},
+                                "_salvaged": "json"})
+                i = max(end, j + 1)
+                continue
+            if args is not None:
+                if set(o) - {name_key, arg_key} or set(args) - set(known[name]):
+                    raise _UnsafeToolPayload("unsupported wrapper or nested arguments")
+            else:
+                # Other keys must all be offered parameters. In particular, a parameter
+                # named "name" is retained when, for example, "action" selected the tool.
+                args = {k: v for k, v in o.items() if k != name_key}
+                if set(args) - set(known[name]):
+                    raise _UnsafeToolPayload("unsupported flat arguments")
             out.append({"function": {"name": name, "arguments": dict(args)}, "_salvaged": "json"})
         i = max(end, j + 1)
 
 
-def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
+def _python_calls_impl(text: str, names: Dict[str, List[str]]) -> List[dict]:
     try:
         tree = ast.parse(text)
     except SyntaxError:
         return []
     consts: Dict[str, Any] = {}
-    for node in ast.walk(tree):
-        if (isinstance(node, ast.Assign) and len(node.targets) == 1
-                and isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.Constant)):
-            consts[node.targets[0].id] = node.value.value
+    assigned: set[str] = set()
     out = []
-    for node in ast.walk(tree):
+    # Interpret only a straight-line, top-level fragment. Walking the tree
+    # promotes calls in `if False`, function definitions, and examples to acts.
+    # Reject the entire fragment on an unsupported statement: partial recovery
+    # can otherwise execute a prefix the being intended to qualify later.
+    for stmt in tree.body:
+        target = None
+        if isinstance(stmt, ast.Import):
+            if any(alias.name != "tools" or alias.asname not in (None, "tools") for alias in stmt.names):
+                return []
+            continue
+        if isinstance(stmt, ast.ImportFrom):
+            if (stmt.level != 0 or stmt.module != "tools" or any(
+                alias.name not in names or alias.asname not in (None, alias.name) for alias in stmt.names
+            )):
+                return []
+            continue
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+            target = stmt.targets[0].id
+            # A literal or result assigned over a tool or its namespace is not a tool call.
+            if target in ("tools", "print") or target in names:
+                return []
+            # A later assignment must not leave an earlier value in scope.
+            consts.pop(target, None)
+            if isinstance(stmt.value, ast.Constant):
+                consts[target] = stmt.value.value
+                assigned.add(target)
+                continue
+            node = stmt.value
+        elif isinstance(stmt, ast.Expr):
+            node = stmt.value
+            # A standalone string may be a quotation or qualification, not executable intent.
+        else:
+            return []
         if not isinstance(node, ast.Call):
-            continue
+            return []
         fn = node.func
-        name = fn.id if isinstance(fn, ast.Name) else (fn.attr if isinstance(fn, ast.Attribute) else None)
-        if name not in names or len(node.args) > len(names[name]):
+        name = fn.id if isinstance(fn, ast.Name) else (
+            fn.attr if isinstance(fn, ast.Attribute) and isinstance(fn.value, ast.Name)
+            and fn.value.id == "tools" else None
+        )
+        # The measured form sometimes prints the result. We never execute it;
+        # only a plain print of already-named results or constants is inert.
+        if target is None and isinstance(fn, ast.Name) and fn.id == "print" and not node.keywords and all(
+            isinstance(arg, ast.Constant) or (isinstance(arg, ast.Name) and arg.id in assigned)
+            for arg in node.args
+        ):
             continue
+        if name not in names or len(node.args) > len(names[name]):
+            return []
         args, ok = {}, True
         # positional arguments map onto the tool's parameters in schema order:
         # memory_write("journal.md", journal_entry) is (path, content) (beat 7, Sprout)
@@ -371,6 +430,10 @@ def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
                 break
         for kw in (node.keywords if ok else []):
             v = kw.value
+            if not kw.arg or kw.arg not in names[name] or kw.arg in args:
+                # Unknown qualifiers may change intended meaning (e.g. a dry run);
+                # duplicate arguments are invalid Python. Never execute a prefix.
+                return []
             if kw.arg and isinstance(v, ast.Constant):
                 args[kw.arg] = v.value
             elif kw.arg and isinstance(v, ast.Name) and v.id in consts:
@@ -378,9 +441,33 @@ def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
             else:
                 ok = False
                 break
-        if ok:
-            out.append({"function": {"name": name, "arguments": args}, "_salvaged": "python"})
+        if not ok:
+            return []
+        out.append({"function": {"name": name, "arguments": args}, "_salvaged": "python"})
+        if target is not None:
+            assigned.add(target)
     return out
+
+
+def _python_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
+    recovered = _python_calls_impl(text, names)
+    if recovered:
+        return recovered
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return []  # Unparseable text has no reliable AST to attribute.
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        name = fn.id if isinstance(fn, ast.Name) else (
+            fn.attr if isinstance(fn, ast.Attribute) and isinstance(fn.value, ast.Name)
+            and fn.value.id == "tools" else None
+        )
+        if name in names:
+            raise _UnsafeToolPayload("unsafe Python tool-shaped block")
+    return []
 
 
 _ATTR_VALUE = r'"((?:[^"\\]|\\.)*)"' + "|" + r"'((?:[^'\\]|\\.)*)'"
@@ -431,13 +518,22 @@ def _attr_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
     return out
 
 def salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
+    """Recover calls, refusing the entire reply if a recognized JSON payload is unsafe."""
+    try:
+        return _salvage_tool_calls(content, tools)
+    except _UnsafeToolPayload:
+        return []
+
+
+def _salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
     """Lift well-formed tool calls that a model put in the TEXT channel, in Ollama's
     tool_calls shape (plus `_salvaged`: "json" | "python" | "attr"). Accepted: a JSON object or
     array of {"name", "arguments"} (fenced or bare), fenced Python `name(k="v", ...)`
     with literal or locally-assigned arguments, positional ones mapped in schema order, or
     the attribute form `name k="v" ...` (see `_attr_calls`), tried last.
-    `tools` is what was offered this turn (Ollama tool specs); only those names count,
-    so prose that mentions a tool is never a call.
+    `tools` is what was offered this turn (Ollama tool specs); only those names count.
+    This structural recovery does not establish intent: a tool-shaped JSON example in prose
+    may still be lifted. Do not treat successful parsing as evidence that an act was intended.
 
     Measured 2026-09-05, same full-beat prompt: qwen2.5:1.5b emits bare JSON (Legion);
     qwen3.8-distill:2b emits fenced JSON in one beat and fenced Python in the next
@@ -448,13 +544,29 @@ def salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
               for t in tools}
     if not content or not params:
         return []
-    blocks = _FENCE.findall(content)
+    blocks = list(_FENCE.finditer(content))
     found: List[dict] = []
-    for text in (blocks or [content]):
-        found.extend(_json_calls(text, params))
-        found.extend(_python_calls(text, params))
-    if blocks and not found:                    # fenced prose, bare call outside the fence
+    if not blocks:
         found.extend(_json_calls(content, params))
+        found.extend(_python_calls(content, params))
+    for block in blocks:
+        language, text = block.group(1).lower(), block.group(2)
+        if language in ("python", "py"):
+            # Do not reinterpret JSON embedded in Python strings as an act.
+            found.extend(_python_calls(text, params))
+        elif language == "json":
+            found.extend(_json_calls(text, params))
+        else:
+            # For an unlabelled/unknown fence, only a complete JSON value is
+            # eligible for JSON recovery; otherwise treat it as Python.
+            try:
+                json.loads(text)
+            except (TypeError, ValueError):
+                found.extend(_python_calls(text, params))
+            else:
+                found.extend(_json_calls(text, params))
+    if blocks and not found:                    # fenced prose, bare call outside the fence
+        found.extend(_json_calls(_FENCE.sub("", content), params))
     if not found:
         found.extend(_attr_calls(content, params))
     return found
