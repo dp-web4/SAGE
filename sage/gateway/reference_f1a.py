@@ -1886,6 +1886,18 @@ class ReferenceF1aDispatcher:
         if rng is not None:
             lines = text.splitlines(keepends=True)
             s0, s1 = rng
+            # LINE 0 (measured on pub-being: 84 refused calls with start_line 0, 2026-09-29 to
+            # 11-14). "lines 0-1 are not all in it: it has 3 lines" reads as a contradiction to a
+            # caller counting from 0; five retries in one beat (11-14 00:15Z) changed only end_line.
+            # Say where numbering starts, and, when 'old' alone would have found the text, say so.
+            if s0 < 1 and s1 >= s0:
+                once = (f" 'old' appears once in '{path}', so the same call without start_line "
+                        f"and end_line would replace it."
+                        if old and old.strip() and text.count(old) == 1 else "")
+                return ResultEnvelope(ok=False, error=(
+                    f"line numbers start at 1: line 1 is the first line of '{path}', and it has "
+                    f"{len(lines)} lines, so start_line {s0} names no line. Nothing was changed. "
+                    f"memory_read shows the current line numbers.{once}"))
             if not (1 <= s0 <= s1 <= len(lines)):
                 return ResultEnvelope(ok=False, error=(
                     f"lines {s0}-{s1} are not all in '{path}': it has {len(lines)} lines. "
