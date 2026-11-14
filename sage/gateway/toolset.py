@@ -243,14 +243,17 @@ def brief_description(name: str, desc: str) -> str:
 # that working room. In this mode a verb the being has not called in its last OFFER_WINDOW_BEATS working
 # beats keeps its NAME, one short line and its parameter NAMES, so it is still offered and still callable
 # (dp, 2026-09-29: every being is offered the whole toolset). Its parameter descriptions and enums are one
-# `describe` away, and a verb the being describes counts as used: it is back in full from the next beat.
+# `describe` away, and a verb the being describes counts as used: from the next beat it is offered like the verbs it uses.
 # Per instance (RESEARCH_GENERALIZATION_RULE): measured on one being.
 OFFER_WINDOW_BEATS = 100
 OFFER_MIN_BEATS = 10          # a record shorter than this says nothing about use: offer everything in full
 BY_NAME_DESC_CHARS = 90
 ALWAYS_FULL = frozenset({DESCRIBE, "stay_awake", "rest"})   # how it finds the rest, keeps going, and stops
+# Mode-neutral on purpose (sprout on #711): under `lean` a described verb comes back lean, not in full, so
+# the note says it returns like the verbs the being uses, which is true in every tool_descriptions mode.
 BY_NAME_NOTE = (" Verbs you have not called in your last {n} working beats are listed with one line and "
-                "parameter names only; describe one and it is back in full from your next beat.")
+                "parameter names only; describe one and, from your next beat, it is offered like the verbs "
+                "you use.")
 
 
 def tool_offer_mode(cfg: Optional[dict]) -> str:
