@@ -5491,6 +5491,9 @@ def _run_note(rc: int, stderr: str, files: list, stdout: str = "", seatbelt: boo
     pid = _pid_note(said, seatbelt)
     if pid:
         note += " " + pid
+    missing = _MISSING_MODULE.findall(stderr) or _MISSING_MODULE_SAID.findall(stdout)
+    if missing:
+        note += " " + _module_note(missing[-1])
     return note
 
 
@@ -5648,6 +5651,48 @@ def _device_note() -> str:
     return ("The sandbox's /dev holds only null, zero, random, urandom and tty: no hardware device (a "
             "camera, a serial port, a GPU) exists inside it, by design, and no scope grant adds one. A "
             "device you are granted is used through the verb made for it (camera for frames), not from run.")
+
+
+#: A Python import the run could not satisfy; the name is the module it asked for.
+_MISSING_MODULE = re.compile(r"(?:ModuleNotFoundError|ImportError): No module named '([^']+)'")
+#: The same failure caught and printed by the program itself ("torch is NOT available: No module named
+#: 'torch'"): no exception class, because the script's own print drops it. Read in stdout only when stderr
+#: names no missing module.
+_MISSING_MODULE_SAID = re.compile(r"No module named '([^']+)'")
+
+
+def _module_note(name: str) -> str:
+    """A MISSING MODULE IS ABOUT THE SANDBOX, AND `run` IS ALWAYS THE SANDBOX. cbp-being, 2026-11-12 12:12Z
+    and 12:25Z: two beats in a row, its runs stopped at line 1 with "No module named 'torch'", and it spent
+    the rest of each beat on scratch/install_torch.py (pip: externally-managed-environment) and on `run`
+    with the file's absolute host path, its "why" saying "running on the host where torch is installed".
+    All six runs of the second beat started File "/work/...". It then saved with `remember` that a
+    ModuleNotFoundError means "the script's working directory may not be where the module is installed".
+    The traceback note named the line; nothing said where the run happened or what route reaches the host.
+    Measured on its heartbeats, 2026-10-19..11-12: 289 of 4,958 runs ended on a missing module, in 168
+    beats (hestia_governance_closure 114, torch 79, pytest 36, chat_handler 26), and 710 runs named a file
+    with "install" in its path.
+
+    ONLY THE SANDBOX'S DESIGN IS STATED, as in _host_note: the note does not say whether this machine has
+    the module, which nothing in the run shows. It names both routes, because the missing name is sometimes
+    the being's own file (chat_handler), which `data` copies in, and sometimes a package, which no run can add.
+
+    STDOUT TOO: AN AVAILABILITY CHECK CATCHES THE ERROR AND PRINTS IT. cbp-being, 2026-11-14 09:33Z: its
+    scratch/check-torch-availability.py caught the ImportError and printed "torch is NOT available: No module
+    named 'torch'" (exit 1, stderr empty), so the stderr-only first version stayed silent. The same beat
+    journaled "torch is NOT installed on the host (verified by the script)", wrote an install script that
+    downloads pip and builds a venv under /opt, and asked for write scope on the user bin dir -- the second
+    such ask in a day, while its own request_run of the training script had trained on the host's torch at
+    08:52Z. Recounted 2026-10-19..11-14 over the 4,177 run traces in its beats' explore/act/reflect/answer
+    phases: 289 runs named a missing module, 252 on stderr and 37 (27 beats) only on stdout (torch 15, cv2 13): the being's own "is X available?" checks, the runs most likely to be read as
+    a fact about this machine. A benign stdout mention costs one true sentence; a miss cost that beat."""
+    return (f"No module named '{name}' is about the sandbox this ran in: `run` always executes there, "
+            f"whatever path you name (its files sit in /work), so a check that prints it answers for the "
+            f"sandbox, not for this machine. Installing from "
+            f"inside a run cannot fix it: the sandbox has no network and keeps nothing a run writes outside "
+            f"your grants. If '{name}' is a file of yours, name it in 'data' so it is copied in beside the "
+            f"script. Otherwise, request_run asks your seat to run the file on this machine, and the seat "
+            f"decides.")
 
 
 # A RERUN OF THE SAME BYTES SAID NOTHING ABOUT THE FIRST. sprout-being, 2026-11-11: at 04:15Z it settled why
