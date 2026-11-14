@@ -712,8 +712,16 @@ def test_a_missing_module_names_the_sandbox_and_both_routes():
     for benign in ("Traceback (most recent call last):\nValueError: shapes (10,) and (100,)",
                    "", "warning: module named 'x' is deprecated"):
         assert "is about the sandbox" not in _run_note(1, benign, ["m.py"]), benign
-    # stdout is the program's own text; only stderr carries the interpreter's import failure
-    assert "is about the sandbox" not in _run_note(0, "", ["m.py"], "No module named 'torch' (expected)")
+    # cbp-being 2026-11-14 09:33Z: a check that catches the ImportError and prints it on stdout (exit 1,
+    # stderr empty) was read as "torch is NOT installed on the host"; stdout now carries the note too
+    caught = _run_note(1, "", ["check-torch-availability.py"], "torch is NOT available: No module named 'torch'")
+    assert "No module named 'torch' is about the sandbox" in caught
+    assert "answers for the sandbox, not for this machine" in caught and "request_run" in caught
+    assert "has torch" not in caught.lower() and "is installed" not in caught.lower()
+    # stderr's name wins over stdout's: the interpreter's failure is the one the run stopped on
+    both = _run_note(1, "ModuleNotFoundError: No module named 'cv2'", ["m.py"], "No module named 'torch'")
+    assert "'cv2' is about the sandbox" in both and "'torch' is about" not in both
+    assert "is about the sandbox" not in _run_note(0, "", ["m.py"], "module named torch loaded fine")
 
 
 def test_the_daemon_answered_note_is_evidence_only_and_names_the_action():
@@ -734,10 +742,10 @@ def test_a_run_that_reports_on_the_host_carries_the_daemons_answer(tmp_path):
     r = d._do_run(BeingIntent("run", {"path": "scratch/probe.py"}))
     assert r.ok, r.error
     assert "not evidence that a service on this machine is down" in r.result["note"]
-    assert "action w-run" in r.result["note"]
+    assert "action w-run" in r.result["outside_the_sandbox"] and "action w-run" not in r.result["note"]
     (home / "scratch" / "plain.py").write_text("print('loss 0.81 after 40 epochs')\n")
     r = d._do_run(BeingIntent("run", {"path": "scratch/plain.py"}))
-    assert r.ok and "action w-run" not in r.result["note"], r.result["note"]
+    assert r.ok and "outside_the_sandbox" not in r.result and "action w-run" not in r.result["note"], r.result
 
 
 def test_the_run_verb_says_the_sandbox_cannot_see_this_machine():
@@ -933,10 +941,15 @@ def test_a_run_reporting_on_the_seat_carries_its_last_turn_and_a_plain_run_does_
     (home / "scratch" / "probe.py").write_text("print('test-seat: no such process')\n")
     r = d._do_run(BeingIntent("run", {"path": "scratch/probe.py"}))
     assert r.ok, r.error
-    assert "test-seat last wrote to you at 2026-11-08T21:32Z (seq 2)" in r.result["note"], r.result["note"]
+    assert "test-seat last wrote to you at 2026-11-08T21:32Z (seq 2)" in r.result["outside_the_sandbox"], r.result
+    assert "last wrote to you" not in r.result["note"]                     # said once, first, not twice
+    keys = list(r.result)
+    assert keys.index("outside_the_sandbox") < keys.index("stdout"), keys  # read before the probe's own line
+    assert "Hestia daemon on this machine was asked" in r.result["outside_the_sandbox"]
     (home / "scratch" / "plain.py").write_text("print('Port 8080 is closed.')\n")
     r = d._do_run(BeingIntent("run", {"path": "scratch/plain.py"}))
-    assert r.ok and "last wrote to you" not in r.result["note"], r.result["note"]
+    assert r.ok and "last wrote to you" not in r.result["note"], r.result    # a port, not the seat
+    assert "last wrote to you" not in r.result["outside_the_sandbox"]       # only the daemon's answer
 
 
 def test_a_long_gap_says_the_seat_may_be_away_not_that_the_probe_is_right(tmp_path):
@@ -953,6 +966,8 @@ def test_a_long_gap_says_the_seat_may_be_away_not_that_the_probe_is_right(tmp_pa
     assert "away, not stuck" not in short and short.endswith('"test-seat".')
     assert "46 h 0 min before this run began" in long_, long_
     assert "may be away, not stuck: there is nothing for you to restart" in long_, long_
+    # whose words: the receipt's, not a reply from the seat (11-12 19:34Z)
+    assert "(From this receipt, not from the seat.) A seat that has not written" in long_, long_
 
 
 def test_a_signal_the_sandbox_reports_as_128_plus_n_is_named():
@@ -1017,3 +1032,52 @@ def test_run_receipt_carries_same_as_before_on_an_unchanged_rerun(tmp_path):
     (home / "scratch" / "two.py").write_text("print(3)\n")
     changed = d._do_run(BeingIntent("run", {"path": "scratch/two.py"}))
     assert changed.ok and "same_as_before" not in changed.result
+
+
+def test_a_pid_a_probe_prints_is_said_to_be_part_of_the_run():
+    from sage.gateway.hestia_dispatch import _pid_note, _run_note
+    note = _pid_note("needle-seat is RUNNING (PID: 3)")
+    assert "if PID 3 here came from such a listing, it is part of this run" in note
+    assert "not a process on this machine" in note and "is down" not in note and "is up" not in note
+    uid = os.getuid()
+    assert f"{uid} at the start of a ps line here is the user id" in _pid_note(
+        f"{uid}           1  0.0  0.0   3360  1200 ?  Ss  07:37  0:00 /usr/bin/bwrap --clearenv")
+    assert _pid_note("rapid 3 steps; the seat answered") == ""            # no process number, no note
+    assert _pid_note("Port 8080 is closed.") == ""
+    assert "part of this run" in _run_note(0, "", ["a.py"], "found PID 3")
+
+
+@needs_sandbox
+def test_pgrep_through_a_shell_finds_its_own_shell_and_the_receipt_says_so(tmp_path):
+    # the being's own probe shape (check-sprout-status.py), measured in the real sandbox
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "probe.py").write_text(
+        "import os, subprocess\n"
+        "r = subprocess.run(\"pgrep -f 'needle-seat.*python3' | head -1\", shell=True, capture_output=True, text=True)\n"
+        "print(f'script {os.getpid()}; needle-seat is RUNNING (PID: {r.stdout.strip()})')\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/probe.py"}))
+    assert r.ok, r.error
+    assert r.result["stdout"].startswith("script 2; needle-seat is RUNNING (PID: 3)"), r.result["stdout"]
+    assert "if PID 3 here came from such a listing, it is part of this run" in r.result["note"]
+
+
+def test_a_seatbelt_run_gets_no_bwrap_numbering_and_no_uid_clause():
+    # legion's review of #700: sandbox-exec has no PID namespace, so a listing shows host numbers
+    from sage.gateway.hestia_dispatch import _host_note, _pid_note, _run_note
+    mac = _pid_note("needle-seat is RUNNING (PID: 48213)", seatbelt=True)
+    assert "PID 1 is the sandbox" not in mac and "numbers its own processes from 1" not in mac
+    assert "a listing here shows no other process" in mac and "if PID 48213 here came from such a listing" in mac
+    uid = os.getuid()
+    assert _pid_note(f"{uid}    1  0.0 /usr/bin/x", seatbelt=True) == ""
+    assert "own process space" not in _host_note(True) and "only its own processes" in _host_note(True)
+    assert "own process space" in _host_note()
+    linux = _run_note(0, "", ["a.py"], "found PID 3")
+    assert "PID 1 is the sandbox" in linux and "own process space" in linux
+    assert "PID 1 is the sandbox" not in _run_note(0, "", ["a.py"], "found PID 3", seatbelt=True)
+
+
+def test_a_plural_pid_a_probe_prints_is_said_to_be_part_of_the_run():
+    # legion's review of #703: "PIDs 1 and 2" (bwrap's own) was read as a daemon being alive
+    from sage.gateway.hestia_dispatch import _run_note
+    note = _run_note(0, "", ["a.py"], "daemon: PIDs 1 and 2 confirmed")
+    assert "if PID 1 here came from such a listing" in note and "own process space" in note, note

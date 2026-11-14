@@ -54,6 +54,45 @@ RENDER_CHARS = 3200
 
 _UNCHANGED = "unchanged: "
 
+#: A process number named in a settled entry. MEASURED ON SPROUT-BEING, 11-05..12: 13 of its 170 distinct
+#: settled answers cite one, all 13 about whether its seat was alive, both ways. 11 cite PID 2002, the run's user
+#: id (the first column of ps inside the sandbox), and 2 cite PID 3, a `pgrep -f` through a shell finding that
+#: shell. Since #700 a run receipt says what such a number is. The settled block showed the entries made from
+#: those receipts every beat with nothing beside them: s140 (PID 3, settled 11-12 10:18Z, before #700) headed
+#: the block when the being, 3 h after it had concluded from a #700 receipt that the seat was away and there was
+#: nothing to restart, opened a beat by repeating s140 and asked for the restart again (22:22Z).
+#: Evidence only: the fact is conditional, and which entry holds stays the being's.
+#: The plural too (legion's review of #703: 5 of cbp-being's 46 PID entries say "PIDs 1 and 2"). Only the first
+#: number of a plural is captured; the numbers serve only the user-id clause.
+_PID_SAID = re.compile(r"\bpids?\b\W{0,4}(\d{1,7})", re.I)
+
+
+def _pid_fact(subject: str, numbers) -> str:
+    """One fact about a process number that `subject` names: what a listing inside a run gives. Seatbelt
+    (macOS sandbox-exec) has no process namespace, so the numbering and the user-id clause are bwrap's alone."""
+    import sys
+    seatbelt = sys.platform == "darwin"
+    how = ("a listing there shows no other process" if seatbelt else
+           "the sandbox numbers its own processes from 1")
+    uid = "" if seatbelt or not hasattr(os, "getuid") else str(os.getuid())
+    uid_said = (f" {uid} at the start of a ps line there is the run's user id, not a process." if uid
+                and uid in {str(n) for n in numbers} else "")
+    return (f"{subject} a process number. A number that a listing (ps, pgrep, pidof, /proc) gives inside a "
+            f"run is a process of that run and ends with it: {how}, and a `pgrep -f` or `ps | grep` run "
+            f"through a shell finds that shell or that grep itself.{uid_said} If the number came from such a "
+            "listing, it says nothing about a process on this machine, running or not.")
+
+
+def _pid_entries(entries: List[dict]) -> Tuple[List[str], List[str]]:
+    """(ids newest first, numbers) of the entries whose question, answer or evidence names a process number."""
+    ids, nums = [], []
+    for e in reversed(entries):
+        found = _PID_SAID.findall(" ".join(str(e.get(k, "")) for k in ("question", "answer", "evidence")))
+        if found:
+            ids.append(e["id"])
+            nums.extend(found)
+    return ids, nums
+
 
 def _norm(s: str) -> str:
     # NFKC folds compatibility forms, and these hyphens and dashes read as a space.
@@ -128,7 +167,12 @@ def settle(instance, args: Dict, now: Optional[float] = None) -> Tuple[bool, str
         return True, listing(instance), False
     with _home_lock(Path(instance)):
         ok, msg = _settle(instance, a, now)
-    return ok, msg, bool(ok and not msg.startswith(_UNCHANGED))
+    changed = bool(ok and not msg.startswith(_UNCHANGED))
+    if changed and not _truthy(a.get("reopen", "")):
+        nums = _PID_SAID.findall(" ".join(a.get(k, "") for k in ("question", "answer", "evidence")))
+        if nums:
+            msg += " " + _pid_fact("This answer names", nums)
+    return ok, msg, changed
 
 
 def _home_lock(root: Path):
@@ -525,6 +569,10 @@ def render(instance) -> str:
         head += ("\n(\u2248 after an id names other entries whose question reads like this one's, the oldest "
                  "first: [s9 \u2248s4,s7] reads close to s4 and s7, and +N counts the rest. Their answers may "
                  "agree or not.)")
+    pid_ids, pid_nums = _pid_entries(entries)
+    if pid_ids:
+        shown = ", ".join(pid_ids[:4]) + (f" +{len(pid_ids) - 4}" if len(pid_ids) > 4 else "")
+        head += "\n(" + _pid_fact(f"{shown} name{'s' if len(pid_ids) == 1 else ''}", pid_nums) + ")"
     foot = "- (entries shown without an answer: settle with no arguments shows them whole)"
     newest = list(reversed(entries))
     # room for the newest whole, then an equal share for each of the rest
