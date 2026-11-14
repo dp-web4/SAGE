@@ -27,7 +27,10 @@ def test_lean_keeps_what_makes_a_call_well_formed_and_drops_the_prose():
         assert lp["required"] == bp["required"], f"{name}: required keys stay"
         for k, v in lp["properties"].items():
             assert bp["properties"][k].get("enum") == v.get("enum"), f"{name}.{k}: a closed value set stays"
-            if name != toolset.DESCRIBE:
+            if (name, k) in toolset.LEAN_KEEP:
+                assert v.get("description") == bp["properties"][k]["description"], \
+                    f"{name}.{k}: a load-bearing line stays (cbp on #711)"
+            elif name != toolset.DESCRIBE:
                 assert "description" not in v, f"{name}.{k}: parameter prose moves behind describe"
         if lp["properties"] and name != toolset.DESCRIBE:
             assert fn["description"].endswith(f"({toolset.DESCRIBE} {name}: what each parameter means.)")
@@ -45,3 +48,9 @@ def test_lean_is_materially_smaller_than_brief():
     b = len(json.dumps(toolset.specs({}, {}, brief=True)))
     l = len(json.dumps(toolset.specs({}, {}, lean=True)))
     assert l < 0.75 * b, f"lean {l} vs brief {b}"
+
+
+def test_every_load_bearing_pair_names_a_real_parameter():
+    """A typo in LEAN_KEEP would silently drop the line it meant to keep."""
+    for verb, param in toolset.LEAN_KEEP:
+        assert verb in _TOOL_SCHEMAS and param in _TOOL_SCHEMAS[verb][1], (verb, param)

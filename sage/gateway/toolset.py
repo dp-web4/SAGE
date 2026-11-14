@@ -215,6 +215,15 @@ DESCRIBE = "describe"
 # (RESEARCH_GENERALIZATION_RULE): whether a small model forms calls as well without parameter prose is
 # the open question, measured per being before it spreads.
 LEAN_POINTER = "({d} {n}: what each parameter means.)"
+# LOAD-BEARING PARAMETER TEXT STAYS UNDER LEAN (cbp on #711). Some parameter descriptions are not labels but
+# fixes, each written after a being failed in a way the fleet observed; behind `describe` they are read only
+# by a being that already suspects it needs them, which is exactly the being they were written for. These
+# stay in the lean spec: run.data (#607, sys.argv: the script gets no arguments), request_run.rerun (#391,
+# an argument, not something to write into the file), memory_read.find (literal, not a regex; ignores the
+# line range), memory_edit.old (exact and unique), game.game (the valid ids are prose, not an enum).
+# Add a pair here when a lean being's per-verb failures show a dropped line was load-bearing.
+LEAN_KEEP = frozenset({("run", "data"), ("request_run", "rerun"), ("memory_read", "find"),
+                       ("memory_edit", "old"), ("game", "game")})
 
 
 def tool_descriptions_mode(cfg: Optional[dict]) -> str:
@@ -380,8 +389,9 @@ def specs(unavail: Optional[Dict[str, str]] = None, enums: Optional[Dict[tuple, 
                     desc = (_re.sub(r"\s*\(Full text: .*?\)\s*$", "", desc.strip()) + " "
                             + LEAN_POINTER.format(d=DESCRIBE, n=name))
                 properties = {k: dict({"type": "string"},
+                                      **({"description": v} if (name, k) in LEAN_KEEP else {}),
                                       **({"enum": list(closed[(name, k)])} if closed.get((name, k)) else {}))
-                              for k in props}
+                              for k, v in props.items()}
             else:
                 properties = {k: dict({"type": "string", "description": v},
                                       **({"enum": list(closed[(name, k)])} if closed.get((name, k)) else {}))
