@@ -206,9 +206,21 @@ BRIEF_DESC_CHARS = 160
 DESCRIBE = "describe"
 
 
+# LEAN (opt-in per instance, `tool_descriptions: "lean"`; SAGE #708, dp 2026-11-14: "name + describe is the
+# right shape"). Brief, and each parameter's DESCRIPTION also moves behind `describe`. The parameter names,
+# required keys and closed value sets (enums) stay: they are what make a call well-formed, and an enum is
+# the meaning of a closed parameter. Measured on nomad-being 11-14 (gemma4:e2b, num_ctx 16384, posture
+# turn 12,998 tokens): brief specs were 22,236 chars, of which verb descriptions were 4,712 and parameter
+# blocks 13,856; lean is 13,801 (-38%). Every verb names where the rest is. Per instance
+# (RESEARCH_GENERALIZATION_RULE): whether a small model forms calls as well without parameter prose is
+# the open question, measured per being before it spreads.
+LEAN_POINTER = "({d} {n}: what each parameter means.)"
+
+
 def tool_descriptions_mode(cfg: Optional[dict]) -> str:
-    """instance.json `tool_descriptions`: "brief" opts in; anything else is the full descriptions."""
-    return "brief" if str((cfg or {}).get("tool_descriptions", "")).strip().lower() == "brief" else "full"
+    """instance.json `tool_descriptions`: "brief" or "lean" opts in; anything else is the full descriptions."""
+    mode = str((cfg or {}).get("tool_descriptions", "")).strip().lower()
+    return mode if mode in ("brief", "lean") else "full"
 
 
 def brief_description(name: str, desc: str) -> str:
@@ -330,9 +342,11 @@ def full_text(name: str, cfg: Optional[dict] = None) -> str:
 
 
 def specs(unavail: Optional[Dict[str, str]] = None, enums: Optional[Dict[tuple, list]] = None,
-          *, brief: bool = False, cfg: Optional[dict] = None) -> List[dict]:
+          *, brief: bool = False, lean: bool = False, cfg: Optional[dict] = None) -> List[dict]:
     """The Ollama tool specs for the whole canonical toolset. Available verbs carry their full
-    description; an unavailable one carries one line and the reason, parameters intact."""
+    description; an unavailable one carries one line and the reason, parameters intact. `lean` is brief
+    plus parameter descriptions behind `describe` (names, required keys and enums stay)."""
+    brief = brief or lean
     unavail = unavail or {}
     # CLOSED VALUE SETS reach the explore turn too (2026-10-01): SAGE #312 put gaze.mode / git_read.op enums
     # in ollama_tools(), but explore is built here, so they never reached the turn where gaze is used.
@@ -356,9 +370,19 @@ def specs(unavail: Optional[Dict[str, str]] = None, enums: Optional[Dict[tuple, 
         else:
             if brief and name != DESCRIBE:
                 desc = brief_description(name, desc)
-            properties = {k: dict({"type": "string", "description": v},
-                                  **({"enum": list(closed[(name, k)])} if closed.get((name, k)) else {}))
-                          for k, v in props.items()}
+            if lean and name != DESCRIBE:
+                # the parameter prose goes; the verb says once where it is (replacing brief's pointer)
+                import re as _re
+                if props:
+                    desc = (_re.sub(r"\s*\(Full text: .*?\)\s*$", "", desc.strip()) + " "
+                            + LEAN_POINTER.format(d=DESCRIBE, n=name))
+                properties = {k: dict({"type": "string"},
+                                      **({"enum": list(closed[(name, k)])} if closed.get((name, k)) else {}))
+                              for k in props}
+            else:
+                properties = {k: dict({"type": "string", "description": v},
+                                      **({"enum": list(closed[(name, k)])} if closed.get((name, k)) else {}))
+                              for k, v in props.items()}
         out.append({"type": "function", "function": {
             "name": name, "description": desc,
             "parameters": {"type": "object", "properties": properties, "required": required}}})
