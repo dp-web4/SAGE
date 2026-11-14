@@ -113,6 +113,13 @@ def delivered_content(pointer: str, workspace: Optional[str]) -> Dict:
     if not target or "://" in target:
         return {"why": "not a file in the shared checkout"}
     shared = (Path(workspace).resolve().parent / "shared-context").resolve()
+    # THE FLEET ADDRESSES FORUM POSTS AS `forum/<file>.md` (hub-notify's own convention: they live at
+    # <ws>/shared-context/forum/). Accepting only the `shared-context/` spelling meant every forum reply
+    # arrived as an envelope with nothing copied: nomad-being, 2026-11-14 11:02Z, read the envelope of the
+    # answer it had asked for eight times, saw no content, and settled that it had the answer anyway.
+    # The guards below still apply after the mapping: no escape, no symlink out, documents only, capped.
+    if target.startswith("forum/"):
+        target = "shared-context/" + target
     if not target.startswith("shared-context/"):
         return {"why": "not in shared-context"}
     p = (shared.parent / target).resolve()
