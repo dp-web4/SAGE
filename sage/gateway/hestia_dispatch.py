@@ -2809,8 +2809,11 @@ class HestiaF1aDispatcher:
             rk = relevance.Ranker([f"{e['question']} {e.get('answer', '')}" for e in entries])
             mine = [entries[i] for _, i in rk.related(relevance.request_subject(query))][:3]
         if mine:
-            out["you_settled"] = ("You settled this, or something close to it, in your own words:\n"
+            out["you_settled"] = ("You settled this, or something close to it, in your own words. These are "
+                                  "your conclusions, not this run's output:\n"
                                   + "\n".join("- " + being_settled._line(e, being_settled.RENDER_ENTRY_CHARS)
+                                              + ("" if e.get("evidence") else
+                                                 " (no evidence given: nothing run or read is behind it)")
                                               for e in mine))
         if found:
             said = relevance.earlier_requests_said(found)
@@ -4827,13 +4830,16 @@ class HestiaF1aDispatcher:
                     "has gone out for this run yet"
                     + ("; it does not make the file run, and the seat still decides" if declined else "")
                     + ". It is not a line in your file.")
-        return ResultEnvelope(ok=True, witness_id=said.witness_id, result={
-            **result,
-            "requested": rel,
-            "asked": seat_conv,
-            "ran": False,
-            "note": note,
-        })
+        # WHAT YOU SETTLED COMES AFTER "NOTHING HAS RUN YET", not before it. cbp 2026-11-14 (heartbeat
+        # 02:43:35, seq 14877/14881): you_settled led the receipt with s499, an evidence-less answer
+        # holding an expectation ("expected to achieve 80-90%+"), the note came last, and the beat's
+        # reflect reported 80-90% as the run's result while the real run (seq 14879) exited 1 with no
+        # accuracy line. Seat answers (unchanged, earlier_on_this) stay above the note; its "above" names them.
+        settled = result.pop("you_settled", None)
+        body = {**result, "requested": rel, "asked": seat_conv, "ran": False, "note": note}
+        if settled:
+            body["you_settled"] = settled
+        return ResultEnvelope(ok=True, witness_id=said.witness_id, result=body)
 
     def _skips_answered_run_wake(self) -> bool:
         """instance.json `answered_run_wake: "skip"` (per-instance; heartbeat.answered_run_wake_for).
