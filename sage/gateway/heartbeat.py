@@ -26,7 +26,7 @@ reflect. Same words, same tools, different order; a presentation, not a fork (Le
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from sage.gateway.fleet_paths import forum_dir as _fleet_forum_dir
 import argparse
@@ -4043,6 +4043,39 @@ def vision_line(metas) -> str:
     return ("Vision: NO frame this beat and none on disk. Your `camera` act IS the request to "
             "see, and a frame rides the beat AFTER the one that captured it.")
 
+def prompt_parts(*, seed: list, posture_turn: Optional[str], posture: str, state: str, recall: str,
+                 inbox: str, digest: str, museum: str, tool_schema_chars: int) -> Dict[str, Any]:
+    """WHAT FILLS THE WINDOW, part by part, in characters (SAGE #708). nomad-being's posture turn was
+    12,998 of 16,384 tokens on 2026-11-13 and nobody, the being included, could say what was in it: the
+    record held only the server's total. This records each part the explore/posture seed was composed
+    from, the state block by its own headings, the tool schemas sent beside it, and the characters
+    actually sent, so a reader can divide the total without reconstructing the prompt by hand.
+    `other` is what was sent beyond the named parts: the system text, the header, the tool-name list
+    and the turn frames. Characters, not tokens; the server's prompt_eval_count stays the token truth."""
+    def _chars(content) -> int:
+        if isinstance(content, str):
+            return len(content)
+        if isinstance(content, list):
+            return sum(len(str(p.get("text", ""))) if isinstance(p, dict) else len(str(p)) for p in content)
+        return len(str(content or ""))
+    sent = sum(_chars(m.get("content")) for m in seed) + len(posture_turn or "")
+    parts = {"posture": len(posture or ""), "state": len(state or ""), "recall": len(recall or ""),
+             "inbox": len(inbox or ""), "digest": len(digest or ""), "museum": len(museum or "")}
+    sections: Dict[str, int] = {}
+    head, size = "(before the first heading)", 0
+    for line in (state or "").splitlines(keepends=True):
+        if line.startswith("#"):
+            if size:
+                sections[head] = sections.get(head, 0) + size
+            head, size = line.strip().lstrip("#").strip()[:80], 0
+        size += len(line)
+    if size:
+        sections[head] = sections.get(head, 0) + size
+    return {"chars": {**parts, "other": max(0, sent - sum(parts.values())), "messages_sent": sent,
+                      "tool_schemas": int(tool_schema_chars or 0)},
+            "state_sections": dict(sorted(sections.items(), key=lambda kv: -kv[1]))}
+
+
 def compose(act_first: bool, *, name: str, machine: str, member: str, posture_text: str,
             header: str, state: str, recall: str, inbox: str, digest: str,
             frame: Optional[str] = None, frames: Optional[list] = None,
@@ -4634,6 +4667,7 @@ def main(argv=None) -> int:
     _enums = _enums or None
     # per instance (RESEARCH_GENERALIZATION_RULE): "brief" shortens available verbs' descriptions
     _tool_desc_mode = _toolset.tool_descriptions_mode(instance_config(instance))
+    _prompt_parts = None            # set once the seed is composed (SAGE #708)
     _explore_specs = _toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief",
                                     cfg=instance_config(instance))
     # EXPECT TRIAL (2026-10-10; private-context legion/egai/PREREG-expect.md): `expect` on game is
@@ -4764,6 +4798,12 @@ def main(argv=None) -> int:
                   "this one, the answer is about different code than the code running you.\n\n"),
         state=state_block,
         recall=recall, inbox=inbox, digest=digest)
+    try:
+        _prompt_parts = prompt_parts(seed=seed, posture_turn=posture_turn, posture=posture(),
+                                     state=state_block, recall=recall, inbox=inbox, digest=digest,
+                                     museum=museum_line, tool_schema_chars=_schema_chars)
+    except Exception as e:          # a measurement never costs the being its beat
+        _prompt_parts = {"error": f"{type(e).__name__}: {e}"[:200]}
 
     # Per-generate trace, written as each generate lands: the record below is written at
     # beat end, so a beat killed by the unit's timeout (Legion 18:33Z 2026-09-05: 840 s cap,
@@ -5194,6 +5234,7 @@ def main(argv=None) -> int:
         # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
         "conversation_settled_turns": _settled_turns,
         "tool_descriptions": _tool_desc_mode,
+        "prompt_parts": _prompt_parts,
         "tool_offer": {"mode": "by_use", "by_name": list(_by_name)} if _by_name else None,
         "decline_closing": decline_closing_for(instance_config(instance)),
         "no_result_line": no_result_line_for(instance_config(instance)),
