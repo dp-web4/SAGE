@@ -1007,11 +1007,26 @@ def _home_lock(root: Path):
 _RETIRED_KEPT = "> Kept whole below, as it was written.\n\n"
 
 
-def _retired_header(stamp: datetime, reason: str) -> str:
+#: Files whose comment line starts with `#`: their retired copy gets the header as comments.
+_HASH_COMMENT_SUFFIXES = frozenset({".py", ".sh", ".bash", ".yaml", ".yml", ".toml"})
+
+
+def _retired_header(stamp: datetime, reason: str, suffix: str = ".md") -> str:
     # NO ACTOR IS NAMED. Nova's hold at dcc5c630b: this read "by cbp-being" in every resident's
     # home, so another being's retired journal would carry a false attribution in its own record.
     # The dispatcher is built from a home and holds no bound identity to name, and the copy sits
     # in that resident's home already; the verb is what is known, so the verb is what is said.
+    #
+    # A RETIRED SCRIPT MUST STILL PARSE (#656). The markdown `>` lines are a SyntaxError on line 1
+    # of a .py: 91 of 93 retired .py on cbp-being failed ast.parse for the header alone, and a
+    # beat that ran one spent its capped steps editing line 1 (the date's leading zero, then the
+    # second line). In a `#`-comment language the header is comments, with the reason on one line
+    # so a newline in it cannot end the comment. Markdown and records keep the `>` form, which
+    # _unfinished_retire splits on.
+    if suffix.lower() in _HASH_COMMENT_SUFFIXES:
+        one_line = " ".join(reason.split())
+        return (f"# RETIRED {stamp:%Y-%m-%d %H:%M}Z with retire_note. No longer current: "
+                f"{one_line}\n# Kept whole below, as it was written.\n\n")
     return (f"> RETIRED {stamp:%Y-%m-%d %H:%M}Z with retire_note. No longer current: {reason}\n"
             + _RETIRED_KEPT)
 
@@ -2239,7 +2254,7 @@ class ReferenceF1aDispatcher:
         while dest.exists():
             dest = p.with_name(f"{p.stem}.retired-{stamp:%Y-%m-%d}-{n}{p.suffix}")
             n += 1
-        _write_atomic(dest, _retired_header(stamp, reason) + body)
+        _write_atomic(dest, _retired_header(stamp, reason, p.suffix) + body)
         result = f"retired {p.name} -> {dest.name}"
         if record:
             fresh, said = _fresh_record(p.name, body, dest.name, stamp)
