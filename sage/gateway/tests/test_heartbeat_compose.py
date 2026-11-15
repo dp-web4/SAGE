@@ -292,3 +292,25 @@ if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):
             f(); print("ok", n)
+
+
+def test_prompt_parts_divides_what_was_sent_into_its_parts():
+    """SAGE #708: nomad-being's posture turn was 12,998 of 16,384 tokens and the record held only the
+    total. prompt_parts names each part, splits the state block by its own headings, and accounts for
+    every character sent, in both presentations."""
+    from sage.gateway.heartbeat import prompt_parts
+    state = "# Your own state\n\n## Todo\n- [ ] a\n- [ ] b\n\n## Journal (tail)\nline one\nline two\nline three\n"
+    for act_first in (False, True):
+        kw = dict(KW, state=state, tools=EXPLORE_TOOLS)
+        seed, second = compose(act_first, **kw)
+        pp = prompt_parts(seed=seed, posture_turn=second, posture=POSTURE, state=state, recall="RECALL",
+                          inbox="INBOX", digest="DIGEST", museum="", tool_schema_chars=1234)
+        c = pp["chars"]
+        sent = sum(len(m["content"]) for m in seed) + len(second or "")
+        assert c["messages_sent"] == sent
+        named = c["posture"] + c["state"] + c["recall"] + c["inbox"] + c["digest"] + c["museum"]
+        assert c["other"] == sent - named >= 0, "system text, header and tool names are what is left"
+        assert c["tool_schemas"] == 1234
+        assert set(pp["state_sections"]) == {"Your own state", "Todo", "Journal (tail)"}
+        assert sum(pp["state_sections"].values()) == len(state)
+        assert list(pp["state_sections"])[0] == "Journal (tail)", "largest section first"
