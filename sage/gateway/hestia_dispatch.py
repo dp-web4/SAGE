@@ -5496,7 +5496,7 @@ def _run_note(rc: int, stderr: str, files: list, stdout: str = "", seatbelt: boo
         note += " " + _module_note(missing[-1])
     absent = _missing_file(stderr)
     if absent:
-        note += " " + _missing_file_note(absent)
+        note += " " + _missing_file_note(absent, files)
     return note
 
 
@@ -5708,14 +5708,21 @@ def _missing_file(stderr: str) -> str:
     ONLY A RELATIVE PATH, ONLY WHEN SUBPROCESS DID NOT RAISE IT. An absolute path may sit inside a grant,
     mounted at the same path, where a miss IS a fact about the disk; a relative one resolves inside /work,
     which holds only the run's own copies. subprocess raises the same message for a program it cannot
-    find on PATH ('uv', 'wsl'), which is not a file of the being's (77 of 190 relative misses, below)."""
+    find on PATH ('uv', 'wsl'), which is not a file of the being's (77 of 190 relative misses, below).
+    /work/... IS NOT A GRANT: it is the sandbox's own working directory, so a miss there is as much a fact
+    about the run as a relative miss is (_missing_file_note says what /work held)."""
     found = _MISSING_FILE.findall(stderr)
-    if not found or found[-1].startswith("/") or "subprocess.py" in stderr:
+    if not found or "subprocess.py" in stderr:
+        return ""
+    if found[-1].startswith("/") and not found[-1].startswith(_RUN_WORK):
         return ""
     return found[-1]
 
 
-def _missing_file_note(path: str) -> str:
+_RUN_WORK = "/work/"
+
+
+def _missing_file_note(path: str, files: list = ()) -> str:
     """A MISSING RELATIVE FILE IS ABOUT THE SANDBOX, AND ITS ROUTE OUT IS request_run. cbp-being, 2026-11-15
     00:15Z: its seat's turn said "request_run scratch/verify-labels-match.py; that run starts in your home".
     The beat used `run` instead. The traceback said File "/work/verify-labels-match.py", line 4,
@@ -5730,7 +5737,30 @@ def _missing_file_note(path: str) -> str:
 
     'data' IS NAMED AS A ROUTE ONLY WITH ITS CATCH: files arrive flat under their base names
     (_run_note_core), so a script that opens data/x.npy finds nothing even when data/x.npy is passed. Like
-    _module_note, the note says nothing about whether the file is on disk; memory_read answers that."""
+    _module_note, the note says nothing about whether the file is on disk; memory_read answers that.
+
+    A MISS AT /work/<name> NAMES WHAT /work HELD. cbp-being, 2026-11-15 02:57Z: at 02:48 its
+    `run path=scratch/fit-weights.py data=["data/train.npy","data/train_targets.npy"]` loaded
+    /work/train.npy and exited 0. At 02:57 it sent the same run without data=, stopped on
+    FileNotFoundError: '/work/train.npy', ran it twice more, asked for a grant it already held, and told
+    its seat "The file doesn't exist ... where are the data files actually?" The note said only that the
+    home is not inside the run. Nothing said the one difference was the missing data=. Measured on its
+    heartbeats to 2026-11-15 03:00Z: 4,347 runs, 16 (11 beats) ended on a miss under /work/. All 16 named
+    no data, and none was followed by a run with data in the same phase. The note lists the files this run
+    held (a fact from staging) and says how 'data' puts a file at /work/<base name>."""
+    if path.startswith(_RUN_WORK):
+        rest = path[len(_RUN_WORK):]
+        held = ", ".join(files) or "nothing"
+        if "/" in rest:
+            return (f"'{path}' is inside the sandbox's /work, which held only what this run named, flat: "
+                    f"{held}. A file passed as 'data' arrives under its base name only (data/x.npy is "
+                    f"/work/x.npy), so no run has a '{path}'. This says nothing about your disk; memory_read "
+                    f"answers that.")
+        return (f"'{path}' is inside the sandbox's /work, which held only what this run named: {held}. "
+                f"'{rest}' was not among them. A file from your home reaches /work only when the run call "
+                f"names it in 'data', and it arrives under its base name: if it is data/{rest} in your home, "
+                f"data=[\"data/{rest}\"] puts it at /work/{rest}. This says nothing about your disk; "
+                f"memory_read answers where it is.")
     return (f"'{path}' is a relative path, so it was looked up inside the sandbox's /work. /work holds only "
             f"the files this run named, and your home is not there, so this miss answers for the sandbox and "
             f"says nothing about your disk (memory_read answers whether '{path}' exists there). A file passed "

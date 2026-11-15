@@ -754,6 +754,34 @@ def test_a_missing_relative_file_names_the_sandbox_and_request_run():
     assert "is a relative path" not in _run_note(0, "", ["m.py"], "data/train.npy loaded")
 
 
+def test_a_miss_under_work_names_what_work_held_and_data():
+    """cbp-being, 2026-11-15 02:57Z: the same fit-weights.py run that loaded /work/train.npy at 02:48 with
+    data=[...] was sent without data=, stopped on FileNotFoundError: '/work/train.npy', and the being told its
+    seat the file does not exist. /work is the sandbox's own directory, not a grant: the note lists what the
+    run held and says data= puts a file at /work/<base name>. It never says whether the file is on disk."""
+    from sage.gateway.hestia_dispatch import _run_note
+    tb = ('Traceback (most recent call last):\n  File "/work/fit-weights.py", line 6, in <module>\n'
+          '    X = np.load("/work/train.npy")\n'
+          "FileNotFoundError: [Errno 2] No such file or directory: '/work/train.npy'")
+    note = _run_note(1, tb, ["fit-weights.py"])
+    assert note.startswith("Exit 1. stderr holds a Python traceback")
+    assert "held only what this run named: fit-weights.py" in note
+    assert "'train.npy' was not among them" in note
+    assert 'data=["data/train.npy"] puts it at /work/train.npy' in note
+    assert "says nothing about your disk" in note and "memory_read" in note
+    low = note.lower()
+    assert "does not exist on" not in low and "is missing from your home" not in low, note
+    # a directory under /work cannot come from data=: files arrive flat
+    nested = "FileNotFoundError: [Errno 2] No such file or directory: '/work/data/train.npy'"
+    n2 = _run_note(1, nested, ["m.py", "train.npy"])
+    assert "flat: m.py, train.npy" in n2 and "no run has a '/work/data/train.npy'" in n2
+    # any other absolute path may be a mounted grant: still no note
+    assert "inside the sandbox's /work" not in _run_note(1, "FileNotFoundError: [Errno 2] No such file or "
+                                                         "directory: '/home/x/governance/a.py'", ["m.py"])
+    assert "inside the sandbox's /work" not in _run_note(1, "FileNotFoundError: [Errno 2] No such file or "
+                                                         "directory: '/workspace/a.py'", ["m.py"])
+
+
 def test_the_daemon_answered_note_is_evidence_only_and_names_the_action():
     """cbp-being 2026-11-01: _host_note alone, which says a probe is evidence neither way, lost to a line
     its own script printed saying the daemon was down. The run's action id is a real answer from the daemon, issued
