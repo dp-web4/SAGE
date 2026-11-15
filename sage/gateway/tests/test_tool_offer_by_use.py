@@ -64,7 +64,7 @@ def test_describe_stay_awake_and_rest_are_never_cut_and_describe_says_how_the_re
     cut = _by_name(toolset.offer_by_name(toolset.specs(brief=True), names))
     full = _by_name(toolset.specs(brief=True))
     assert cut["rest"] == full["rest"] and cut["stay_awake"] == full["stay_awake"]
-    assert "back in full from your next beat" in cut["describe"]["description"]
+    assert "offered like the verbs you use" in cut["describe"]["description"]
     assert cut["describe"]["parameters"] == full["describe"]["parameters"]
 
 
