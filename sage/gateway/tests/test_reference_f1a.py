@@ -492,6 +492,38 @@ def test_a_second_write_says_it_appended_and_the_way_to_start_fresh_works():
     assert open(os.path.join(root, path)).read() == "print('v3')\n"
 
 
+def test_an_absence_made_by_a_retire_names_the_retired_copy():
+    """Measured 2026-11-15 on cbp-being: scratch/xor-mlp-4units.py was retired whole at 21:53Z,
+    its memory_edit at 22:00Z got "does not exist ... memory_write creates a file", and the same
+    beat wrote a different, broken script there from memory. Read, edit and the new-file receipt
+    must each name the retired copy that still holds the text."""
+    disp, root = _disp()
+    path = "scratch/xor.py"
+    assert disp(BeingIntent("memory_write", {"path": path, "content": "print('xor')"}), _ALLOW).ok
+    ret = disp(BeingIntent("retire_note", {"path": path, "reason": "drop the second script"}), _ALLOW)
+    assert ret.ok, ret.error
+    copy = ret.result.split(" -> ", 1)[1].split()[0].rstrip(".")
+    shown = f"scratch/{copy}"
+    edit = disp(BeingIntent("memory_edit", {"path": path, "start_line": 2, "end_line": 3,
+                                            "new": ""}), _ALLOW)
+    assert not edit.ok and "does not exist" in edit.error
+    assert shown in edit.error and "drop the second script" in edit.error, edit.error
+    assert "memory_write creates a file" not in edit.error, edit.error
+    read = disp(BeingIntent("memory_read", {"path": path}), _ALLOW)
+    assert read.ok and shown in read.result and "retire_note moved the whole file" in read.result
+    write = disp(BeingIntent("memory_write", {"path": path, "content": "print('other')"}), _ALLOW)
+    assert write.ok and write.result.startswith("created xor.py"), write.result
+    assert "NEW file under a retired name" in write.result and shown in write.result
+    # a path that was never retired keeps the plain absence
+    plain = disp(BeingIntent("memory_edit", {"path": "scratch/never.py", "old": "a", "new": "b"}), _ALLOW)
+    assert "memory_write creates a file" in plain.error and "retired" not in plain.error
+    # a sibling with a longer stem is not this path's retired copy
+    disp(BeingIntent("memory_write", {"path": "scratch/xor-deep.py", "content": "x = 1"}), _ALLOW)
+    disp(BeingIntent("retire_note", {"path": "scratch/xor-deep.py", "reason": "r"}), _ALLOW)
+    other = disp(BeingIntent("memory_read", {"path": "scratch/xor-d.py"}), _ALLOW)
+    assert "retired" not in other.result, other.result
+
+
 def test_the_todo_can_be_retired_and_starts_fresh_with_what_is_still_open():
     """dp, 2026-10-20: cbp-being was asked to retire old todo items and had no tool that removes
     anything, so the todo grew. An append to todo.md names retire_note; retiring keeps the old list

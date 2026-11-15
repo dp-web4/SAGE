@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import glob as _glob
 import re
 import textwrap
 import contextlib
@@ -1412,6 +1413,58 @@ class ReferenceF1aDispatcher:
                 continue
         return out
 
+    def _retired_copy_of(self, p: Path) -> Optional[tuple]:
+        """(home-relative path of the newest retired copy of `p` beside it, " at <time> (reason
+        given: ...)" or "", how many retired copies there are), or None if there is none.
+
+        AN ABSENCE THAT A RETIRE MADE IS NOT A MISSING FILE. Measured 2026-11-15 on cbp-being:
+        at 21:53Z it retired scratch/xor-mlp-4units.py whole (it meant to drop lines 27-119), and
+        at 22:00Z its memory_edit on that path got "does not exist ... memory_write creates a
+        file". The same beat wrote a new 28-line script there from memory: make_classification
+        data (not XOR) and a "4-unit MLP" built as LogisticRegression, the baseline's own model,
+        and asked the seat to run it to "confirm ~96.5%" (it printed 0.8800 twice). The real
+        script sat whole in xor-mlp-4units.retired-2026-11-15-5.py, and the seat had said so two
+        beats earlier. The receipt named the verb that rewrites and not the copy that holds the
+        text, and the receipt won. So when a retired copy of this name sits beside the path,
+        the absence says where it is, when it was retired and why, and that a write starts a
+        new file rather than bringing it back. Existence only: nothing in the copy is read
+        except its own one-line header."""
+        try:
+            copies = sorted((c for c in p.parent.glob(f"{_glob.escape(p.stem)}.retired-*{_glob.escape(p.suffix)}") if c.is_file()),
+                            key=lambda c: c.stat().st_mtime)
+        except OSError:
+            return None
+        if not copies:
+            return None
+        newest = copies[-1]
+        try:
+            shown = str(newest.relative_to(self.memory_root))
+        except ValueError:
+            shown = newest.name
+        when = ""
+        try:
+            with open(newest, errors="replace") as fh:
+                first = fh.readline().strip()
+        except OSError:
+            first = ""
+        m = re.match(r"^[#>] RETIRED (\S+ \S+) with retire_note\. No longer current: (.*)$", first)
+        if m:
+            reason = m.group(2).strip()
+            if len(reason) > 160:
+                reason = reason[:157] + "..."
+            when = f" at {m.group(1)} (reason given: \"{reason}\")"
+        return shown, when, len(copies)
+
+    @staticmethod
+    def _retired_absence(found: tuple) -> str:
+        """What an absence says when _retired_copy_of found a retired copy."""
+        shown, when, n = found
+        more = f" It is the newest of {n} retired copies of this name." if n > 1 else ""
+        return (f"This path was retired{when}: retire_note moved the whole file to '{shown}', "
+                f"and it is still there.{more} To see it: memory_read {{\"path\": \"{shown}\"}}. "
+                f"Writing this path again starts a new file; it does not bring the retired one "
+                f"back.")
+
     @staticmethod
     def _existence(p: Path) -> str:
         """'absent' | 'present' | 'unknown'. Never guesses.
@@ -1588,7 +1641,9 @@ class ReferenceF1aDispatcher:
                 ok=True,
                 result=(f"[no such path: '{shown}' does not exist. This is not an empty file: there is "
                         f"nothing here to read, so it is no evidence about anything else. "
-                        f"memory_write creates a file inside your home.]"),
+                        + (self._retired_absence(found) if (found := self._retired_copy_of(p))
+                           else "memory_write creates a file inside your home.")
+                        + "]"),
                 witness_id=self._witness(f"memory_read {p.name} (does not exist)"))
         if p.is_dir():
             names = sorted(x.name + ("/" if x.is_dir() else "") for x in p.iterdir())
@@ -1940,9 +1995,11 @@ class ReferenceF1aDispatcher:
                 f"purpose, send 'new' as an empty string)."))
         p = self._safe_path(path, writing=True)
         if not p.exists():
+            found = self._retired_copy_of(p)
             return ResultEnvelope(ok=False, error=(
                 f"nothing to edit: '{path}' does not exist. This is an absence, not a "
-                f"refusal. memory_write creates a file; memory_edit changes one that is there."))
+                f"refusal. " + (self._retired_absence(found) if found else
+                                "memory_write creates a file; memory_edit changes one that is there.")))
         if p.is_dir():
             return ResultEnvelope(ok=False, error=f"'{path}' is a directory.")
         text = p.read_text(errors="replace")
@@ -2428,6 +2485,13 @@ class ReferenceF1aDispatcher:
             f.write(content + ("\n" if not content.endswith("\n") else ""))
         if not existed:
             result = f"created {p.name} with {len(content)} chars"
+            found = self._retired_copy_of(p)
+            if found:
+                # The name had a retired copy beside it: this file is new, not that one back.
+                shown, when, _ = found
+                result += (f". This is a NEW file under a retired name, not the retired one "
+                           f"restored: the old one was retired{when}, and its text is still in "
+                           f"'{shown}'.")
         else:
             result = (f"appended {len(content)} chars to the END of {p.name}, below the {before} "
                       f"lines already there. memory_write only adds; it never replaces or edits a line. "
