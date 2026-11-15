@@ -1125,8 +1125,8 @@ def test_a_think_only_stop_after_acting_ends_the_turn_without_a_nudge():
             return {"content": "", "tool_calls": [],
                     "raw": {"done_reason": "stop", "prompt_eval_count": 2581, "eval_count": 154,
                             "message": {"content": "",
-                                        "thinking": "I have already executed these calls and received their "
-                                                    "results. The task is complete. I will stop here."}}}
+                                        "thinking": "The calls were made and their results came back. "
+                                                    "Nothing is left to do this turn."}}}
 
     llm = FakeLLM()
     r = run_ollama_tool_turn(_client(OK_DISPATCH), llm, [{"role": "user", "content": "hi"}])

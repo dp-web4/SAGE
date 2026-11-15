@@ -1650,8 +1650,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             # turn already ran tools is the being's turn ending, not a silence. The seed holds
             # no tool messages, so one in `convo` means it acted in this turn. nomad-being
             # (gemma4:e2b), measured on its kept empty turns 11-05..11-12: 539 of 652 thinkings
-            # say so in words ("I have already executed these calls ... the task is complete. I
-            # will stop here."); 531 of those stopped cleanly, median 181 output tokens of 3000.
+            # say so in words (the calls were already made, the task was complete, and it would
+            # stop); 531 of those stopped cleanly, median 181 output tokens of 3000.
             # Each got "[harness] Your previous attempt returned thinking without a reply ...
             # Act now: one tool call", which it obeyed with a witness of its own "failure",
             # and its journal and seat messages filled with apologies for a fault it never
