@@ -724,6 +724,36 @@ def test_a_missing_module_names_the_sandbox_and_both_routes():
     assert "is about the sandbox" not in _run_note(0, "", ["m.py"], "module named torch loaded fine")
 
 
+def test_a_missing_relative_file_names_the_sandbox_and_request_run():
+    """cbp-being, 2026-11-15 00:15Z: told to request_run its label check, it used `run`, stopped on
+    FileNotFoundError: 'data/train.npy' in /work, and spent the beat copying data into a sandbox that cannot
+    see its home. The note now says a relative miss answers for the sandbox, that 'data' arrives flat, and
+    names request_run. It never says whether the file exists on disk."""
+    from sage.gateway.hestia_dispatch import _run_note
+    tb = ('Traceback (most recent call last):\n  File "/work/verify-labels-match.py", line 4, in <module>\n'
+          '    X = np.load("data/train.npy")\n'
+          "FileNotFoundError: [Errno 2] No such file or directory: 'data/train.npy'")
+    note = _run_note(1, tb, ["verify-labels-match.py"])
+    assert note.startswith("Exit 1. stderr holds a Python traceback")
+    assert "'data/train.npy' is a relative path" in note
+    assert "says nothing about your disk" in note and "memory_read" in note
+    assert "data/x.npy is x.npy" in note and "request_run" in note
+    low = note.lower()
+    assert "does not exist on" not in low and "is missing from your home" not in low, note
+    # an absolute path may sit inside a mounted grant, where the miss is a disk fact: no note
+    absolute = "FileNotFoundError: [Errno 2] No such file or directory: '/home/x/governance/a.py'"
+    assert "is a relative path" not in _run_note(1, absolute, ["m.py"])
+    # subprocess raises the same text for a program not on PATH: that is not a file of the being's
+    sub = ('Traceback (most recent call last):\n  File "/usr/lib/python3.12/subprocess.py", line 1955\n'
+           "FileNotFoundError: [Errno 2] No such file or directory: 'uv'")
+    assert "is a relative path" not in _run_note(1, sub, ["m.py"])
+    # the last miss is the one the run stopped on; a clean run gets nothing
+    two = ("FileNotFoundError: [Errno 2] No such file or directory: 'a.npy'\nduring handling\n"
+           "FileNotFoundError: [Errno 2] No such file or directory: 'b/c.npy'")
+    assert "'b/c.npy' is a relative path" in _run_note(1, two, ["m.py"])
+    assert "is a relative path" not in _run_note(0, "", ["m.py"], "data/train.npy loaded")
+
+
 def test_the_daemon_answered_note_is_evidence_only_and_names_the_action():
     """cbp-being 2026-11-01: _host_note alone, which says a probe is evidence neither way, lost to a line
     its own script printed saying the daemon was down. The run's action id is a real answer from the daemon, issued

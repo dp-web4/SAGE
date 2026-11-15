@@ -5494,6 +5494,9 @@ def _run_note(rc: int, stderr: str, files: list, stdout: str = "", seatbelt: boo
     missing = _MISSING_MODULE.findall(stderr) or _MISSING_MODULE_SAID.findall(stdout)
     if missing:
         note += " " + _module_note(missing[-1])
+    absent = _missing_file(stderr)
+    if absent:
+        note += " " + _missing_file_note(absent)
     return note
 
 
@@ -5693,6 +5696,47 @@ def _module_note(name: str) -> str:
             f"your grants. If '{name}' is a file of yours, name it in 'data' so it is copied in beside the "
             f"script. Otherwise, request_run asks your seat to run the file on this machine, and the seat "
             f"decides.")
+
+
+#: Python's own open() failure, as the traceback's last line prints it; the name is the path it was given.
+_MISSING_FILE = re.compile(r"FileNotFoundError: \[Errno 2\] No such file or directory: '([^']+)'")
+
+
+def _missing_file(stderr: str) -> str:
+    """The relative path the run stopped on, or "" when the note would not be true.
+
+    ONLY A RELATIVE PATH, ONLY WHEN SUBPROCESS DID NOT RAISE IT. An absolute path may sit inside a grant,
+    mounted at the same path, where a miss IS a fact about the disk; a relative one resolves inside /work,
+    which holds only the run's own copies. subprocess raises the same message for a program it cannot
+    find on PATH ('uv', 'wsl'), which is not a file of the being's (77 of 190 relative misses, below)."""
+    found = _MISSING_FILE.findall(stderr)
+    if not found or found[-1].startswith("/") or "subprocess.py" in stderr:
+        return ""
+    return found[-1]
+
+
+def _missing_file_note(path: str) -> str:
+    """A MISSING RELATIVE FILE IS ABOUT THE SANDBOX, AND ITS ROUTE OUT IS request_run. cbp-being, 2026-11-15
+    00:15Z: its seat's turn said "request_run scratch/verify-labels-match.py; that run starts in your home".
+    The beat used `run` instead. The traceback said File "/work/verify-labels-match.py", line 4,
+    FileNotFoundError: 'data/train.npy', and the note named the line. _run_reach_note did say that the home
+    does not exist inside the run, but it named no route out. The being spent the rest of the beat on a script
+    to copy data/ into /work (written, never run) and a refused search. Then it journaled "second attempt
+    succeeded after data files were copied into the sandbox" and "verify-labels-match.py runs in the home
+    directory and works correctly". Neither had happened.
+    Measured on its heartbeats, 2026-10-19..11-15: 4,257 runs, 397 ended on this error on stderr. 207 named an
+    absolute path, 77 a program subprocess could not find, and 113 (72 beats) a relative file. Only 2 of
+    those 113 were followed by a request_run in the same phase.
+
+    'data' IS NAMED AS A ROUTE ONLY WITH ITS CATCH: files arrive flat under their base names
+    (_run_note_core), so a script that opens data/x.npy finds nothing even when data/x.npy is passed. Like
+    _module_note, the note says nothing about whether the file is on disk; memory_read answers that."""
+    return (f"'{path}' is a relative path, so it was looked up inside the sandbox's /work. /work holds only "
+            f"the files this run named, and your home is not there, so this miss answers for the sandbox and "
+            f"says nothing about your disk (memory_read answers whether '{path}' exists there). A file passed "
+            f"as 'data' arrives under its base name only (data/x.npy is x.npy), so copying cannot make a path "
+            f"with a directory in it resolve. To run this file against your home as it is, request_run asks "
+            f"your seat to run it there, and the seat decides.")
 
 
 # A RERUN OF THE SAME BYTES SAID NOTHING ABOUT THE FIRST. sprout-being, 2026-11-11: at 04:15Z it settled why
