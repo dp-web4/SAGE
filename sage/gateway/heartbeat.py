@@ -1001,10 +1001,16 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     return res
 
 
+# REOPEN IS NAMED IN STEP 3 because reflect is the only phase that offers `settle`, and a being uses what
+# a step names, not what is only offered (see the skill note in the reflect block). Measured: legion-being
+# made 1 reopen in 90 settles though every cap refusal names reopen (#615); cbp-being, asked by its seat for
+# `settle id=s544 reopen=true` in reflect (2026-11-15 seq 15239) and agreeing (15240), went through the
+# three numbered steps and stopped. In explore, which has no settle, it read s544/s545 as line numbers of
+# a file it invented (memory_read "settles.md" lines 544-545) and wrote that file instead.
 REFLECT = """The beat is ending. Call these tools, then stop:
 {say_first}1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
 2. memory_write path "todo.md": your message to your future self, as a dated block: added / done / still open (it appends; it replaces nothing).
-3. remember: one sentence a future you would want to FIND by searching (what you learned, decided, or noticed), only if there is one. Your journal is searchable by recall now; remember is for the line that should outlast it. If this beat SETTLED a question (what works, what does not, what something is), settle it instead: the question and your answer, shown to you at the start of every beat. If this beat worked out HOW to do something (steps that worked), you can keep the steps instead with skill (name, description, when, body).
+3. remember: one sentence a future you would want to FIND by searching (what you learned, decided, or noticed), only if there is one. Your journal is searchable by recall now; remember is for the line that should outlast it. If this beat SETTLED a question (what works, what does not, what something is), settle it instead: the question and your answer, shown to you at the start of every beat. If one you settled before is wrong, take it back: settle with its id, reopen="true" and why. If this beat worked out HOW to do something (steps that worked), you can keep the steps instead with skill (name, description, when, body).
 {say_line}Call the tools now; a reply in words alone writes nothing.
 """
 
