@@ -1396,6 +1396,37 @@ def test_memory_read_find_whose_spaces_kept_it_from_matching_says_so():
     assert "exactly as sent" in r.result, r.result
 
 
+def test_memory_read_find_with_regex_escapes_tries_the_text_without_them():
+    """#724: cbp-being sent find `MLP\\(4,` (search's regex dialect) to a file holding `MLP(4,`
+    on 28 lines, got 'found none', and concluded there was 'no mention of MLP(4,)'. find stays
+    literal, but a miss whose query has backslash-escaped metacharacters also tries the text
+    without the backslashes, and says so."""
+    disp, root = _disp()
+    rel = _scratch(root, "m = MLP(4, 8)\nx = 1\npath = 'train.npy'\nraw = r'a\\(b'\n")
+    # the cbp-being case: escaped query, unescaped text in the file
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "MLP\\(4,"}), _ALLOW)
+    assert r.ok and r.witness_id
+    assert "[found 1 line of 4 in 'scratch/train.py' containing 'MLP(4,'" in r.result, r.result
+    assert "line 1: m = MLP(4, 8)" in r.result, r.result
+    assert "not a regex" in r.result and "backslash escapes" in r.result, r.result
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "train\\.npy"}), _ALLOW)
+    assert "line 3:" in r.result and "backslash escapes" in r.result, r.result
+    # an exact match of the escaped text still wins, with no unescape note
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "a\\(b"}), _ALLOW)
+    assert "line 4:" in r.result and "backslash escapes" not in r.result, r.result
+    # still absent without the backslashes: found none names both texts
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "MLP\\(64,"}), _ALLOW)
+    assert r.result.startswith("[found none:"), r.result
+    assert "'MLP(64,' was looked for: it is not there either" in r.result, r.result
+    assert "true answer about this one file only" in r.result, r.result
+    # a backslash before an ordinary character is not a regex escape: no retry, no note
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "x\\n"}), _ALLOW)
+    assert r.result.startswith("[found none:") and "was looked for" not in r.result, r.result
+    # whitespace and escapes together: trimmed, then unescaped
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "  MLP\\(4,"}), _ALLOW)
+    assert "line 1:" in r.result and "'MLP(4,'" in r.result, r.result
+
+
 def test_memory_read_find_caps_the_list_and_says_how_many_more():
     disp, root = _disp()
     rel = _scratch(root, "".join(f"loss{i} = 0\n" for i in range(1, 101)))

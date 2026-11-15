@@ -102,6 +102,9 @@ _SAME_NAME_SHOWN = 5
 # longer than _FIND_LINE_CHARS, saying it did both.
 _FIND_SHOWN = 40
 _FIND_LINE_CHARS = 240
+#: A backslash before a regex metacharacter (or before a backslash): what `search`'s dialect
+#: looks like inside a literal find (#724).
+_REGEX_ESCAPE = re.compile(r"\\([.()\[\]{}*+?|^$\\])")
 
 
 _MAGIC = ((b"\xff\xd8\xff", "a JPEG image"), (b"\x89PNG\r\n\x1a\n", "a PNG image"),
@@ -1749,15 +1752,29 @@ class ReferenceF1aDispatcher:
         if not hits and find.strip() != find:
             loose = find.strip()
             hits = [(i, ln) for i, ln in enumerate(lines, 1) if loose in ln]
+        # A REGEX DIALECT CARRIED OVER FROM `search` (#724). `search` takes an extended regex, so
+        # a being that switches to find keeps its escapes: `MLP\(4,` found none on cbp-being while
+        # `MLP(4,` was on 28 lines, and its next thought was "no mention of MLP(4,)". find stays
+        # literal (an exact match of the escaped text still wins), but when nothing matches and the
+        # query has backslash-escaped metacharacters, the text without those backslashes is tried
+        # too, and the answer says which text it is about.
+        unescaped = ""
+        if not hits and _REGEX_ESCAPE.search(loose or find):
+            unescaped = _REGEX_ESCAPE.sub(r"\1", loose or find)
+            hits = [(i, ln) for i, ln in enumerate(lines, 1) if unescaped in ln]
         ignored = "".join(
             f" {key}={args[key]} was ignored: find looks at every line of the file."
             for key in ("start_line", "end_line") if args.get(key) is not None
         )
         if not hits:
+            also = (f" find is literal text, not a regex, so the backslashes were also removed "
+                    f"and {unescaped!r} was looked for: it is not there either."
+                    if unescaped else "")
             return ResultEnvelope(ok=True, result=(
                 f"[found none: no line of '{shown}' contains {find!r} (literal text, "
-                f"case-sensitive; all {len(lines)} lines were looked at). This is a true answer "
-                f"about this one file only: it says nothing about any other file.{ignored}]"),
+                f"case-sensitive; all {len(lines)} lines were looked at).{also} This is a true "
+                f"answer about this one file only: it says nothing about any other file."
+                f"{ignored}]"),
                 witness_id=self._witness(f"memory_read {p.name} (find: 0 matches)"))
         shown_hits = hits[:_FIND_SHOWN]
         cut = False
@@ -1767,10 +1784,14 @@ class ReferenceF1aDispatcher:
                 ln, cut = ln[:_FIND_LINE_CHARS] + "…", True
             rows.append(f"line {i}: {ln}")
         n = len(hits)
-        what = repr(loose) if loose else repr(find)
+        what = repr(unescaped or loose or find)
         head = (f"[found {n} line{'' if n == 1 else 's'} of {len(lines)} in '{shown}' "
                 f"containing {what} (literal text, case-sensitive)]")
-        if loose:
+        if unescaped:
+            head += (f"\n[find is literal text, not a regex. No line contains {find!r} as sent; "
+                     f"your query had backslash escapes, and these lines contain it without "
+                     f"them]")
+        elif loose:
             head += (f"\n[no line contains {find!r} exactly as sent, with its leading/trailing "
                      f"spaces; these contain it with those spaces removed]")
         notes = []
