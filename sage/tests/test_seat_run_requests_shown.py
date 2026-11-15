@@ -149,3 +149,42 @@ def test_cmd_decline_refuses_a_cut_reason_and_posts_nothing(monkeypatch, tmp_pat
     posted.clear(); A.cut_anyway = False; A.reason = "The result is at seq 4211; the sha has not moved."
     srr.cmd_decline(A())
     assert len(posted) == 1
+
+
+def test_decline_closes_a_request_whose_file_the_being_retired(monkeypatch, tmp_path):
+    """#721 (cbp-being 2026-11-15, seq 15545): the being asked to run scratch/x.py, then retired it
+    in the same beat, and `decline` refused with "is not a file", so the request could never be
+    closed. A decline executes nothing: it needs the path inside the home and a pending request for
+    it, not the file. `run` still needs the file."""
+    (tmp_path / "scratch").mkdir()
+    (tmp_path / "scratch" / "x.retired-2026-11-15.py").write_text("print(1)\n")
+    posted = []
+    reqs = [{"seq": 15545, "text": f"{srr.MARKER} scratch/x.py\nwhy: check it"}]
+    monkeypatch.setattr(srr, "_say", lambda t: posted.append(t))
+    monkeypatch.setattr(srr, "_instance", lambda: tmp_path)
+    monkeypatch.setattr(srr, "_conv_id", lambda: "cbp-claude")
+    monkeypatch.setattr(srr, "pending", lambda inst, cid: list(reqs))
+
+    class A:
+        path = "scratch/x.py"; seq = None; cut_anyway = False; unrequested = False
+        reason = "You retired this file in the same beat, so there is nothing to run."
+    srr._decline(A())
+    assert len(posted) == 1 and posted[0].startswith(f"{srr.MARKER} I did not run scratch/x.py.")
+    assert srr.answers_line([15545]) in posted[0], posted[0]
+    # --seq naming that request binds too
+    posted.clear(); A.seq = [15545]
+    srr._decline(A())
+    assert len(posted) == 1
+    # still refused: nothing pending for that path, or a path outside the home
+    posted.clear(); A.seq = None; reqs.clear()
+    with pytest.raises(SystemExit) as e:
+        srr._decline(A())
+    assert "no pending request" in str(e.value) and posted == []
+    A.path = "../elsewhere.py"
+    with pytest.raises(SystemExit) as e:
+        srr._decline(A())
+    assert "outside the being's home" in str(e.value) and posted == []
+    # run keeps its existence check
+    with pytest.raises(SystemExit) as e:
+        srr._target(tmp_path, "scratch/x.py")
+    assert "is not a file" in str(e.value)

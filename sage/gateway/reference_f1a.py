@@ -102,6 +102,9 @@ _SAME_NAME_SHOWN = 5
 # longer than _FIND_LINE_CHARS, saying it did both.
 _FIND_SHOWN = 40
 _FIND_LINE_CHARS = 240
+#: A backslash before a regex metacharacter (or before a backslash): what `search`'s dialect
+#: looks like inside a literal find (#724).
+_REGEX_ESCAPE = re.compile(r"\\([.()\[\]{}*+?|^$\\])")
 
 
 _MAGIC = ((b"\xff\xd8\xff", "a JPEG image"), (b"\x89PNG\r\n\x1a\n", "a PNG image"),
@@ -1073,11 +1076,26 @@ def _home_lock(root: Path):
 _RETIRED_KEPT = "> Kept whole below, as it was written.\n\n"
 
 
-def _retired_header(stamp: datetime, reason: str) -> str:
+#: Files whose comment line starts with `#`: their retired copy gets the header as comments.
+_HASH_COMMENT_SUFFIXES = frozenset({".py", ".sh", ".bash", ".yaml", ".yml", ".toml"})
+
+
+def _retired_header(stamp: datetime, reason: str, suffix: str = ".md") -> str:
     # NO ACTOR IS NAMED. Nova's hold at dcc5c630b: this read "by cbp-being" in every resident's
     # home, so another being's retired journal would carry a false attribution in its own record.
     # The dispatcher is built from a home and holds no bound identity to name, and the copy sits
     # in that resident's home already; the verb is what is known, so the verb is what is said.
+    #
+    # A RETIRED SCRIPT MUST STILL PARSE (#656). The markdown `>` lines are a SyntaxError on line 1
+    # of a .py: 91 of 93 retired .py on cbp-being failed ast.parse for the header alone, and a
+    # beat that ran one spent its capped steps editing line 1 (the date's leading zero, then the
+    # second line). In a `#`-comment language the header is comments, with the reason on one line
+    # so a newline in it cannot end the comment. Markdown and records keep the `>` form, which
+    # _unfinished_retire splits on.
+    if suffix.lower() in _HASH_COMMENT_SUFFIXES:
+        one_line = " ".join(reason.split())
+        return (f"# RETIRED {stamp:%Y-%m-%d %H:%M}Z with retire_note. No longer current: "
+                f"{one_line}\n# Kept whole below, as it was written.\n\n")
     return (f"> RETIRED {stamp:%Y-%m-%d %H:%M}Z with retire_note. No longer current: {reason}\n"
             + _RETIRED_KEPT)
 
@@ -1805,11 +1823,41 @@ class ReferenceF1aDispatcher:
             # A directory read is a listing: name, kind, size — what a being without `ls`
             # needs to stop guessing filenames (five guesses in one beat, 2026-09-09).
             rows = []
-            for x in sorted(p.iterdir(), key=lambda y: (not y.is_dir(), y.name))[:200]:
+            for x in sorted(p.iterdir(), key=lambda y: y.name):
                 try:
-                    rows.append(f"- {x.name}/" if x.is_dir() else f"- {x.name}  ({x.stat().st_size} bytes)")
+                    rows.append(f"{x.name}/" if x.is_dir() else f"{x.name}  ({x.stat().st_size} bytes)")
                 except OSError:
-                    rows.append(f"- {x.name}  (unreadable)")
+                    rows.append(f"{x.name}  (unreadable)")
+            names = rows
+            # A LISTING PAST 50 HAD NO WAY ON. Measured 2026-11-14 02:30Z on cbp-being (beat
+            # heartbeat-3e41cd2a17ba): notes/inbox holds 423 entries, the listing showed the first
+            # 50 and "…and 373 more", and the being sent start_line 420 end_line 423 four times,
+            # end_line 1 once, and the bare path twice. All seven calls in that explore phase
+            # returned the same first 50 names, because start_line/end_line on a directory were
+            # dropped without a word. It then journaled "no 2026-11-14 entries found", which it
+            # had never seen. So start_line/end_line now page the name-sorted listing (1-based,
+            # at most 50 a page), and the "more" line names the call that reads on.
+            sl = str(intent.args.get("start_line") or "").strip()
+            el = str(intent.args.get("end_line") or "").strip()
+            try:
+                a = max(1, int(sl)) if sl else 1
+                b = int(el) if el else a + 49
+            except ValueError:
+                a, b = 1, 50
+            b = min(max(b, a), a + 49, len(names))
+            paged = bool(sl or el)
+            if paged and a > len(names):
+                listing = (f"(past the end: '{shown}' holds {len(names)} entries, so start_line={a} "
+                           f"shows nothing. Read from start_line=1.)")
+                more = ""
+            else:
+                window = names[a - 1:b]
+                head = (f"(entries {a}-{b} of {len(names)}, sorted by name)\n"
+                        if paged and names else "")
+                listing = head + "\n".join(f"- {n}" for n in window)
+                rest = len(names) - b
+                more = (f"\n…and {rest} more after entry {b}. To list them: memory_read with path "
+                        f"'{shown}' and start_line={b + 1}." if rest > 0 else "")
             # A find on a directory used to be dropped without a word: the listing came back as
             # if it were the answer. cbp-being sent memory_read {path: "notes", find: ...} three
             # times in one beat (2026-10-21 07:51Z) and once on the governance snapshot root,
@@ -1825,10 +1873,11 @@ class ReferenceF1aDispatcher:
             unrun = (f"\n[find was NOT run: find looks inside ONE file, and '{shown}' is a "
                      f"directory. Nothing was searched, so nothing is known yet about which file "
                      f"holds '{find.strip()[:80]}'. {how}]") if find.strip() else ""
-            listing = (f"[directory: '{shown}' holds {len(rows)} entr{'y' if len(rows) == 1 else 'ies'}]\n"
-                       + ("\n".join(rows) if rows else "(empty directory)") + unrun)
-            return ResultEnvelope(ok=True, result=listing,
-                                  witness_id=self._witness(f"memory_read {p.name}/ (listing)"))
+            return ResultEnvelope(
+                ok=True,
+                result=(f"[directory: '{shown}' holds {len(names)} entr{'y' if len(names) == 1 else 'ies'}]\n"
+                        + (listing + more if names else "(empty directory)") + unrun),
+                witness_id=self._witness(f"memory_read {p.name}/ (listing)"))
         # A BINARY FILE IS NOT READ AS TEXT. Measured on sprout-being, 2026-10-12..26: 21 memory_reads
         # of its own camera frames (.jpg) returned the JPEG's bytes decoded as text ("\ufffd\ufffd...JFIF..."),
         # 10 of them from 10-25 19:20Z on. In the same window its model began emitting byte soup and JPEG
@@ -2018,15 +2067,29 @@ class ReferenceF1aDispatcher:
         if not hits and find.strip() != find:
             loose = find.strip()
             hits = [(i, ln) for i, ln in enumerate(lines, 1) if loose in ln]
+        # A REGEX DIALECT CARRIED OVER FROM `search` (#724). `search` takes an extended regex, so
+        # a being that switches to find keeps its escapes: `MLP\(4,` found none on cbp-being while
+        # `MLP(4,` was on 28 lines, and its next thought was "no mention of MLP(4,)". find stays
+        # literal (an exact match of the escaped text still wins), but when nothing matches and the
+        # query has backslash-escaped metacharacters, the text without those backslashes is tried
+        # too, and the answer says which text it is about.
+        unescaped = ""
+        if not hits and _REGEX_ESCAPE.search(loose or find):
+            unescaped = _REGEX_ESCAPE.sub(r"\1", loose or find)
+            hits = [(i, ln) for i, ln in enumerate(lines, 1) if unescaped in ln]
         ignored = "".join(
             f" {key}={args[key]} was ignored: find looks at every line of the file."
             for key in ("start_line", "end_line") if args.get(key) is not None
         )
         if not hits:
+            also = (f" find is literal text, not a regex, so the backslashes were also removed "
+                    f"and {unescaped!r} was looked for: it is not there either."
+                    if unescaped else "")
             return ResultEnvelope(ok=True, result=(
                 f"[found none: no line of '{shown}' contains {find!r} (literal text, "
-                f"case-sensitive; all {len(lines)} lines were looked at). This is a true answer "
-                f"about this one file only: it says nothing about any other file.{ignored}]"),
+                f"case-sensitive; all {len(lines)} lines were looked at).{also} This is a true "
+                f"answer about this one file only: it says nothing about any other file."
+                f"{ignored}]"),
                 witness_id=self._witness(f"memory_read {p.name} (find: 0 matches)"))
         shown_hits = hits[:_FIND_SHOWN]
         cut = False
@@ -2036,10 +2099,14 @@ class ReferenceF1aDispatcher:
                 ln, cut = ln[:_FIND_LINE_CHARS] + "…", True
             rows.append(f"line {i}: {ln}")
         n = len(hits)
-        what = repr(loose) if loose else repr(find)
+        what = repr(unescaped or loose or find)
         head = (f"[found {n} line{'' if n == 1 else 's'} of {len(lines)} in '{shown}' "
                 f"containing {what} (literal text, case-sensitive)]")
-        if loose:
+        if unescaped:
+            head += (f"\n[find is literal text, not a regex. No line contains {find!r} as sent; "
+                     f"your query had backslash escapes, and these lines contain it without "
+                     f"them]")
+        elif loose:
             head += (f"\n[no line contains {find!r} exactly as sent, with its leading/trailing "
                      f"spaces; these contain it with those spaces removed]")
         notes = []
@@ -2170,6 +2237,18 @@ class ReferenceF1aDispatcher:
         if rng is not None:
             lines = text.splitlines(keepends=True)
             s0, s1 = rng
+            # LINE 0 (measured on pub-being: 84 refused calls with start_line 0, 2026-09-29 to
+            # 11-14). "lines 0-1 are not all in it: it has 3 lines" reads as a contradiction to a
+            # caller counting from 0; five retries in one beat (11-14 00:15Z) changed only end_line.
+            # Say where numbering starts, and, when 'old' alone would have found the text, say so.
+            if s0 < 1 and s1 >= s0:
+                once = (f" 'old' appears once in '{path}', so the same call without start_line "
+                        f"and end_line would replace it."
+                        if old and old.strip() and text.count(old) == 1 else "")
+                return ResultEnvelope(ok=False, error=(
+                    f"line numbers start at 1: line 1 is the first line of '{path}', and it has "
+                    f"{len(lines)} lines, so start_line {s0} names no line. Nothing was changed. "
+                    f"memory_read shows the current line numbers.{once}"))
             if not (1 <= s0 <= s1 <= len(lines)):
                 return ResultEnvelope(ok=False, error=(
                     f"lines {s0}-{s1} are not all in '{path}': it has {len(lines)} lines. "
@@ -2523,7 +2602,7 @@ class ReferenceF1aDispatcher:
         while dest.exists():
             dest = p.with_name(f"{p.stem}.retired-{stamp:%Y-%m-%d}-{n}{p.suffix}")
             n += 1
-        _write_atomic(dest, _retired_header(stamp, reason) + body)
+        _write_atomic(dest, _retired_header(stamp, reason, p.suffix) + body)
         result = f"retired {p.name} -> {dest.name}"
         if record:
             fresh, said = _fresh_record(p.name, body, dest.name, stamp)

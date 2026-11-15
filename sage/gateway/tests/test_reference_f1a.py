@@ -1703,6 +1703,28 @@ def test_memory_edit_reads_delete_lines_as_the_range():
     assert "replaced lines 2-6 (5 lines)" in r.result, r.result
 
 
+def test_memory_edit_start_line_zero_says_numbering_starts_at_one():
+    """2026-11-14 00:15Z: pub-being sent start_line 0 five times in one beat; the refusal said
+    'lines 0-1 are not all in it: it has 3 lines', and each retry changed only end_line."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "scratch").mkdir(exist_ok=True)
+    f = home / "scratch" / "h.py"
+    f.write_text("import sys\nimport sys\nprint('abc')\n")
+    r = disp(BeingIntent("memory_edit", {"path": "scratch/h.py", "old": "abc", "start_line": 0, "end_line": 1, "new": ""}), _ALLOW)
+    assert not r.ok and "line numbers start at 1" in r.error and "Nothing was changed" in r.error, r.error
+    assert "without start_line and end_line would replace it" in r.error, r.error
+    assert f.read_text() == "import sys\nimport sys\nprint('abc')\n"
+    # 'old' repeated (or absent): no claim that dropping the range would work
+    r = disp(BeingIntent("memory_edit", {"path": "scratch/h.py", "old": "import sys", "start_line": 0, "end_line": 2, "new": ""}), _ALLOW)
+    assert not r.ok and "line numbers start at 1" in r.error and "would replace it" not in r.error, r.error
+    r = disp(BeingIntent("memory_edit", {"path": "scratch/h.py", "start_line": 0, "end_line": 2, "new": ""}), _ALLOW)
+    assert not r.ok and "line numbers start at 1" in r.error and "would replace it" not in r.error, r.error
+    # a range past the end keeps the existing refusal
+    r = disp(BeingIntent("memory_edit", {"path": "scratch/h.py", "start_line": 2, "end_line": 9, "new": ""}), _ALLOW)
+    assert not r.ok and "are not all in" in r.error, r.error
+
+
 def test_memory_edit_delete_lines_agrees_with_end_line_or_refuses():
     disp, root = _disp()
     home = Path(root)
@@ -1858,6 +1880,37 @@ def test_memory_read_find_whose_spaces_kept_it_from_matching_says_so():
     r = disp(BeingIntent("memory_read", {"path": rel, "find": "    head = nn.Linear"}), _ALLOW)
     assert "line 2:   head = nn.Linear(5, 8)" in r.result, r.result
     assert "exactly as sent" in r.result, r.result
+
+
+def test_memory_read_find_with_regex_escapes_tries_the_text_without_them():
+    """#724: cbp-being sent find `MLP\\(4,` (search's regex dialect) to a file holding `MLP(4,`
+    on 28 lines, got 'found none', and concluded there was 'no mention of MLP(4,)'. find stays
+    literal, but a miss whose query has backslash-escaped metacharacters also tries the text
+    without the backslashes, and says so."""
+    disp, root = _disp()
+    rel = _scratch(root, "m = MLP(4, 8)\nx = 1\npath = 'train.npy'\nraw = r'a\\(b'\n")
+    # the cbp-being case: escaped query, unescaped text in the file
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "MLP\\(4,"}), _ALLOW)
+    assert r.ok and r.witness_id
+    assert "[found 1 line of 4 in 'scratch/train.py' containing 'MLP(4,'" in r.result, r.result
+    assert "line 1: m = MLP(4, 8)" in r.result, r.result
+    assert "not a regex" in r.result and "backslash escapes" in r.result, r.result
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "train\\.npy"}), _ALLOW)
+    assert "line 3:" in r.result and "backslash escapes" in r.result, r.result
+    # an exact match of the escaped text still wins, with no unescape note
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "a\\(b"}), _ALLOW)
+    assert "line 4:" in r.result and "backslash escapes" not in r.result, r.result
+    # still absent without the backslashes: found none names both texts
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "MLP\\(64,"}), _ALLOW)
+    assert r.result.startswith("[found none:"), r.result
+    assert "'MLP(64,' was looked for: it is not there either" in r.result, r.result
+    assert "true answer about this one file only" in r.result, r.result
+    # a backslash before an ordinary character is not a regex escape: no retry, no note
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "x\\n"}), _ALLOW)
+    assert r.result.startswith("[found none:") and "was looked for" not in r.result, r.result
+    # whitespace and escapes together: trimmed, then unescaped
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "  MLP\\(4,"}), _ALLOW)
+    assert "line 1:" in r.result and "'MLP(4,'" in r.result, r.result
 
 
 def test_memory_read_find_caps_the_list_and_says_how_many_more():
@@ -2427,3 +2480,43 @@ def test_a_line_that_only_parses_in_its_block_is_not_refused_when_the_file_parse
     r = disp(BeingIntent("memory_edit", {"path": "notes/e.py", "start_line": 3, "end_line": 3,
                                          "new": "elif y:"}), _ALLOW)
     assert r.ok, f"an edit that leaves the file parsing must not be refused: {r.error}"
+
+
+def test_memory_read_pages_a_directory_listing_by_start_line():
+    """cbp-being 2026-11-14 02:30Z: notes/inbox held 423 entries; start_line 420 end_line 423 came
+    back as the same first 50 names four times. start_line/end_line now page the sorted listing."""
+    disp, root = _disp()
+    inbox = Path(root) / "inbox"
+    inbox.mkdir()
+    for i in range(1, 124):
+        (inbox / f"n{i:03d}.md").write_text("x")
+    # unpaged: the first 50, and the call that reads on
+    r = disp(BeingIntent("memory_read", {"path": "inbox"}), _ALLOW)
+    assert r.ok and r.result.startswith("[directory: 'inbox' holds 123 entries]"), r.result
+    assert "- n050.md" in r.result and "- n051.md" not in r.result, r.result
+    assert "…and 73 more after entry 50" in r.result and "start_line=51" in r.result, r.result
+    assert "(entries" not in r.result
+    # the being's own call, string args as it sends them
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "start_line": "120", "end_line": "123"}),
+             _ALLOW)
+    assert "(entries 120-123 of 123, sorted by name)" in r.result, r.result
+    assert "- n120.md" in r.result and "- n123.md" in r.result and "- n001.md" not in r.result
+    assert "more after" not in r.result
+    # start alone: a page of 50, then the next call
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "start_line": 51}), _ALLOW)
+    assert "(entries 51-100 of 123" in r.result and "start_line=101" in r.result, r.result
+    # end_line alone, and a page asked larger than 50 is cut to 50
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "end_line": "1"}), _ALLOW)
+    assert "(entries 1-1 of 123" in r.result and "- n002.md" not in r.result, r.result
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "start_line": 1, "end_line": 500}), _ALLOW)
+    assert "(entries 1-50 of 123" in r.result, r.result
+    # past the end says so instead of showing an empty list as if the directory were empty
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "start_line": 400}), _ALLOW)
+    assert "past the end" in r.result and "holds 123 entries" in r.result, r.result
+    # a junk number falls back to the first page; find still says it did not run
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "start_line": "abc", "find": "x"}), _ALLOW)
+    assert "- n001.md" in r.result and "find was NOT run" in r.result, r.result
+    # empty directory keeps its answer
+    (Path(root) / "empty").mkdir()
+    r = disp(BeingIntent("memory_read", {"path": "empty", "start_line": 3}), _ALLOW)
+    assert "(empty directory)" in r.result, r.result

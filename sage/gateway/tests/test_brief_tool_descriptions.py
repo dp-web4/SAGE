@@ -72,10 +72,10 @@ def test_the_heartbeat_offers_and_measures_the_same_specs():
     import re
     src = re.sub(r"\s+", " ", inspect.getsource(hb.main))
     # the same arguments to both, this seat's config included (toolset.here: what a verb says on this seat)
-    assert ('_toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief", cfg=instance_config(instance))'
-            in src)
+    assert ('_toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief", '
+            'lean=_tool_desc_mode == "lean", cfg=instance_config(instance))' in src)
     assert ('_schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief", '
-            'cfg=instance_config(instance))' in src)
+            'lean=_tool_desc_mode == "lean", cfg=instance_config(instance))' in src)
     assert '"tool_descriptions": _tool_desc_mode' in src, "the beat record says which mode ran"
 
 

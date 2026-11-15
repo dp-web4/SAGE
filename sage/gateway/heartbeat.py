@@ -26,7 +26,7 @@ reflect. Same words, same tools, different order; a presentation, not a fork (Le
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from sage.gateway.fleet_paths import forum_dir as _fleet_forum_dir
 import argparse
@@ -241,7 +241,14 @@ def _offered_explore_tools_before_the_canonical_toolset(body_reading: Optional[d
 # written only in the journal did not reach the next beat (being_settled, measured on Sprout 10-14..27).
 # It is item 3's alternative in REFLECT, not a fourth item: the routine writes fill --reflect-steps (3)
 # exactly, so a fourth would be unreachable, and a fourth step would cost every being a generate a beat.
-REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "settle", "skill", "say", "stay_awake"]
+# `tune` is offered here because reflection is the one turn whose prompt is small enough to survive a
+# window the being made too small itself. nomad-being, 2026-11-13: it tuned num_ctx 16384 -> 8192
+# at 10:26Z, meaning to prevent window halts; from the next beat explore (13,582 tokens) and posture
+# (15,418) were refused at preflight, while reflect (about 2,600) ran. In that reflect it recorded
+# that it should tune back to 16384, and could not: tune was not offered here, so the door it
+# needed only existed in the turns its own setting had closed.
+REFLECT_TOOLS = ["memory_write", "remember", "memory_read", "retire_note", "settle", "skill", "say", "stay_awake",
+                 "tune"]
 
 # The OPERATOR's own channel, distinct from the seat's (dp console, Legion 2026-09-07).
 # Seat-owned: the being reads it and cannot write it (reference_f1a.SEAT_OWNED_NOTES).
@@ -1065,10 +1072,16 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     return res
 
 
+# REOPEN IS NAMED IN STEP 3 because reflect is the only phase that offers `settle`, and a being uses what
+# a step names, not what is only offered (see the skill note in the reflect block). Measured: legion-being
+# made 1 reopen in 90 settles though every cap refusal names reopen (#615); cbp-being, asked by its seat for
+# `settle id=s544 reopen=true` in reflect (2026-11-15 seq 15239) and agreeing (15240), went through the
+# three numbered steps and stopped. In explore, which has no settle, it read s544/s545 as line numbers of
+# a file it invented (memory_read "settles.md" lines 544-545) and wrote that file instead.
 REFLECT = """The beat is ending. Call these tools, then stop:
 {say_first}1. memory_write path "journal.md": one entry starting with the date {date}: what you did, what you noticed, what was refused and why you think so, what you want next time.
 2. memory_write path "todo.md": your message to your future self, as a dated block: added / done / still open (it appends; it replaces nothing).
-3. remember: one sentence a future you would want to FIND by searching (what you learned, decided, or noticed), only if there is one. Your journal is searchable by recall now; remember is for the line that should outlast it. If this beat SETTLED a question (what works, what does not, what something is), settle it instead: the question and your answer, shown to you at the start of every beat. If this beat worked out HOW to do something (steps that worked), you can keep the steps instead with skill (name, description, when, body).
+3. remember: one sentence a future you would want to FIND by searching (what you learned, decided, or noticed), only if there is one. Your journal is searchable by recall now; remember is for the line that should outlast it. If this beat SETTLED a question (what works, what does not, what something is), settle it instead: the question and your answer, shown to you at the start of every beat. If one you settled before is wrong, take it back: settle with its id, reopen="true" and why. If this beat worked out HOW to do something (steps that worked), you can keep the steps instead with skill (name, description, when, body).
 {say_line}Call the tools now; a reply in words alone writes nothing.
 """
 
@@ -1385,7 +1398,7 @@ _SCHEMA_CHARS_FLOOR = 12_000   # at least the 18-verb measurement, for when the 
 
 
 def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[dict] = None,
-                      brief: bool = False, cfg: Optional[dict] = None) -> Optional[int]:
+                      brief: bool = False, cfg: Optional[dict] = None, lean: bool = False) -> Optional[int]:
     """Chars the offered verbs' schemas actually cost. None rather than a guess if it
     cannot be computed — a budgeted number that nobody checks is how 4,000 survived from
     13 verbs to 18. Callers must route None through _schema_chars_fallback, never `or`
@@ -1399,7 +1412,7 @@ def _schema_chars_for(offered, unavail: Optional[dict] = None, enums: Optional[d
             # here, so the cost is measured on THOSE specs, not on the full descriptions
             from sage.gateway import toolset
             names = set(offered)
-            return len(json.dumps([t for t in toolset.specs(unavail, enums, brief=brief, cfg=cfg)
+            return len(json.dumps([t for t in toolset.specs(unavail, enums, brief=brief, lean=lean, cfg=cfg)
                                    if t["function"]["name"] in names]))
         from sage.gateway.being_gate_client import ollama_tools
         return len(json.dumps(ollama_tools(list(offered))))
@@ -4140,6 +4153,39 @@ def vision_line(metas) -> str:
     return ("Vision: NO frame this beat and none on disk. Your `camera` act IS the request to "
             "see, and a frame rides the beat AFTER the one that captured it.")
 
+def prompt_parts(*, seed: list, posture_turn: Optional[str], posture: str, state: str, recall: str,
+                 inbox: str, digest: str, museum: str, tool_schema_chars: int) -> Dict[str, Any]:
+    """WHAT FILLS THE WINDOW, part by part, in characters (SAGE #708). nomad-being's posture turn was
+    12,998 of 16,384 tokens on 2026-11-13 and nobody, the being included, could say what was in it: the
+    record held only the server's total. This records each part the explore/posture seed was composed
+    from, the state block by its own headings, the tool schemas sent beside it, and the characters
+    actually sent, so a reader can divide the total without reconstructing the prompt by hand.
+    `other` is what was sent beyond the named parts: the system text, the header, the tool-name list
+    and the turn frames. Characters, not tokens; the server's prompt_eval_count stays the token truth."""
+    def _chars(content) -> int:
+        if isinstance(content, str):
+            return len(content)
+        if isinstance(content, list):
+            return sum(len(str(p.get("text", ""))) if isinstance(p, dict) else len(str(p)) for p in content)
+        return len(str(content or ""))
+    sent = sum(_chars(m.get("content")) for m in seed) + len(posture_turn or "")
+    parts = {"posture": len(posture or ""), "state": len(state or ""), "recall": len(recall or ""),
+             "inbox": len(inbox or ""), "digest": len(digest or ""), "museum": len(museum or "")}
+    sections: Dict[str, int] = {}
+    head, size = "(before the first heading)", 0
+    for line in (state or "").splitlines(keepends=True):
+        if line.startswith("#"):
+            if size:
+                sections[head] = sections.get(head, 0) + size
+            head, size = line.strip().lstrip("#").strip()[:80], 0
+        size += len(line)
+    if size:
+        sections[head] = sections.get(head, 0) + size
+    return {"chars": {**parts, "other": max(0, sent - sum(parts.values())), "messages_sent": sent,
+                      "tool_schemas": int(tool_schema_chars or 0)},
+            "state_sections": dict(sorted(sections.items(), key=lambda kv: -kv[1]))}
+
+
 def compose(act_first: bool, *, name: str, machine: str, member: str, posture_text: str,
             header: str, state: str, recall: str, inbox: str, digest: str,
             frame: Optional[str] = None, frames: Optional[list] = None,
@@ -4763,7 +4809,9 @@ def main(argv=None) -> int:
     _enums = _enums or None
     # per instance (RESEARCH_GENERALIZATION_RULE): "brief" shortens available verbs' descriptions
     _tool_desc_mode = _toolset.tool_descriptions_mode(instance_config(instance))
+    _prompt_parts = None            # set once the seed is composed (SAGE #708)
     _explore_specs = _toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief",
+                                    lean=_tool_desc_mode == "lean",
                                     cfg=instance_config(instance))
     # EXPECT TRIAL (2026-10-10; private-context legion/egai/PREREG-expect.md): `expect` on game is
     # offered on ON beats only, so its effect can be compared; the arm is recorded on every beat.
@@ -4782,6 +4830,7 @@ def main(argv=None) -> int:
     # and the window's schema measurement must describe exactly what the model is handed
     _explore_tools = [t["function"]["name"] for t in _explore_specs]
     _schema_measured = _schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief",
+                                         lean=_tool_desc_mode == "lean",
                                          cfg=instance_config(instance))
     if _by_name:
         # measured on the specs that are SENT: _schema_chars_for rebuilds them without the by-name cut
@@ -4933,6 +4982,13 @@ def main(argv=None) -> int:
     # differed for 395 beats and nothing recorded it. A record that names delivery makes
     # that gap visible in one field instead of in a captured payload.
     prompt_sizes["images_attached"] = sum(len(m.get("images") or []) for m in seed)
+    try:
+        _prompt_parts = prompt_parts(seed=seed, posture_turn=posture_turn, posture=posture(),
+                                     state=state_block, recall=blocks["recall"], inbox=inbox,
+                                     digest=blocks["digest"], museum=museum_line,
+                                     tool_schema_chars=_schema_chars)
+    except Exception as e:          # a measurement never costs the being its beat
+        _prompt_parts = {"error": f"{type(e).__name__}: {e}"[:200]}
 
     # Per-generate trace, written as each generate lands: the record below is written at
     # beat end, so a beat killed by the unit's timeout (Legion 18:33Z 2026-09-05: 840 s cap,
@@ -5387,6 +5443,7 @@ def main(argv=None) -> int:
         # active per-instance policies, recorded when on (RESEARCH_GENERALIZATION_RULE)
         "conversation_settled_turns": _settled_turns,
         "tool_descriptions": _tool_desc_mode,
+        "prompt_parts": _prompt_parts,
         "tool_offer": {"mode": "by_use", "by_name": list(_by_name)} if _by_name else None,
         "decline_closing": decline_closing_for(instance_config(instance)),
         "no_result_line": no_result_line_for(instance_config(instance)),
