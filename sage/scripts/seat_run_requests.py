@@ -231,12 +231,18 @@ def bind(inst: Path, cid: str, rel: str, seqs: list[int] | None) -> list[int]:
     return sorted(int(t["seq"]) for t in open_reqs if _same_file(inst, request_path(t), rel))
 
 
-def _target(inst: Path, raw: str) -> Path:
-    """Resolve inside the being's home. The being's path check is not trusted a second time:
-    this process is the one that will execute, so it does its own."""
+def _in_home(inst: Path, raw: str) -> Path:
+    """Resolve inside the being's home, whether or not the file is there."""
     p = (inst / raw).resolve() if not os.path.isabs(raw) else Path(raw).resolve()
     if not (p == inst.resolve() or inst.resolve() in p.parents):
         sys.exit(f"refusing: {p} is outside the being's home {inst.resolve()}")
+    return p
+
+
+def _target(inst: Path, raw: str) -> Path:
+    """Resolve inside the being's home. The being's path check is not trusted a second time:
+    this process is the one that will execute, so it does its own."""
+    p = _in_home(inst, raw)
     if not p.is_file():
         sys.exit(f"refusing: {p} is not a file")
     return p
@@ -569,7 +575,11 @@ def cmd_decline(args) -> None:
 
 def _decline(args) -> None:
     inst = _instance()
-    rel = _target(inst, args.path).relative_to(inst.resolve())
+    # A DECLINE EXECUTES NOTHING, so it needs the path inside the home but not the file (#721).
+    # cbp-being 2026-11-15 seq 15545: its reflect retire_note renamed the script it had just asked
+    # to run, `decline` refused with "is not a file", and the request stayed owed with no way to
+    # close it. bind() and require_pending still demand a pending request for exactly this path.
+    rel = _in_home(inst, args.path).relative_to(inst.resolve())
     seqs = bind(inst, _conv_id(), str(rel), args.seq)
     require_pending(seqs, rel, args, "declined")
     text = decline_text(rel, args.reason, seqs, decline_closing(inst))
