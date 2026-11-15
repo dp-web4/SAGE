@@ -2747,8 +2747,12 @@ def _parse_todo(text: str, closures: Optional[list] = None) -> dict:
     return items
 
 
-def todo_view(instance: Path, now=None) -> str:
-    """The todo section of the window: what is still open, from the whole log."""
+def todo_view(instance: Path, now=None, scope_rows: Optional[dict] = None) -> str:
+    """The todo section of the window: what is still open, from the whole log.
+
+    `scope_rows` (request_id -> hestia_scope_status row) puts hestia's live status beside every
+    shown item that names a scope request (todo_membot.scope_status_note). None = not measured,
+    and no note is written."""
     try:
         text = (instance / "todo.md").read_text(errors="replace")
     except OSError:
@@ -2765,6 +2769,9 @@ def todo_view(instance: Path, now=None) -> str:
         lines.append(f"- [ ] {t}" + (f" (since {s:%Y-%m-%d %H:%M} UTC)" if s else "")
                      # neutral: the shown item is the newest; the others are not claimed to share its state
                      + (f" — {n} open items mention {k}; this is the newest of them" if n > 1 else ""))
+        live = _tm.scope_status_note(t, scope_rows)
+        if live:
+            lines.append(f"  ({live})")
     if len(groups) > TODO_SHOWN:
         rest = sum(g[2] for g in groups[TODO_SHOWN:])
         lines.append(f"- … and {rest} more opened in the last {TODO_WINDOW_H} h.")
@@ -2900,7 +2907,8 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
               services: str = "", mark_conversations: bool = True,
               body_reading: Optional[dict] = None,
               settled_turns: Optional[int] = None,
-              proprioception: bool = True) -> str:
+              proprioception: bool = True,
+              scope_rows: Optional[dict] = None) -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     from sage.gateway import being_params as _bp
     parts = []
@@ -3044,10 +3052,16 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     acc = carried_account(instance, last_session_number(instance))
     if acc:
         check = want_check(acc, files_facts)
+        # the same live fact the todo view writes: an account carried verbatim can say "pending"
+        # about a request hestia ruled on (cbp-being 2026-11-15 21:31, WANT naming two refused asks)
+        from sage.gateway import todo_membot as _tm_acc
+        live_acc = _tm_acc.scope_status_note(acc, scope_rows)
+        if live_acc:
+            check = (check + "\n" if check else "") + f"_Beside your account, {live_acc}._"
         parts.append("## Your own account\n" + acc + (("\n" + check) if check else ""))
     # tails are short now that recall searches the whole home (window pressure: median 6157
     # of 8192 tokens per prompt, max 8013, measured 2026-09-07)
-    parts.append(todo_view(instance))
+    parts.append(todo_view(instance, scope_rows=scope_rows))
     if census_todo:
         parts.append(census_todo)
     journal = _read(instance / "journal.md", 1200)
@@ -4467,9 +4481,12 @@ def main(argv=None) -> int:
             forum_replies = {"error": f"{type(_e).__name__}: {_e}"}
     # what reach the being holds and has already asked for, so it does not re-file
     scope = "(scope status unavailable)"
+    scope_rows = None       # request_id -> row, for the todo view's live note; None = unmeasured
     if disp is not None and hasattr(disp, "_call"):
         try:
             st = disp._call("hestia_scope_status", {"plugin_id": args.member})
+            scope_rows = {str(r.get("request_id")).lower(): r for r in (st.get("requests") or [])
+                          if r.get("request_id")}
             grants = scope_grant_lines(st)
             reqs = [(r.get("request_id"), r.get("path"), r.get("decision") or r.get("status"))
                     for r in (st.get("requests") or [])]
@@ -4703,6 +4720,7 @@ def main(argv=None) -> int:
                                         services=_services, mark_conversations=False,
                                         settled_turns=_settled_turns,
                                         proprioception=_proprioception,
+                                        scope_rows=scope_rows,
                                         body_reading=_body_cur) + _scope_tail)
 
     # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its

@@ -64,6 +64,39 @@ _SCOPE = re.compile(r"scope-[0-9a-f]{12}", re.I)
 _DEVICE = re.compile(r"/dev/[A-Za-z]+\d*", re.I)
 
 
+def scope_status_note(text: str, rows: Optional[Dict[str, dict]]) -> str:
+    """What hestia holds NOW for each scope request an open item names, or "" when it names none or the beat
+    has no scope status.
+
+    WHY (cbp-being, 2026-11-15). Two asks were refused at 20:06 UTC. The being's todo still held seven
+    "scope-…: pending, lapses in ~6 hours" lines, copied from earlier beats' pending block. Its 20:45 journal said
+    "all refused, none pending", but the todo view showed only its own frozen word. At 21:07 and 21:25 its
+    WANT was "renew the two scope requests that are about to lapse". It asked dp to renew them and searched its
+    inbox for the entries. The live status was in the same beat, in the scope block, but it was never next to
+    the item that contradicted it. The item is the being's and stays verbatim; the measurement now sits beside
+    it (the same move as want_check).
+
+    `rows` maps request_id -> hestia_scope_status `requests[]` row. tool_scope_status lists every request of the
+    member's, decided and expired included, so an id it lacks is not one waiting on anyone (_named_scope_fact)."""
+    if rows is None:
+        return ""
+    ids = []
+    for m in _SCOPE.finditer(text or ""):
+        rid = m.group(0).lower()
+        if rid not in ids:
+            ids.append(rid)
+    facts = []
+    for rid in ids:
+        row = rows.get(rid)
+        if not row:
+            facts.append(f"{rid}: not on record for you")
+            continue
+        status = row.get("status") or row.get("decision") or "unknown"
+        by = f" by {row['decided_by']}" if row.get("decided_by") and status != "pending" else ""
+        facts.append(f"{rid}: {status}{by}")
+    return ("hestia now: " + "; ".join(facts)) if facts else ""
+
+
 def group_key(text: str) -> Optional[str]:
     """The one id an item is grouped under, or None (shown alone).
 
