@@ -47,7 +47,7 @@ from typing import Any, Callable, Dict, List, Optional
 from sage.gateway.being_gate_client import (BeingIntent, GatewayVerdict, ResultEnvelope, camera_command,
                                             copy_alternative, same_path_in_reach)
 from sage.gateway.hestia_witness import _ENDPOINT, _Mcp, _unwrap, make_hestia_witness_fn
-from sage.gateway.reference_f1a import ReferenceF1aDispatcher
+from sage.gateway.reference_f1a import ReferenceF1aDispatcher, retired_copy_note
 
 # The marker the seat's run-request reader keys on (sage/scripts/seat_run_requests.py).
 _RUN_MARKER = "[request_run]"
@@ -3536,6 +3536,9 @@ class HestiaF1aDispatcher:
                                     "base name is only how it appears inside the sandbox")
                     except Exception:  # noqa: BLE001 — a hint must never turn a miss into a crash
                         hint = ""
+                if not hint and i == 0:
+                    gone = retired_copy_note(Path(full), Path(root))
+                    hint = f".{gone}" if gone else ""
                 return ResultEnvelope(ok=False, error=f"run: no such file in your home: {n}{hint}")
             try:
                 fd = os.open(full, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)

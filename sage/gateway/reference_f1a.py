@@ -28,6 +28,7 @@ import os
 import re
 import textwrap
 import contextlib
+import glob
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Optional
@@ -1034,6 +1035,57 @@ def _retired_header(stamp: datetime, reason: str, suffix: str = ".md") -> str:
             + _RETIRED_KEPT)
 
 
+_RETIRED_LINE = re.compile(r"> RETIRED (\S+ \S+?)Z? with retire_note\. No longer current: (.*)")
+
+
+def retired_copy_note(p: Path, home: Path) -> str:
+    """One sentence for an absence: the missing file was retired, by name, when, and why.
+
+    A MISS ON A NAME IT RETIRED ITSELF READ AS "NEVER EXISTED". Measured 2026-11-15 on
+    cbp-being, scratch/verify-xor-numpy-only.py: retired at 19:06Z with a correct reason; at
+    19:12Z `run` said "no such file", so it wrote the script again under the same name, edited
+    it for 20 minutes and retired it a second time at 19:35Z citing the seat's review; at 19:57Z
+    retire_note said "nothing to retire"; at 20:03Z memory_edit said "does not exist", and it
+    stored remember #7915 "verify-xor-numpy-only.py ... has not been created", journaled "needs
+    to be created or located", and told the seat the file was missing. Both retired copies sat
+    beside the name the whole time. Every absence said only "absent"; none said "you retired
+    it". This names the newest copy and the reason it was given, so the next step is the being's
+    own decision recalled, not a file rewritten from memory.
+
+    Existence only, inside the same directory the being named: reads one header line of a file
+    in its own home and nothing else. Empty string when there is no retired copy."""
+    try:
+        copies = sorted(p.parent.glob(f"{glob.escape(p.stem)}.retired-*{p.suffix}"),
+                        key=lambda c: c.stat().st_mtime)
+    except OSError:
+        return ""
+    copies = [c for c in copies if c.is_file()]
+    if not copies:
+        return ""
+    newest = copies[-1]
+    try:
+        rel = str(newest.relative_to(home))
+    except ValueError:
+        rel = newest.name
+    when, why = "", ""
+    try:
+        with open(newest, errors="replace") as f:
+            m = _RETIRED_LINE.match(f.readline().rstrip("\n"))
+        if m:
+            when, why = m.group(1), m.group(2).strip()
+    except OSError:
+        pass
+    if len(why) > 240:
+        why = why[:240].rstrip() + "..."
+    count = (f" (it was retired {len(copies)} times; this is the newest copy)"
+             if len(copies) > 1 else "")
+    said = f" The reason you gave: \"{why}\"" if why else ""
+    at = f" at {when} UTC" if when else ""
+    return (f" You retired it yourself{at} with retire_note: it is now '{rel}'{count}.{said} "
+            f"Nothing was lost. If that reason still holds, it needs nothing more. To look at it "
+            f"again, memory_read '{rel}'.")
+
+
 def _write_atomic(p: Path, text: str) -> None:
     """Write text to p whole or not at all: a tmp beside it, synced, then os.replace."""
     tmp = p.with_name(f".{p.name}.tmp")
@@ -1587,8 +1639,9 @@ class ReferenceF1aDispatcher:
             return ResultEnvelope(
                 ok=True,
                 result=(f"[no such path: '{shown}' does not exist. This is not an empty file: there is "
-                        f"nothing here to read, so it is no evidence about anything else. "
-                        f"memory_write creates a file inside your home.]"),
+                        f"nothing here to read, so it is no evidence about anything else."
+                        + (retired_copy_note(p, self.memory_root)
+                           or " memory_write creates a file inside your home.") + "]"),
                 witness_id=self._witness(f"memory_read {p.name} (does not exist)"))
         if p.is_dir():
             names = sorted(x.name + ("/" if x.is_dir() else "") for x in p.iterdir())
@@ -1942,7 +1995,8 @@ class ReferenceF1aDispatcher:
         if not p.exists():
             return ResultEnvelope(ok=False, error=(
                 f"nothing to edit: '{path}' does not exist. This is an absence, not a "
-                f"refusal. memory_write creates a file; memory_edit changes one that is there."))
+                f"refusal." + (retired_copy_note(p, self.memory_root) or
+                               " memory_write creates a file; memory_edit changes one that is there.")))
         if p.is_dir():
             return ResultEnvelope(ok=False, error=f"'{path}' is a directory.")
         text = p.read_text(errors="replace")
@@ -2278,6 +2332,13 @@ class ReferenceF1aDispatcher:
                 return ResultEnvelope(ok=False, error=f"no such note: '{raw}' does not exist, so there is nothing to retire")
             return ResultEnvelope(ok=True, result=f"{p.name} is already retired; nothing changed")
         if not p.exists():
+            gone = retired_copy_note(p, self.memory_root)
+            if gone:
+                # ALREADY DONE IS NOT A FAILURE (cbp-being 2026-11-15 19:57Z: a third retire of a
+                # name it had retired twice read "nothing to retire" and it concluded the file
+                # had never been created). The intent is already true; say so.
+                return ResultEnvelope(ok=True, result=(
+                    f"'{raw}' is already retired; nothing changed." + gone))
             return ResultEnvelope(ok=False, error=f"no such note: '{raw}' does not exist, so there is nothing to retire")
         return self._retire_locked(p, reason, record)
 
