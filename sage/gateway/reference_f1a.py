@@ -2322,6 +2322,16 @@ class ReferenceF1aDispatcher:
             result += f". {said}"
         else:
             p.unlink()
+            # SAY THE WHOLE FILE MOVED (cbp-being, 2026-11-15 21:53Z). A memory_write had appended a
+            # second script below a working 26-line one; the being called retire_note with the reason
+            # "Retiring it leaves only the valid XOR verification script (lines 1-26)", got back only
+            # "retired X -> Y", and filed the cleanup as done while nothing was left at the path. The
+            # receipt now says what left and names the call that removes only some lines.
+            n_lines = len(body.splitlines())
+            result += (f". The whole file ({n_lines} line{'' if n_lines == 1 else 's'}) moved there; nothing is left at "
+                       f"{p.parent.name}/{p.name}. retire_note always takes the whole file. To drop only "
+                       f"some lines and keep the rest in place, use memory_edit with start_line, "
+                       f"end_line and an empty new.")
         return ResultEnvelope(ok=True, result=result,
                               witness_id=self._witness(f"retire_note {p.name} -> {dest.name}: {reason[:120]}"))
 
