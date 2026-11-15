@@ -1239,6 +1239,28 @@ def test_memory_edit_reads_delete_lines_as_the_range():
     assert "replaced lines 2-6 (5 lines)" in r.result, r.result
 
 
+def test_memory_edit_start_line_zero_says_numbering_starts_at_one():
+    """2026-11-14 00:15Z: pub-being sent start_line 0 five times in one beat; the refusal said
+    'lines 0-1 are not all in it: it has 3 lines', and each retry changed only end_line."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "scratch").mkdir(exist_ok=True)
+    f = home / "scratch" / "h.py"
+    f.write_text("import sys\nimport sys\nprint('abc')\n")
+    r = disp(BeingIntent("memory_edit", {"path": "scratch/h.py", "old": "abc", "start_line": 0, "end_line": 1, "new": ""}), _ALLOW)
+    assert not r.ok and "line numbers start at 1" in r.error and "Nothing was changed" in r.error, r.error
+    assert "without start_line and end_line would replace it" in r.error, r.error
+    assert f.read_text() == "import sys\nimport sys\nprint('abc')\n"
+    # 'old' repeated (or absent): no claim that dropping the range would work
+    r = disp(BeingIntent("memory_edit", {"path": "scratch/h.py", "old": "import sys", "start_line": 0, "end_line": 2, "new": ""}), _ALLOW)
+    assert not r.ok and "line numbers start at 1" in r.error and "would replace it" not in r.error, r.error
+    r = disp(BeingIntent("memory_edit", {"path": "scratch/h.py", "start_line": 0, "end_line": 2, "new": ""}), _ALLOW)
+    assert not r.ok and "line numbers start at 1" in r.error and "would replace it" not in r.error, r.error
+    # a range past the end keeps the existing refusal
+    r = disp(BeingIntent("memory_edit", {"path": "scratch/h.py", "start_line": 2, "end_line": 9, "new": ""}), _ALLOW)
+    assert not r.ok and "are not all in" in r.error, r.error
+
+
 def test_memory_edit_delete_lines_agrees_with_end_line_or_refuses():
     disp, root = _disp()
     home = Path(root)
