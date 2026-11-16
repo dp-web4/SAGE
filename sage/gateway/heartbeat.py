@@ -2201,6 +2201,13 @@ _RUNNING_CLAIM = re.compile(
     r"results? (?:are |is )?(?:pending|coming|on (?:its|their|the) way)|"
     r"await\w*[^.\n]{0,60}results?|waiting (?:for|on)[^.\n]{0,60}results?)")
 _RUN_ANSWER = re.compile(r"^\[request_run\] I (ran|did not run) (\S+?)[.,;:]?(?:\s|$)")
+# A seat answer written without the prefix ("I did not run scratch/x.py (sha ...)"): read only when the
+# path is plainly a runnable file, so "I ran into ..." is never taken for an answer.
+_RUN_ANSWER_BARE = re.compile(r"^I (ran|did not run) (\S+?\.(?:py|sh))[.,;:]?(?:\s|$)")
+# The receipt line request_run writes on a repeat of bytes the seat already answered (hestia_dispatch,
+# "UNCHANGED since ..."). Group 1 is the seq of that answer; group "ran" is set when it was a run.
+_UNCHANGED_REPEAT = re.compile(r"^UNCHANGED since (?:the request at seq \d+; the seat answered|"
+                               r"(?P<ran>the seat ran this exact file)) at seq (\d+)\.", re.M)
 _RUN_VERDICT = re.compile(r"(exit code -?\d+|timed out after [^.—]+)")
 _RUN_SHA = re.compile(r"sha(?:256)?[:= ]\s*([0-9a-f]{12})")
 _REQUEST = "[request_run]"
@@ -2352,9 +2359,16 @@ def _runs_by_file(instance: Path, member: str) -> tuple:
     conversation the being is in, keyed by the path RELATIVE TO THE HOME, so notes/a.py and
     a.py are two files. A run answer is someone else's turn starting `[request_run] I ran
     <path>` (or `I did not run`); a request is the being's own `[request_run] <path>` with no
-    answer for that path after it."""
+    answer for that path after it.
+
+    A REPEAT OF ANSWERED BYTES IS NOT WAITING (sprout-being, 2026-11-16). A request whose receipt says
+    UNCHANGED (the same bytes the seat already answered) gets no new answer: seats do not answer a repeat
+    again. Counted as pending, it stood in this block every beat as "waiting to be run": 9 requests,
+    8 of them repeats, the oldest from 11-03, most of them scripts to restart the seat it had settled
+    needed no restart. Each beat this block told it otherwise, as a measurement. The third dict maps
+    such a path to (answer seq, ran) from the request's own receipt line."""
     from sage.gateway import conversations as _conv
-    last, pending = {}, {}
+    last, pending, repeated = {}, {}, {}
     try:
         convs = [m for m in _conv.listing(instance) if member in m.get("participants", [])]
     except Exception:
@@ -2366,14 +2380,23 @@ def _runs_by_file(instance: Path, member: str) -> tuple:
             continue
         for t in turns:
             text = (t.get("text") or "").strip()
-            if not text.startswith(_REQUEST):
+            bare = t.get("from") != member and _RUN_ANSWER_BARE.match(text)
+            if not text.startswith(_REQUEST) and not bare:
                 continue
             first = text.splitlines()[0]
+            if bare and not first.startswith(_REQUEST):
+                first = f"{_REQUEST} {first}"
             if t.get("from") == member:
                 rest = first[len(_REQUEST):].strip()
                 f = _rel(instance, rest.split()[0]) if rest else ""
                 if f:
-                    pending.setdefault(f, []).append(int(t.get("seq") or 0))
+                    rep = _UNCHANGED_REPEAT.search(text)
+                    if rep:
+                        # the seat answered these bytes, so every earlier request for the path was answered
+                        repeated[f] = (int(rep.group(2)), bool(rep.group("ran")))
+                        pending.pop(f, None)
+                    else:
+                        pending.setdefault(f, []).append(int(t.get("seq") or 0))
                 continue
             mm = _RUN_ANSWER.match(first)
             if not mm:
@@ -2388,7 +2411,8 @@ def _runs_by_file(instance: Path, member: str) -> tuple:
                        "verdict": v.group(1) if v else ("declined" if mm.group(1) != "ran" else "no verdict"),
                        "sha": sh.group(1) if sh else None}
             pending.pop(f, None)      # an answer for a path answers every request for it before it
-    return last, pending
+            repeated.pop(f, None)
+    return last, pending, repeated
 
 
 # Where a being keeps runnable code: its home's top level and the two directories it writes
@@ -2415,7 +2439,7 @@ def files_and_runs(instance: Path, member: str, now: Optional[float] = None,
                     found[str(p.resolve().relative_to(home))] = p
         except (OSError, ValueError):
             continue
-    last, pending = _runs_by_file(instance, member) if member else ({}, {})
+    last, pending, repeated = _runs_by_file(instance, member) if member else ({}, {}, {})
     # a path a run or request names is the being's file too, wherever it lives
     for rel in list(last) + list(pending):
         p = instance / rel
@@ -2460,8 +2484,13 @@ def files_and_runs(instance: Path, member: str, now: Optional[float] = None,
                         f"start_line {r['seq']}).")
             else:
                 row += f" Last request was declined at seq {r['seq']} ({when})."
+        elif rel in repeated and repeated[rel][1]:
+            row += f" The seat ran these exact bytes at seq {repeated[rel][0]}."
         else:
             row += " Never run."
+        if rel in repeated and rel not in pending:
+            row += (f" Your last request for it repeated bytes the seat had already answered (seq "
+                    f"{repeated[rel][0]}). A repeat is not answered again, so nothing is waiting.")
         if rel in pending:
             row += f" Your request (seq {', '.join(map(str, pending[rel]))}) is waiting to be run."
         row += " Running now." if running and rel in running else ""
