@@ -1509,6 +1509,50 @@ def run_budget_s(now: Optional[float] = None) -> tuple:
     return int(left), "the time left in this beat"
 
 
+def host_user_site() -> str:
+    """The seat user's Python user site (e.g. ~/.local/lib/python3.12/site-packages), realpath'd,
+    or "" when there is none.
+
+    THE BOX READS IT, READ-ONLY (dp, 2026-11-16, SAGE #701 option 2). `run` and `request_run`
+    imported different packages: on cbp, sklearn and torch live only in the user site, so the seat's
+    host run imported them and the box could not. The being saw the box's answer every beat and
+    spent two days filing installer scripts and scope asks for ~/.local/bin to close a gap no
+    install could close. Binding the user site read-only into the box makes the two places agree,
+    so the cheap path (run) and the correct path import the same packages. It is box plumbing
+    like /usr: package code, read-only, no secrets, nothing the being can write.
+
+    SAGE_RUN_USER_SITE=0 turns it off on a seat that does not want it."""
+    import os
+    import site
+    if os.environ.get("SAGE_RUN_USER_SITE", "1") == "0":
+        return ""
+    try:
+        p = site.getusersitepackages()
+    except Exception:
+        return ""
+    p = os.path.realpath(p) if p else ""
+    return p if p and os.path.isdir(p) else ""
+
+
+def box_user_site(interp_minor: Optional[int] = None) -> str:
+    """Where Python inside the box looks for its user site: HOME is /tmp there, so
+    /tmp/.local/lib/python3.N/site-packages. Binding the host's user site AT THIS PATH (not at its
+    own path plus PYTHONPATH) lets site.py treat it as the user site it is, .pth files included."""
+    import sys
+    n = sys.version_info.minor if interp_minor is None else interp_minor
+    return f"/tmp/.local/lib/python3.{n}/site-packages"
+
+
+def user_site_bind() -> str:
+    """The bwrap fragment that shows the host user site to the box, or "" when there is none.
+    Must come AFTER `--tmpfs /tmp` (a later mount masks an earlier one)."""
+    import shlex
+    p = host_user_site()
+    if not p:
+        return ""
+    return f" --ro-bind {shlex.quote(p)} {shlex.quote(box_user_site())}"
+
+
 def run_mem_cap_bytes() -> int:
     import os
     try:
@@ -1914,6 +1958,8 @@ def run_command(args: dict, ctx: Optional[dict] = None) -> str:
         " --ro-bind /etc/alternatives /etc/alternatives"
         f" --ro-bind {interp} {interp}"
         f" --proc /proc --dev /dev --size {RUN_TMP_BYTES} --tmpfs /tmp"
+        # the host user site, read-only, where the box's python looks for it (SAGE #701)
+        f"{user_site_bind()}"
         f"{wt_bind}"
         f"{grant_binds}"
         # Writable in there: these two size-limited tmpfs, and what the being's grants reach.

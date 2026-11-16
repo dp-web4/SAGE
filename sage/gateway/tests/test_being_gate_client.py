@@ -1105,6 +1105,11 @@ def _assert_every_bind_is_judged_or_plumbing(calls):
     judged = {p for e in events for p in (e["tool_input"].get("paths") or [])}
     interp = os.path.dirname(os.path.dirname(sys.executable))
     plumbing = {"/usr", "/lib", "/lib64", "/bin", "/etc/alternatives", interp}
+    # the host user site is box plumbing by operator decision (dp, 2026-11-16, SAGE #701 option 2):
+    # package code, read-only, like /usr. Judging it as the being's read would refuse every run.
+    from sage.gateway.being_gate_client import host_user_site
+    if host_user_site():
+        plumbing.add(host_user_site())
     for src in _line_bind_sources(line):
         if src in plumbing or src.startswith(STAGE_ROOT + "-"):
             continue
@@ -1180,3 +1185,38 @@ def test_a_run_name_that_could_add_a_bind_never_reaches_the_law(tmp_path, monkey
     v = c.gate(BeingIntent("run", {"path": "scratch/s.py", "data": data}))
     assert v.blocks, v
     assert not calls, "refused at composition, before any decide()"
+
+
+# --- SAGE #701 option 2 (dp, 2026-11-16): the host user site is in the run box, read-only, where the
+# box's python looks for it, so `run` and `request_run` import the same packages.
+
+def test_the_user_site_is_bound_read_only_after_tmp_where_the_box_looks(tmp_path, monkeypatch):
+    import shlex
+    import sage.gateway.being_gate_client as bgc
+    site_dir = tmp_path / "site-packages"; site_dir.mkdir()
+    monkeypatch.setattr(bgc, "host_user_site", lambda: str(site_dir))
+    monkeypatch.setattr(bgc, "run_sandbox_kind", lambda: "bwrap")
+    home = tmp_path / "home"; (home / "scratch").mkdir(parents=True)
+    (home / "scratch" / "s.py").write_text("print(1)\n")
+    line = bgc.run_command({"path": "scratch/s.py"}, {"memory_root": str(home), "member": "t"})
+    toks = shlex.split(line)
+    i = toks.index(str(site_dir))
+    assert toks[i - 1] == "--ro-bind", "the user site must never be writable from the box"
+    assert toks[i + 1] == bgc.box_user_site()
+    assert toks.index("/tmp") < i, "bound after --tmpfs /tmp, or the tmpfs masks it"
+
+
+def test_the_user_site_bind_can_be_switched_off(monkeypatch):
+    import sage.gateway.being_gate_client as bgc
+    monkeypatch.setenv("SAGE_RUN_USER_SITE", "0")
+    assert bgc.host_user_site() == "" and bgc.user_site_bind() == ""
+
+
+def test_the_census_box_binds_the_user_site_and_does_not_isolate_it_away(tmp_path, monkeypatch):
+    import sage.gateway.being_gate_client as bgc
+    from sage.gateway import run_census
+    site_dir = tmp_path / "site-packages"; site_dir.mkdir()
+    monkeypatch.setattr(bgc, "host_user_site", lambda: str(site_dir))
+    cmd = run_census.box_command(str(tmp_path))
+    assert str(site_dir) in cmd and bgc.box_user_site() in cmd
+    assert "-I" not in cmd, "-I disables the user site; run's own line has no -I"
