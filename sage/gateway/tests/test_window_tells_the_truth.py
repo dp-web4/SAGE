@@ -169,10 +169,29 @@ def test_a_repeat_of_answered_bytes_is_not_waiting(tmp_path):
     block, _, facts = hb.files_and_runs(inst, BEING)
     row = {l[2:6]: l for l in block.splitlines() if l.startswith("- ")}
     assert "waiting to be run" not in row["a.py"] and f"already answered (seq {ans})" in row["a.py"]
-    assert "nothing is waiting" in row["a.py"]
+    assert "adds nothing to wait for" in row["a.py"]
     assert "The seat ran these exact bytes at seq 7." in row["b.py"] and "Never run" not in row["b.py"]
     assert f"Your request (seq {first}, {again}) is waiting to be run." in row["c.py"]
     assert facts["pending"] == {"c.py": [first, again]}
+
+
+def test_a_repeat_does_not_close_a_newer_request_for_other_bytes(tmp_path):
+    """legion-claude's probe on #737: request v1, the seat declines, the being edits and requests v2
+    (new bytes, unanswered), then reverts and requests v1 again (UNCHANGED, answered earlier). The
+    seat's answer covers only requests made before it, so v2's request still waits."""
+    inst = _home(tmp_path)
+    _script(inst, "a.py")
+    conv.append(inst, SEAT, speaker=BEING, text="[request_run] a.py\nwhy: x")
+    ans = conv.append(inst, SEAT, speaker=SEAT, text="[request_run] I did not run a.py.")["seq"]
+    v2 = conv.append(inst, SEAT, speaker=BEING, text="[request_run] a.py\nwhy: x")["seq"]
+    conv.append(inst, SEAT, speaker=BEING, text=f"[request_run] a.py\nwhy: x\n"
+                                                f"UNCHANGED since the request at seq 1; the seat answered "
+                                                f"at seq {ans}.")
+    block, _, facts = hb.files_and_runs(inst, BEING)
+    row = next(l for l in block.splitlines() if l.startswith("- a.py"))
+    assert facts["pending"] == {"a.py": [v2]}
+    assert f"Your request (seq {v2}) is waiting to be run." in row
+    assert "adds nothing to wait for" not in row
 
 
 def test_a_seat_answer_without_the_prefix_still_answers(tmp_path):

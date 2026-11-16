@@ -2362,8 +2362,8 @@ def _runs_by_file(instance: Path, member: str) -> tuple:
     answer for that path after it.
 
     A REPEAT OF ANSWERED BYTES IS NOT WAITING (sprout-being, 2026-11-16). A request whose receipt says
-    UNCHANGED (the same bytes the seat already answered) gets no new answer: seats do not answer a repeat
-    again. Counted as pending, it stood in this block every beat as "waiting to be run": 9 requests,
+    UNCHANGED (the same bytes the seat already answered at seq Y) adds nothing to wait for; requests for
+    the path made after Y (other bytes) still wait. Counted as pending, it stood in this block every beat as "waiting to be run": 9 requests,
     8 of them repeats, the oldest from 11-03, most of them scripts to restart the seat it had settled
     needed no restart. Each beat this block told it otherwise, as a measurement. The third dict maps
     such a path to (answer seq, ran) from the request's own receipt line."""
@@ -2392,9 +2392,14 @@ def _runs_by_file(instance: Path, member: str) -> tuple:
                 if f:
                     rep = _UNCHANGED_REPEAT.search(text)
                     if rep:
-                        # the seat answered these bytes, so every earlier request for the path was answered
-                        repeated[f] = (int(rep.group(2)), bool(rep.group("ran")))
-                        pending.pop(f, None)
+                        # the seat's answer at seq y closes the requests made before it, not the ones after
+                        y = int(rep.group(2))
+                        repeated[f] = (y, bool(rep.group("ran")))
+                        keep = [s for s in pending.get(f, []) if s > y]
+                        if keep:
+                            pending[f] = keep
+                        else:
+                            pending.pop(f, None)
                     else:
                         pending.setdefault(f, []).append(int(t.get("seq") or 0))
                 continue
@@ -2490,7 +2495,7 @@ def files_and_runs(instance: Path, member: str, now: Optional[float] = None,
             row += " Never run."
         if rel in repeated and rel not in pending:
             row += (f" Your last request for it repeated bytes the seat had already answered (seq "
-                    f"{repeated[rel][0]}). A repeat is not answered again, so nothing is waiting.")
+                    f"{repeated[rel][0]}), so it adds nothing to wait for.")
         if rel in pending:
             row += f" Your request (seq {', '.join(map(str, pending[rel]))}) is waiting to be run."
         row += " Running now." if running and rel in running else ""
