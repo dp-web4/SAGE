@@ -5510,8 +5510,8 @@ def _run_note(rc: int, stderr: str, files: list, stdout: str = "", seatbelt: boo
 
 
 #: A run that ended asking for its arguments: a usage line, argparse's complaint, or an IndexError
-#: traceback through sys.argv.
-_ARGV_SAID = re.compile(r"^\s*usage:|the following arguments are required|sys\.argv\[", re.I | re.M)
+#: traceback through sys.argv[1..] (argv[0], the script's own name, is always there: legion on #733).
+_ARGV_SAID = re.compile(r"^\s*usage:|the following arguments are required|sys\.argv\[[1-9]", re.I | re.M)
 
 #: A SCRIPT THAT WANTS AN ARGUMENT NEVER GETS ONE. sprout-being, 2026-11-13 02:10Z: it wrote a port
 #: check to find out whether anything listens on 30001. The script printed its usage line and exited 1.

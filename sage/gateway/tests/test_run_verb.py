@@ -1156,6 +1156,10 @@ def test_a_run_that_asks_for_its_arguments_is_told_run_passes_none():
     assert said not in _run_note(0, "", ["p.py"], "usage: p.py <port>")      # it ran fine: no note
     assert said not in _run_note(1, "", ["p.py"], "connect: refused")       # failed, not for argv
     assert said not in _run_note(1, "", ["p.py"], "see the usage: section")  # not a usage line
+    # argv[0] is the script's own name, always present: a failure through it is not a missing argument
+    assert said not in _run_note(1, 'Traceback (most recent call last):\n  File "/work/p.py", line 3, in '
+                                    '<module>\n    open(os.path.join(os.path.dirname(sys.argv[0]), '
+                                    '"cfg.json"))\nFileNotFoundError: cfg.json', ["p.py"])
 
 
 @needs_sandbox
