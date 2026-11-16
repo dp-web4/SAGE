@@ -2667,6 +2667,27 @@ _BARE_TAG = re.compile(r"^\s*(\[(?:still open|open|added|done|completed)\].*\S)\
 # outside a done: section, so the parser read it as nothing and nothing closed.
 _BARE_ALL = re.compile(r"^\s*(?:(20\d\d-\d\d-\d\d)(?:[ T](\d\d:\d\d)(?::\d\d)?)?\s*(?:UTC|Z)?\s*:?\s*)?"
                        r"((?:all|every)\s*:\s*\S.*?)\s*$", re.I)
+# A `done: <item>` line is a closing act, not a section header. Measured on cbp-being 2026-11-14: its todo history
+# holds 1,034 such lines (16 in the 19:43Z retired file alone) and the parser read none of them: _SECTION wants
+# the line to END after "done:", and _ITEM wants a dash. Told at seq 15045 to mark "Proceed with mechanism train
+# once torch version is confirmed" done, it wrote that closing four times; the retire_note at 19:43Z carried the
+# item forward as open, and the being, which had written the closing, told the seat it was "already done".
+_BARE_DONE = re.compile(r"^\s*(?:done|completed)\s*:\s*(\S.*\S)\s*$", re.I)
+# THE VIEW'S OWN WORDS ARE NOT PART OF THE ITEM. todo_view shows each item as `- [ ] <text> (since <date> UTC)`,
+# and a being that closes an item by copying the line it was shown copies the suffix too (424 closings on
+# cbp-being). The suffix is ~27 chars, enough to put a 60-char item under the 0.85 ratio, so the closing named
+# the item and closed nothing. A trailing `(done at <seq>...)` note -- the shape the seat asked for at 15045 --
+# misses the same way. Both are cut before the item is compared.
+_VIEW_SUFFIX = re.compile(r"\s*(?:\(since 20\d\d-\d\d-\d\d[ T]\d\d:\d\d(?: ?UTC|Z)?\)"
+                          r"|\((?:done|closed|completed)(?: at| in)?\b[^()]*\)"
+                          r"|\s+—\s+\d+ open items mention .*; this is the newest of them)\s*$", re.I)
+
+
+def _strip_view_suffix(body: str) -> str:
+    prev = None
+    while prev != body:
+        prev, body = body, _VIEW_SUFFIX.sub("", body)
+    return body
 
 
 def _canonical_todo(text: str) -> str:
@@ -2688,6 +2709,10 @@ def _canonical_todo(text: str) -> str:
             if a.group(1):
                 out.append(stamp(a.group(1), a.group(2)))
             out.append(f"- [done] {a.group(3)}")
+            continue
+        d = _BARE_DONE.match(line)
+        if d:
+            out.append(f"- [done] {d.group(1)}")
             continue
         m = _INLINE_ITEM.match(line)
         if m:
@@ -2770,7 +2795,10 @@ def _parse_todo(text: str, closures: Optional[list] = None) -> dict:
                 body = t.group(2)
             elif section:
                 status = "done" if section in ("done", "completed") else "open"
-        if not status or len(body) < 4:
+        if not status:
+            continue
+        body = _strip_view_suffix(body)
+        if len(body) < 4:
             continue
         n = _norm(body)
         if status == "open":
