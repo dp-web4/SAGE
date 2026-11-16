@@ -1412,6 +1412,34 @@ class ReferenceF1aDispatcher:
                 continue
         return out
 
+    def _same_name_note(self, p: Path, *, created: bool) -> str:
+        """One sentence naming files that share `p`'s name one directory away, or "".
+
+        THE ABSENCE TEXT WAS THE ROUTE TO A DUPLICATE. Measured 2026-11-16 06:23Z on cbp-being
+        (beat heartbeat-5d75f0a150eb): the seat asked for two memory_edit range deletions on
+        scratch/xor_not_linearly_separable.py (401 lines). The being sent the bare name, got
+        "does not exist ... memory_write creates a file", did exactly that, and the receipt
+        said "created xor_not_linearly_separable.py with 2059 chars". It then edited, read and
+        ran the NEW 66-line top-level file as if it were the one it was asked to trim; the
+        scratch/ file never changed, and the script that imports it would have run the old
+        401 lines. memory_read already names a same-name file on a miss (#140); edit and the
+        create receipt did not. Matches are listed neutrally, as memory_read does."""
+        near = self._same_name_elsewhere(p)
+        if not near:
+            return ""
+        shown = near[:_SAME_NAME_SHOWN]
+        where = ", ".join(f"'{n}'" for n in shown)
+        more = f" and {len(near) - len(shown)} more" if len(near) > len(shown) else ""
+        if created:
+            return (f" A file with this name already exists elsewhere: {where}{more}. It was "
+                    f"NOT changed; this write made a separate new file. Anything that imports or "
+                    f"runs {where if len(near) == 1 else 'one of those'} still sees the old text.")
+        if len(near) == 1:
+            return (f" But a file with that name DOES exist at '{near[0]}': to edit it, send the "
+                    f"same memory_edit with path \"{near[0]}\".")
+        return (f" But {len(near)} files with that name exist: {where}{more}. Nothing tells "
+                f"which you mean; send memory_edit with the full path of the one you mean.")
+
     @staticmethod
     def _existence(p: Path) -> str:
         """'absent' | 'present' | 'unknown'. Never guesses.
@@ -1942,7 +1970,9 @@ class ReferenceF1aDispatcher:
         if not p.exists():
             return ResultEnvelope(ok=False, error=(
                 f"nothing to edit: '{path}' does not exist. This is an absence, not a "
-                f"refusal. memory_write creates a file; memory_edit changes one that is there."))
+                f"refusal." + (self._same_name_note(p, created=False) or
+                               " memory_write creates a file; memory_edit changes one that is "
+                               "there.")))
         if p.is_dir():
             return ResultEnvelope(ok=False, error=f"'{path}' is a directory.")
         text = p.read_text(errors="replace")
@@ -2427,7 +2457,8 @@ class ReferenceF1aDispatcher:
         with open(p, "a") as f:     # under the home lock (see __call__)
             f.write(content + ("\n" if not content.endswith("\n") else ""))
         if not existed:
-            result = f"created {p.name} with {len(content)} chars"
+            result = (f"created {p.name} with {len(content)} chars"
+                      + self._same_name_note(p, created=True))
         else:
             result = (f"appended {len(content)} chars to the END of {p.name}, below the {before} "
                       f"lines already there. memory_write only adds; it never replaces or edits a line. "
