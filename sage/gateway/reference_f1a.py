@@ -2184,11 +2184,33 @@ class ReferenceF1aDispatcher:
                 f"{at} now reads {line!r}. To set the whole line, call memory_edit with "
                 f"start_line={at} end_line={at}, old set to that line, and new set to the "
                 f"line you want."))
+        # A SINGLE-LINE OLD THAT STOPS MID-LINE IS LEFT ALONE ABOVE (it can be a token swap),
+        # but if the spliced line then fails to parse, the refusal must say the splice did it.
+        # Measured 2026-11-16 22:54Z (cbp-being, heartbeat-77e9e26ab514): old 'y_batch = y',
+        # new 'y_batch = y.reshape(-1, 1)'. It matched the start of line 88, 'y_batch =
+        # y_shuffled[i:i + batch_size]', so the line became 'y.reshape(-1, 1)_shuffled[...]'.
+        # The refusal said "Python cannot read line 1 of your text as code" and quoted the
+        # spliced line, which the being never wrote. A second try with the same old and a
+        # multi-line new was refused the same way, then a 3-line old landed. The being stored
+        # memory #8136: "memory_edit only accepts single-line edits". The cause it was given
+        # was its text; the cause was the tail of the line its old matched.
+        splice = ""
+        if not old.endswith("\n"):
+            end = text.index(old) + len(old)
+            rest = text[end:].split("\n", 1)[0]
+            if rest:
+                at = text.count("\n", 0, end) + 1
+                splice = (f"Your old text matched only the start of line {at}, so the rest of "
+                          f"that line, {rest!r}, stayed after your new text. That spliced line "
+                          f"is what Python could not read; your new text was not the problem, "
+                          f"and memory_edit does take several lines. To replace the whole line, "
+                          f"call memory_edit with start_line={at} end_line={at}. ")
         return self._commit_edit(p, path, text, text.replace(old, new, 1),
-                                 "replaced 1 occurrence", "", replacement=new)
+                                 "replaced 1 occurrence", "", replacement=new, splice=splice)
 
     def _commit_edit(self, p, path: str, text: str, new_text: str, what: str,
-                     gone: str, replacement: Optional[str] = None) -> ResultEnvelope:
+                     gone: str, replacement: Optional[str] = None,
+                     splice: str = "") -> ResultEnvelope:
         """Write an edit atomically and say what it did. Shared by the text and line modes.
 
         THE SAME CHECK AS THE APPEND PATH, BECAUSE THE PATTERN WALKED TO THIS DOOR. Guarding
@@ -2219,6 +2241,9 @@ class ReferenceF1aDispatcher:
             # SAGE #427). Only text Python reads as invalid, not as unfinished, is refused.
             if why and _is_unfinished_code(_changed_lines(text, new_text) or replacement):
                 why = ""
+            if why and splice:
+                return ResultEnvelope(ok=False, error=(
+                    f"memory_edit refused, nothing was changed in {p.name}. {splice}{why}"))
             if why:
                 return ResultEnvelope(ok=False, error=(
                     f"memory_edit refused, nothing was changed in {p.name}. {why} A note about "
