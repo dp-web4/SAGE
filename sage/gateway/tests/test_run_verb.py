@@ -187,6 +187,35 @@ def test_run_data_accepts_the_shapes_a_model_actually_emits():
         run_command({"path": "e.py", "data": 7}, ctx)
 
 
+@needs_bwrap
+def test_run_data_mapping_of_base_names_to_sources_is_the_list_it_names():
+    """cbp-being 2026-11-16 02:44: data='{"m.py": "scratch/m.py"}' six times, refused each
+    time as 'a base name with no directory'. A {base name: source} map is the stager's own
+    naming, so its values are the list."""
+    from sage.gateway.being_gate_client import run_command
+    ctx = {"memory_root": "/home/x/inst", "member": "b"}
+    want = run_command({"path": "scratch/e.py", "data": ["scratch/m.py"]}, ctx)
+    assert run_command({"path": "scratch/e.py", "data": '{"m.py": "scratch/m.py"}'}, ctx) == want
+    assert run_command({"path": "scratch/e.py", "data": {"m.py": "scratch/m.py"}}, ctx) == want
+    two = run_command({"path": "e.py", "data": ["scratch/a.npy", "b.md"]}, ctx)
+    assert run_command({"path": "e.py", "data": '{"a.npy": "scratch/a.npy", "b.md": "b.md"}'}, ctx) == two
+
+
+def test_run_data_mapping_that_renames_or_passes_settings_is_refused_with_the_list_to_send():
+    from sage.gateway.being_gate_client import run_command
+    ctx = {"memory_root": "/home/x/inst", "member": "b"}
+    # a rename: the key is not the source's base name
+    with pytest.raises(ValueError, match=r'a mapping .*send data=\["scratch/test_image.npy"\]') as e:
+        run_command({"path": "e.py", "data": '{"test_image": "scratch/test_image.npy"}'}, ctx)
+    assert "{\"test_image\":" not in str(e.value).split("keys")[0]  # not the old prose misread
+    # settings, not files: no list to offer, but the reason is named
+    with pytest.raises(ValueError, match="passes no arguments or settings") as e:
+        run_command({"path": "e.py", "data": '{"verbose": true}'}, ctx)
+    assert "send data=" not in str(e.value)
+    # an empty mapping is no data, as an empty list is (3 of its calls sent {})
+    assert run_command({"path": "e.py", "data": "{}"}, ctx) == run_command({"path": "e.py"}, ctx)
+
+
 def test_run_mounts_the_worktree_read_only_on_the_import_path(tmp_path, monkeypatch):
     from sage.gateway import being_gate_client as B
     monkeypatch.setattr(B, "sandbox_available", lambda: True)

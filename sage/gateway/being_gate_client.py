@@ -1545,7 +1545,7 @@ def run_names(args: dict, ctx: Optional[dict] = None) -> List[str]:
             parsed = _json.loads(data)
         except ValueError:
             parsed = None
-        if isinstance(parsed, list):
+        if isinstance(parsed, (list, dict)):
             data = parsed
         else:
             # A LIST OF PATHS ARRIVES AS PROSE. Measured 2026-09-18 06:46Z: it sent
@@ -1556,6 +1556,33 @@ def run_names(args: dict, ctx: Optional[dict] = None) -> List[str]:
             # space is still refused, by the per-path check below, where the message is about
             # that path rather than about the blob.
             data = [x for x in _re.split(r"[,\s]+", data.strip()) if x]
+    if isinstance(data, dict):
+        # A MAPPING ARRIVES AND IS READ AS PROSE. cbp-being, 2026-10-23..11-16: 189 run calls
+        # sent `data` as a JSON object, and none ran. The prose split above cut the object at
+        # whitespace, so the first "path" was `{"name.py":` and the refusal said "you gave a
+        # base name with no directory", which was false about what it sent; it re-sent the
+        # same object 6 times in one beat (11-16 02:44). Its objects take two forms. 58 entries
+        # were {base name: source path}: exactly the name the stager gives that source anyway,
+        # so the values are taken as the list. The rest rename a file ({"test_image": ".../
+        # test_image.npy"}) or pass settings ({"verbose": true}), and run does neither, so the
+        # refusal says which, and spells out the list to send instead.
+        import json
+        vals = list(data.values())
+        if all(isinstance(v, str) and v.strip() and isinstance(k, str)
+                        and k.strip() == os.path.basename(v.strip().rstrip("/"))
+                        for k, v in data.items()):
+            data = [v.strip() for v in vals]
+        else:
+            paths = [v.strip() for v in vals if isinstance(v, str) and v.strip()]
+            route = (f" If the values are the files you want, send data={json.dumps(paths)}; "
+                     f"each appears in the sandbox under its own base name"
+                     if paths else "")
+            raise ValueError(
+                f"run 'data' is a LIST of files to copy into the sandbox, and you sent a mapping "
+                f"(keys {json.dumps([str(k) for k in data][:4])}). A file appears in the sandbox "
+                f"under its source's base name, which a key cannot change, and run passes no "
+                f"arguments or settings to the script: write those into the script itself."
+                + route)
     if not isinstance(data, (list, tuple)):
         raise ValueError(f"run 'data' must be a list of paths in your home, got {type(data).__name__}")
     names = [path] + [str(d).strip() for d in data]
