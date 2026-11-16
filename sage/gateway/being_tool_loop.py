@@ -584,11 +584,20 @@ EMPTY_THINKING_KEEP_S = 7 * 24 * 3600
 EMPTY_THINKING_NAME_MIN_CHARS = 4000
 
 
+# A `length` CUT IS NOT A DRAFT BY ITSELF (2026-11-16). The cut said the provider ran out of
+# tokens, not that the returned text holds a draft: #448 saw 6000 tokens return 149-700 chars and
+# kept the pointer, effect unmeasured. Measured on cbp-being (qwen3.8-distill-4b): 57 of its 71
+# kept `length` cuts are under 4,000 chars, and 14 of the 16 kept files it read back were those.
+# They restate the beat's premises, not code. 02:25Z: a 704-char one opened with "the script
+# has been run and confirmed to work" (from its own unrun 02:19 journal); offered as "what you
+# drafted", it was read, then journaled as "Results confirmed ... (exit code 0)" and stored as
+# remember #7968 -- the script had exited 1 at the seat 4 min earlier. legion-being's drafts
+# (smallest 7,203 chars) clear the size bar unaided, so size alone decides.
 def empty_thinking_worth_naming(raw: dict, thinking: str) -> bool:
     """Whether the stopped-thinking nudge should point the being at its kept thinking:
-    a `length` cut (a draft stopped mid-way), or thinking long enough to hold one."""
-    return ((raw or {}).get("done_reason") == "length"
-            or len(thinking) >= EMPTY_THINKING_NAME_MIN_CHARS)
+    only when the returned text is long enough to hold a draft. `raw` is unused, kept for
+    the call signature (a `length` cut with little text returned is a restatement)."""
+    return len(thinking) >= EMPTY_THINKING_NAME_MIN_CHARS
 
 
 def keep_empty_thinking(root: Optional[str], raw: dict, msg: dict) -> Optional[str]:
