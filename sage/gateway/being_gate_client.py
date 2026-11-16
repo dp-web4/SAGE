@@ -397,6 +397,12 @@ _SEARCH_HOME_POINTER = (
     "with the file's path and find: it lists matching line numbers in that file.")
 
 GIT_OPS =("log", "show", "diff", "status", "blame", "cat")
+#: Ops a being reaches for that the grammar already serves under another name. `ls` on a
+#: directory is `cat`: `git show <rev>:<dir>` prints the tree's entries. mcnugget-being sent
+#: `{"op": "ls", "path": "sage/gateway/"}` 6 times in 2026-11 while searching for file names
+#: that do not exist (`being_in_drain*.py`); each was refused, so the one read that would have
+#: settled the question never ran. The published enum stays GIT_OPS (a name, not a new verb).
+GIT_OP_ALIASES = {"ls": "cat"}
 
 # A revision the being may name: a hex sha, HEAD with optional ~n/^n, or a plain branch or
 # tag name. Deliberately excludes anything containing a flag, a space, or a path separator
@@ -445,6 +451,7 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     if not worktree:
         raise ValueError(NO_WORKTREE_REFUSAL["git_read"])
     op = str(args.get("op", "")).strip()
+    op = GIT_OP_ALIASES.get(op, op)
     if op not in GIT_OPS:
         raise ValueError(f"git_read 'op' must be one of {list(GIT_OPS)}, got {op!r}")
 
@@ -525,7 +532,8 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
         return f"{base} diff --no-ext-diff --no-textconv {span}" + (f" -- {shlex.quote(path)}" if path else "")
     if op == "cat":
         if not path:
-            raise ValueError("git_read op='cat' needs a 'path': the file whose content you want")
+            raise ValueError("git_read op='cat' needs a 'path': the file whose content you want, "
+                             "or a directory whose entries you want")
         # `<rev>:<path>` is ONE argument to git and the being supplies neither half raw —
         # the rev passed _REV, the path was resolved absolute inside the worktree above. The
         # path must be repo-relative here, so it is relativised back; an absolute path after
@@ -2931,7 +2939,7 @@ _TOOL_SCHEMAS = {
                  "beats, and to compare a `check` result's tree block against what is "
                  "actually in the history.",
                  {"op": "one of " + ", ".join(repr(o) for o in GIT_OPS)
-                        + " ('cat' reads a file's content at a revision, and needs 'path')",
+                        + " ('cat' reads a file or lists a directory at a revision; needs 'path')",
                   "rev": "optional: a commit sha, HEAD, HEAD~2, or a branch name",
                   "rev2": "optional, for op='diff': the second revision of the span",
                   "path": "optional: a path inside your worktree to narrow the answer to",
