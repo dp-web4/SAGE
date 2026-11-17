@@ -1611,8 +1611,14 @@ def test_a_broken_pattern_is_a_failure_not_an_absence(tmp_path):
         return {}
     d._call = _call
 
-    # An unmatched paren: valid as a literal, invalid as the extended regex git applies.
-    broken = d._do_search(BeingIntent("search", {"pattern": "def compose("}))
+    # An unmatched paren (`def compose(`) is no longer this case: a pattern that is not a valid
+    # regex is searched as literal text (search_mode), so it RUNS and its answer is real. A
+    # pattern Python's re accepts but git's ERE rejects still never runs: `[[:foo:]]`, an
+    # invalid character class, exits 128 — and that must stay a failure, never an absence.
+    literal = d._do_search(BeingIntent("search", {"pattern": "def compose("}))
+    assert literal.ok and literal.result["matches"] == 1 and "literal text" in literal.result["literal"], \
+        f"an invalid regex is searched literally and says so: {literal.result!r}"
+    broken = d._do_search(BeingIntent("search", {"pattern": "[[:foo:]]"}))
 
     assert broken.ok is False, (
         f"a pattern that never ran must not succeed; got result={broken.result!r}")
