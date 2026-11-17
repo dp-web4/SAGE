@@ -136,7 +136,14 @@ def test_the_beat_actually_joins_the_two_ends():
     # `frame=` deleted, because main also builds a config dict with a "frame" key — a pin
     # satisfied by an unrelated string is the same failure as a pin satisfied by a comment.
     # `posture_text` identifies the compose call and appears nowhere else.
-    calls = [set(ins.argval) for ins in dis.get_instructions(H.main)
+    # main and the functions nested in it: the compose call lives in main's _compose_seed since the
+    # whole-seed refit (#582) renders the seed more than once. Still main's own code, still bytecode.
+    def _codes(co):
+        yield co
+        for c in co.co_consts:
+            if hasattr(c, "co_code"):
+                yield from _codes(c)
+    calls = [set(ins.argval) for co in _codes(H.main.__code__) for ins in dis.get_instructions(co)
              if ins.opname == "KW_NAMES" and isinstance(ins.argval, tuple)
              and "posture_text" in ins.argval]
     assert len(calls) == 1, f"expected exactly one compose call in main, found {len(calls)}"
