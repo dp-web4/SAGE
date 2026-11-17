@@ -256,6 +256,17 @@ def _stale_transport(e: Exception) -> bool:
     return "HTTP 404" in msg and "Session not found" in msg
 
 
+def _literal_key(pattern: str) -> dict:
+    """The receipt's word on HOW the pattern was matched, when it was not a regex: a search
+    the being sent as a regex but that ran as literal text must say so, or a hit or an absence
+    would be read as an answer to a question it did not ask (see search_mode)."""
+    from sage.gateway.being_gate_client import search_mode
+    if search_mode(pattern) != "-F":
+        return {}
+    return {"literal": (f"{pattern!r} is not a valid regex, so it was matched as literal text, "
+                        f"exactly as written; to use regex operators, write a valid pattern")}
+
+
 def _worktree_env() -> dict:
     """The environment for EVERY process the seat runs inside the being's worktree: git hooks OFF.
 
@@ -3246,7 +3257,7 @@ class HestiaF1aDispatcher:
                 f"conclude the text is absent."))
         if not lines:
             return ResultEnvelope(ok=True, witness_id=action_id, result={
-                "pattern": pattern, "searched": target, "matches": 0,
+                "pattern": pattern, **_literal_key(pattern), "searched": target, "matches": 0,
                 "searched_a_real_file": True,
                 "note": (f"no line matches {pattern!r} in {target} (text files only, .git "
                          f"skipped). The path exists and was searched, so this is a real absence "
@@ -3258,7 +3269,7 @@ class HestiaF1aDispatcher:
                  ln[:SEARCH_LINE_CHARS] + f" …[line cut here: {len(ln) - SEARCH_LINE_CHARS} more characters]"
                  for ln in lines[:SEARCH_LINES_SHOWN]]
         return ResultEnvelope(ok=True, witness_id=action_id, result={
-            "pattern": pattern, "searched": target, "matches": len(lines),
+            "pattern": pattern, **_literal_key(pattern), "searched": target, "matches": len(lines),
             "shown": len(shown),
             "truncated": (f"{len(lines) - len(shown)} further matches not shown; narrow the "
                           f"path or the pattern" if truncated else None),
@@ -3391,7 +3402,7 @@ class HestiaF1aDispatcher:
                     f"there (todo.md, journal.md, notes/, scratch/) cannot be searched at "
                     f"all. Read those with memory_read; search the source tree."))
             return ResultEnvelope(ok=True, witness_id=action_id, result={
-                "pattern": pattern, "searched": where, "matches": 0,
+                "pattern": pattern, **_literal_key(pattern), "searched": where, "matches": 0,
                 "searched_a_real_file": True,
                 "note": (f"no line matches {pattern!r} in {where}. The path exists and was "
                          f"searched, so this is a real absence — but an answer about WHAT "
@@ -3399,7 +3410,7 @@ class HestiaF1aDispatcher:
                          f"check the pattern (it is an extended regex, so ( ) | + are "
                          f"special — searching for a literal one needs a backslash)")})
         return ResultEnvelope(ok=True, witness_id=action_id, result={
-            "pattern": pattern, "searched": where, "matches": len(lines),
+            "pattern": pattern, **_literal_key(pattern), "searched": where, "matches": len(lines),
             "shown": len(shown),
             "truncated": (f"{len(lines) - len(shown)} further matches not shown; narrow the "
                           f"path or the pattern" if truncated else None),

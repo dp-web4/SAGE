@@ -1025,6 +1025,25 @@ SEARCH_MAX_N = 60        # matches returned at most; a search is a pointer, not 
 
 
 
+def search_mode(pattern: str) -> str:
+    """`-E` for a pattern that is a valid regex, `-F` (literal text) for one that is not.
+
+    A PATTERN GIT CANNOT PARSE NEVER RUNS. The being searches for code as it appears in source:
+    `drain_once(` failed `git grep -E` with exit 128 ("parentheses not balanced") 6 times on
+    mcnugget-being in 6 hours on 2026-11-17, each with a receipt telling it to add a backslash,
+    and the next beat sent the same text again. Read literally, that text has one meaning, so
+    it is searched literally and the result says so. The mode is chosen HERE, before the law
+    judges the command, so judged == executed still holds: no retry with a different command.
+    Python's `re` is the validity test; it rejects what git's ERE rejects for the shapes seen
+    (`(` unbalanced, `=**` nothing to repeat)."""
+    import re
+    try:
+        re.compile(pattern)
+        return "-E"
+    except re.error:
+        return "-F"
+
+
 def search_command(args: dict, ctx: Optional[dict] = None) -> str:
     """The shell command the seat runs for a `search` intent.
 
@@ -1079,7 +1098,7 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
     # directory names. A worktree path containing a space would split into two argv elements
     # and the law would have judged a command that is not the one executed (GPT review of
     # #83). Fleet paths are simple today; the invariant must not depend on that staying true.
-    return (f"git --no-pager -C {shlex.quote(worktree)} grep -n -I -E --max-count={n} "
+    return (f"git --no-pager -C {shlex.quote(worktree)} grep -n -I {search_mode(pattern)} --max-count={n} "
             f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
 
 
@@ -1127,7 +1146,7 @@ def _reach_search_command(pattern: str, n: int, path: str, ctx: dict) -> str:
     if not os.path.exists(target):
         raise ValueError(f"search 'path' {path!r} does not exist, so there is nothing there to "
                          f"search. Name a folder or file that exists, by its absolute path.")
-    return (f"grep -r -n -I -E -s --max-count={n} --exclude-dir=.git "
+    return (f"grep -r -n -I {search_mode(pattern)} -s --max-count={n} --exclude-dir=.git "
             f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
 
 
