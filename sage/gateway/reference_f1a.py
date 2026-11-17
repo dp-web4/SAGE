@@ -236,13 +236,60 @@ def _python_status(p) -> str:
     if not str(p).endswith(".py"):
         return ""
     try:
-        compile(p.read_text(errors="replace"), str(p), "exec")
+        src = p.read_text(errors="replace")
+        compile(src, str(p), "exec")
     except SyntaxError as e:
         return (f" Python cannot parse {p.name} now: {e.__class__.__name__} at line "
                 f"{e.lineno}: {e.msg}. It cannot run until that line is fixed.")
     except (OSError, ValueError):
         return ""
-    return f" Python can parse {p.name} now. That is not the same as running it."
+    return f" Python can parse {p.name} now. That is not the same as running it." + _two_programs(src)
+
+
+def _is_main_guard(node) -> bool:
+    import ast
+    t = getattr(node, "test", None)
+    return (isinstance(node, ast.If) and isinstance(t, ast.Compare) and isinstance(t.left, ast.Name)
+            and t.left.id == "__name__" and len(t.comparators) == 1
+            and isinstance(t.comparators[0], ast.Constant) and t.comparators[0].value == "__main__")
+
+
+def _two_programs(src: str) -> str:
+    """A file that parses but holds a name defined twice, or more than one `if __name__ == "__main__":`
+    block, said in the receipt that already says it parses (#287).
+
+    WHAT PARSING DID NOT SAY. cbp-being, 2026-09-30: `held_out_test` was defined at lines 123 and 268,
+    and an edit moved the main guard below the second; the receipt said "Python can parse it now" and the
+    next run failed with a missing argument, because the call now bound to the other def. 2026-11-16:
+    scratch/xor_numpy_only.py held two, then three, whole versions, each with its own main block; only
+    the first ran and crashed at l.126, while every edit landed in a version that never ran, and the
+    being's run requests described fixes that were not in the bytes that ran. The duplicates were
+    findable from the parse it already did. Top-level statements only; empty when the parse fails."""
+    import ast
+    try:
+        body = ast.parse(src).body
+    except (SyntaxError, ValueError):
+        return ""
+    defs: dict = {}
+    for n in body:
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            defs.setdefault(n.name, []).append(n.lineno)
+    twice = [(k, v) for k, v in defs.items() if len(v) > 1]
+    mains = [n.lineno for n in body if _is_main_guard(n)]
+    out = ""
+    if len(mains) > 1:
+        out += (f" It has {len(mains)} `if __name__ == \"__main__\":` blocks (lines "
+                f"{', '.join(map(str, mains))}): running it runs the file from the top, so the block at line "
+                f"{mains[0]} runs first, and if it crashes or exits nothing below it runs. An edit below line "
+                f"{mains[0]} changes nothing that runs before it. If these are versions of one program, keep "
+                f"one.")
+    if twice:
+        shown = twice[:3]
+        named = "; ".join(f"`{k}` at lines {', '.join(map(str, v))}" for k, v in shown)
+        more = f" ({len(twice) - 3} more names too)" if len(twice) > 3 else ""
+        out += (f" Defined more than once: {named}{more}. A call uses whichever definition ran last before "
+                f"the call, not the one you edited.")
+    return out
 
 
 
