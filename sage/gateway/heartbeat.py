@@ -1123,16 +1123,80 @@ def _failed_sentence(failed) -> str:
             " done: " + "; ".join(shown) + (f"; and {more} more" if more > 0 else "") + ".")
 
 
-def reflect_prompt(optional=(), refused=True, failed=(), **kw) -> str:
+# WHAT THE BEAT'S OWN ACTS DID, BESIDE THE RECORD (#716). Acts that ran and are ok=True can still say
+# the opposite of what reflect writes: a `run` whose script exited 1 is ok=True (the act ran), a
+# `request_run` is ok=True and runs nothing, and a landed `memory_edit` is ok=True. Measured on cbp-being:
+# 2026-11-14 21:42Z, three runs of one script all exited 1 and the journal said it "now correctly trains";
+# 2026-11-17 10:37Z, a request_run and in the same beat a remember of the result the run had not produced;
+# 10:44Z, a landed edit recorded as "pending" because reflect copied a seat message written before it.
+# Reflect followed the newest text over the beat's own trace. The harness holds the receipts; it puts
+# them beside the instruction to write the record. An affordance: nothing is blocked.
+RECEIPTS_SHOWN = 6
+_LANDED_VERBS = ("memory_edit", "memory_write", "retire_note")
+
+
+def receipts_this_beat(*turns) -> list:
+    """One short line per target for what these turns' ok acts did: each `run` script and its exit
+    codes, each `request_run` (asked, nothing run), each landed write. In first-act order. Empty when
+    there are none or the traces cannot be read."""
+    items = []
+    for t in turns:
+        tr = getattr(t, "trace", None) if t is not None else None
+        if isinstance(tr, list):
+            items.extend(i for i in tr if isinstance(i, tuple) and len(i) == 2)
+    runs: dict = {}
+    order: dict = {}
+    for intent, env in items:
+        if not getattr(env, "ok", False) or getattr(env, "refused", False):
+            continue
+        eff = str(getattr(intent, "effector", "") or "")
+        args = getattr(intent, "args", None) or {}
+        target = next((str(args[a]).strip() for a in _FAILED_TARGET_ARGS
+                       if isinstance(args, dict) and args.get(a)), "")
+        res = getattr(env, "result", None)
+        if eff == "run" and isinstance(res, dict) and "exit" in res:
+            script = str(res.get("script") or target or "?")
+            runs.setdefault(script, []).append(res.get("exit"))
+            order.setdefault(("run", script), None)
+        elif eff == "request_run" and target:
+            order.setdefault(("request_run", target), None)
+        elif eff in _LANDED_VERBS and target:
+            key = (eff, target)
+            order[key] = (order.get(key) or 0) + 1
+    out = []
+    for (eff, target), n in order.items():
+        if eff == "run":
+            codes = runs[target]
+            out.append(f"run {target} exited {codes[0]}" if len(codes) == 1 else
+                       f"run {target} ran {len(codes)} times, exits " + ", ".join(str(c) for c in codes))
+        elif eff == "request_run":
+            out.append(f"request_run {target} was only asked for: the seat has not run it, so no result"
+                       " of it exists yet")
+        else:
+            out.append(f"{eff} {target} landed" + (f" ({n} times)" if n > 1 else ""))
+    return out
+
+
+def _receipts_sentence(receipts) -> str:
+    shown = list(receipts)[:RECEIPTS_SHOWN]
+    more = len(receipts) - len(shown)
+    return (" What your own acts this beat did, from their receipts (record these, not what a message"
+            " says happened): " + "; ".join(shown) + (f"; and {more} more" if more > 0 else "") + ".")
+
+
+def reflect_prompt(optional=(), refused=True, failed=(), receipts=(), **kw) -> str:
     """REFLECT, with the records in `optional` offered rather than required, and the refusal question
     unless `refused` is False (known: nothing recorded as refused). True and None (unknown) keep it.
     `failed` (failed_this_beat) names acts that ran and failed; when any did, "no act refused" is not
-    said alone, the failures are named beside it."""
+    said alone, the failures are named beside it. `receipts` (receipts_this_beat) says what the ok acts
+    did: run exits, requests not yet run, landed writes (#716)."""
     body = REFLECT.format(**kw)
     for r in optional:
         old, new = _REFLECT_OPTIONAL_LINE[r]
         body = body.replace(old, new, 1)
     tail = _failed_sentence(failed) if failed else ""
+    if receipts:
+        tail += _receipts_sentence(receipts)
     if refused is False:
         old, new = _REFLECT_REFUSED
         body = body.replace(old, new + tail, 1)
@@ -5235,6 +5299,7 @@ def main(argv=None) -> int:
             convo.append({"role": "user", "content": reflect_prompt(
                 reflect_optional_for(instance_config(instance)), refused=refused_this_beat(explore, after),
                 failed=failed_this_beat(explore, after),
+                receipts=receipts_this_beat(explore, after),
                 date=f"{now:%Y-%m-%d %H:%M} UTC", say_line=say_line, say_first=say_first)})
             # One extra step when someone is waiting, because the routine three fill the budget exactly.
             # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
