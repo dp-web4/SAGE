@@ -1561,7 +1561,7 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
     reserve = min(num_predict, ANSWER_RESERVE_CAP)
     budget_chars = window_budget_chars(num_ctx, num_predict, slack)
     order = ("digest", "recall")
-    floors = {"digest": 1200, "recall": 400}
+    floors = FIT_FLOORS
     out, interventions = dict(blocks), []
     total = lambda: fixed_chars + sum(len(v or "") for v in out.values())
     for key in order:
@@ -1574,15 +1574,103 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
         keep = max(floors[key], len(text) - over)
         if keep >= len(text):
             continue
-        # keep the HEAD of the digest (newest-first there) and the TAIL of recall/journal
-        out[key] = (text[:keep] + "\n[…trimmed to fit the context window…]") if key == "digest" \
-            else ("[…trimmed to fit the context window…]\n" + text[-keep:])
+        out[key] = _trim_block(key, text, keep)
         interventions.append({"kind": "context_fit", "block": key,
                               "suppressed": f"{len(text) - keep} chars of {key}",
                               "reason": f"prompt + a p99 answer ({reserve} tok) would not fit "
                                         f"num_ctx ({num_ctx}); the generation would be cut "
                                         f"mid-answer (27/506 generates already were)"})
     return out, interventions
+
+
+# The least of each trimmable block a fit keeps (fit_to_window and fit_seed_to_preflight alike).
+FIT_FLOORS = {"digest": 1200, "recall": 400}
+
+
+def _trim_block(key: str, text: str, keep: int) -> str:
+    """A block cut to `keep` chars, saying so: the HEAD of the digest (newest-first there), the
+    TAIL of recall."""
+    return ((text[:keep] + "\n[…trimmed to fit the context window…]") if key == "digest"
+            else ("[…trimmed to fit the context window…]\n" + text[-keep:]))
+
+
+# Room a refit leaves under the step-1 preflight line, so the next small addition does not put the
+# seed straight back over it (235 schema chars silenced mcnugget-being on 2026-11-17, ~28 tokens under).
+SEED_REFIT_HEADROOM = 512
+
+
+def fit_seed_to_preflight(render, measure, *, num_ctx, rung_index: int, digest: str, recall: str,
+                          cpt: float):
+    """Fit the COMPOSED seed to the tool loop's step-1 preflight, measured the way the loop measures it.
+
+    `render(rung, digest, recall)` composes the seed (whatever compose returns); `measure(rendered)`
+    is the tool loop's own step-1 estimate of it in tokens (being_tool_loop.preflight_tokens), and
+    `cpt` the chars-per-token that estimate divides by. Returns (rendered, rung, digest, recall,
+    intervention or None).
+
+    WHY (SAGE #582). fit_state and fit_to_window budget the seed from its parts plus constants for the
+    rest; the preflight counts the list that is sent. When the parts-count said "fits" and the
+    whole-count said "over", every explore ended unsent with `interventions: []`, beat after beat, until
+    the being's state happened to shrink. This runs after them, on the seed itself, so the heartbeat
+    knows before the loop does.
+
+    WHAT IT CHANGES. Nothing on a seed the preflight accepts: a beat that would have run, runs with
+    exactly the seed it had. On a seed the preflight would refuse, it trims toward the line minus
+    SEED_REFIT_HEADROOM, in the fitters' own order (digest, then recall, each to its floor, then the
+    conversation ladder) and keeps a trim only if the measured estimate fell (in the act-first form the
+    digest rides the posture turn, not the seed, so cutting it buys this seed nothing). If the seed is
+    still over at the last rung, it is sent as is and the intervention says it will be refused."""
+    rung = CONV_LADDER[rung_index]
+    rendered = render(rung, digest, recall)
+    try:
+        ctx = int(num_ctx or 0)
+    except (TypeError, ValueError):
+        ctx = 0
+    if ctx <= 0:
+        return rendered, rung, digest, recall, None
+    from sage.gateway.being_tool_loop import WINDOW_SEND_MARGIN
+    line = ctx - WINDOW_SEND_MARGIN
+    est0 = est = measure(rendered)
+    if est <= line:
+        return rendered, rung, digest, recall, None
+    target = line - SEED_REFIT_HEADROOM
+    blocks = {"digest": digest or "", "recall": recall or ""}
+    suppressed = []
+    for key in ("digest", "recall"):
+        if est <= target:
+            break
+        text = blocks[key]
+        keep = max(FIT_FLOORS[key], len(text) - (int((est - target) * cpt) + 1))
+        if keep >= len(text):
+            continue
+        trial = dict(blocks, **{key: _trim_block(key, text, keep)})
+        r = render(rung, trial["digest"], trial["recall"])
+        e = measure(r)
+        if e >= est:
+            continue
+        blocks, rendered, est = trial, r, e
+        suppressed.append(f"{len(text) - keep} chars of {key}")
+    i = rung_index
+    while est > target and i < len(CONV_LADDER) - 1:
+        i += 1
+        rendered = render(CONV_LADDER[i], blocks["digest"], blocks["recall"])
+        est = measure(rendered)
+    if i != rung_index:
+        rung = CONV_LADDER[i]
+        pc, tc = rung
+        suppressed.append(f"conversations stepped down to the last {pc} turns per conversation"
+                          + (f", each at most {tc} chars" if tc else ""))
+    still = est > line
+    return rendered, rung, blocks["digest"], blocks["recall"], {
+        "kind": "context_fit", "block": "seed", "cause": "step1_preflight",
+        "estimated_before": int(est0), "estimated_after": int(est), "line": line,
+        "suppressed": "; ".join(suppressed) or "nothing (no trimmable block shortened this seed)",
+        "still_refused": still,
+        "reason": (f"the composed seed measured {int(est0)} tokens on the tool loop's step-1 preflight, "
+                   f"over num_ctx {ctx} minus {WINDOW_SEND_MARGIN}; the part-wise fit had accepted it "
+                   f"(SAGE #582)" + ("; STILL over at the sparsest rung, so explore will be refused"
+                                     if still else "")),
+    }
 
 
 def measure_service(name: str, url: str, timeout: float = 3.0) -> str:
@@ -5059,35 +5147,55 @@ def main(argv=None) -> int:
     if (_alarm := harness_alarm(_harness)):
         print(f"[heartbeat] {_alarm}", file=sys.stderr)
     _clock = clock_sense(now, instance, args.member, instance_config(instance), since_beat_h=hours)
-    seed, posture_turn = compose(
-        act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
-        museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas, tools=_explore_tools,
-        posture_framing=posture_framing_for(instance_config(instance)),
-        header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
-                f"{render_clock(_clock)}\n"
-                # The absolute home path is context, NOT an address to copy. Measured on
-                # Sprout: 15 of 15 path refusals were this string reproduced from memory and
-                # truncated (…/sage/sage/journal.md six times, …/sage/journal.md, /scratch/…),
-                # against 51 successful writes by bare name. So it is given once, and named as
-                # the thing not to retype.
-                f"Your home: {instance}\n"
-                f"You never need to type that path. Name your files bare — journal.md, todo.md, or a "
-                f"name of your choosing under notes/ or scratch/ — and they resolve inside your home. "
-                f"An absolute path is only for something OUTSIDE your home.\n"
-                # WHAT RUNS YOU, measured, not inferred from a directory name. legion-being read its
-                # model-named home ("legion-gemma3-12b") first as its own size, then as a different
-                # being's directory; the harness holds the model, the window and its own revision.
-                + body_line(args.model, instance, _num_ctx,
-                            instance_config(instance).get("former_homes")) + "\n"
-                + window_line(instance) + "\n"
-                f"The harness you are running under: {_harness.get('short')} on "
-                f"{_harness.get('branch')}"
-                + (" (uncommitted edits present)" if _harness.get("dirty") else "")
-                + (" (commits not yet merged to main)" if _harness.get("on_main") is False else "")
-                + ". A `check` result carries the `tree` it ran against; if that head is not "
-                  "this one, the answer is about different code than the code running you.\n\n"),
-        state=state_block,
-        recall=recall, inbox=inbox, digest=digest)
+    def _compose_seed(state_text, recall_text, digest_text):
+        return compose(
+            act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
+            museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas, tools=_explore_tools,
+            posture_framing=posture_framing_for(instance_config(instance)),
+            header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
+                    f"{render_clock(_clock)}\n"
+                    # The absolute home path is context, NOT an address to copy. Measured on
+                    # Sprout: 15 of 15 path refusals were this string reproduced from memory and
+                    # truncated (…/sage/sage/journal.md six times, …/sage/journal.md, /scratch/…),
+                    # against 51 successful writes by bare name. So it is given once, and named as
+                    # the thing not to retype.
+                    f"Your home: {instance}\n"
+                    f"You never need to type that path. Name your files bare — journal.md, todo.md, or a "
+                    f"name of your choosing under notes/ or scratch/ — and they resolve inside your home. "
+                    f"An absolute path is only for something OUTSIDE your home.\n"
+                    # WHAT RUNS YOU, measured, not inferred from a directory name. legion-being read its
+                    # model-named home ("legion-gemma3-12b") first as its own size, then as a different
+                    # being's directory; the harness holds the model, the window and its own revision.
+                    + body_line(args.model, instance, _num_ctx,
+                                instance_config(instance).get("former_homes")) + "\n"
+                    + window_line(instance) + "\n"
+                    f"The harness you are running under: {_harness.get('short')} on "
+                    f"{_harness.get('branch')}"
+                    + (" (uncommitted edits present)" if _harness.get("dirty") else "")
+                    + (" (commits not yet merged to main)" if _harness.get("on_main") is False else "")
+                    + ". A `check` result carries the `tree` it ran against; if that head is not "
+                      "this one, the answer is about different code than the code running you.\n\n"),
+            state=state_text,
+            recall=recall_text, inbox=inbox, digest=digest_text)
+
+    # THE SEED IS FITTED AGAIN, WHOLE, ON THE TOOL LOOP'S OWN STEP-1 COUNT (SAGE #582): the fitters
+    # above budget from parts; this measures what will be sent and trims only if the loop would
+    # refuse it. A beat whose seed the loop accepts is unchanged.
+    from sage.gateway.being_tool_loop import uncounted_chars, preflight_tokens, preflight_cpt
+    _seed_uncounted = uncounted_chars(_explore_specs, explore_turn_mode(instance))
+    _states = {conv_rung: state_block}
+
+    def _render_seed(rung, digest_text, recall_text):
+        if rung not in _states:
+            _states[rung] = _build_state(*rung)
+        return _compose_seed(_states[rung], recall_text, digest_text)
+
+    (seed, posture_turn), _seed_rung, digest, recall, _seed_iv = fit_seed_to_preflight(
+        _render_seed, lambda r: preflight_tokens(r[0], _seed_uncounted, llm),
+        num_ctx=_num_ctx, rung_index=CONV_LADDER.index(conv_rung) if conv_rung in CONV_LADDER else 0,
+        digest=digest, recall=recall, cpt=preflight_cpt(llm))
+    if _seed_rung != conv_rung:
+        conv_rung, state_block = _seed_rung, _states[_seed_rung]
     try:
         _prompt_parts = prompt_parts(seed=seed, posture_turn=posture_turn, posture=posture(),
                                      state=state_block, recall=recall, inbox=inbox, digest=digest,
@@ -5415,6 +5523,12 @@ def main(argv=None) -> int:
     _term_before_record = signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
     interventions = []
+    # WHAT THE FIT CUT FROM THIS BEAT'S SEED. fit_state and fit_to_window have returned these since
+    # 2026-09-13 and their docstrings say the beat records them; nothing did, so a beat refused at
+    # step 1 showed `interventions: []` (SAGE #582) and a thinned conversation block read as a quiet one.
+    for _iv in ([conv_intervention] if conv_intervention else []) + list(_fit_iv or []) \
+            + ([_seed_iv] if _seed_iv else []):
+        interventions.append(_iv)
     if act_first:
         interventions.append({"kind": "act_first", "suppressed": "posture-first presentation (the model narrates under it)"})
     if answer is not None and getattr(answer, "answer_form", None) is not None:

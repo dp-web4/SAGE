@@ -1074,6 +1074,36 @@ def preflight_cpt(llm) -> float:
         return PREFLIGHT_CPT
     return v if 1.5 <= v <= 8.0 else PREFLIGHT_CPT
 
+
+# ONE COUNT FOR THE SEED, USED BY THE LOOP THAT SENDS IT AND BY THE HEARTBEAT THAT BUILDS IT (SAGE #582).
+# The heartbeat's seed fitter budgeted the seed from parts (posture, state, inbox, measured schemas, and
+# constants for the header and template), while this loop's step-1 preflight counted the whole message list
+# it was about to send. The two disagreed by ~9-10k chars on hub-being (2026-10-27), so the fitter found
+# nothing to trim and the preflight refused every explore with `interventions: []`: hub-being silent 11 h,
+# pub-being 125 beats, mcnugget-being from 2026-11-17 15:40Z (a 235-char schema change on a seed ~28 tokens
+# under the line). Per-model ratios (#592, #629) and trimming schema text (#769) each moved the line; none
+# made the two sides count the same thing. These functions are the step-1 preflight; the heartbeat calls
+# them on the composed seed, so it can never hand this loop a seed the loop will refuse without knowing it.
+def uncounted_chars(tools, act_form: str = "native") -> int:
+    """Chars a prompt carries beyond its messages: the tool schemas as sent (none in the JSON act form,
+    which sends no tools with the request) plus the chat template."""
+    return (len(json.dumps(tools)) if (tools is not None and act_form != "json") else 0) + _TEMPLATE_CHARS
+
+
+def preflight_tokens(msgs, uncounted: int, llm) -> float:
+    """The step-1 preflight's estimate of a prompt with no server count yet: whole prompt over this
+    model's preflight chars-per-token. The tool loop refuses to send above num_ctx - WINDOW_SEND_MARGIN."""
+    return (_convo_chars(msgs) + uncounted) / preflight_cpt(llm)
+
+
+def preflight_refuses(est: float, num_ctx) -> bool:
+    """Whether the step-1 preflight would end the phase unsent ("window_full: preflight")."""
+    try:
+        ctx = int(num_ctx or 0)
+    except (TypeError, ValueError):
+        return False
+    return ctx > 0 and est > ctx - WINDOW_SEND_MARGIN
+
 # A count far below a server-anchored estimate means the server truncated what was sent: the
 # server's prompt_eval_count is then of what survived its own cut, not of the list we sent.
 # Stored as a measurement, it anchored the next step's estimate ~8k low (a window retry came back
@@ -1409,7 +1439,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     # guard exists to prevent (a seed that passes, then is cut by the server). The tools list is in
     # hand here, so it is measured, as heartbeat._schema_chars_for measures it (len of the JSON). In
     # the JSON act form no schemas are sent with the request (_json_act), so only the template counts.
-    uncounted = (len(json.dumps(tools)) if act_form != "json" else 0) + _TEMPLATE_CHARS
+    uncounted = uncounted_chars(tools, act_form)
     # Keep the think block per generate: when a small model narrates instead of acting,
     # whether it decided not to call or failed to format the call is only visible here.
     thoughts: List[str] = []
@@ -1585,10 +1615,10 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 _est, _cause = _est_tokens(_convo_chars(msgs), measured), "over_window"
                 if not _same_tail and _tail == _TAIL_USER:
                     # anchored on a count made WITHOUT the tool schemas, which this prompt carries
-                    _est = max(_est, (_convo_chars(msgs) + uncounted) / preflight_cpt(llm))
+                    _est = max(_est, preflight_tokens(msgs, uncounted, llm))
             else:
-                _est, _cause = (_convo_chars(msgs) + uncounted) / preflight_cpt(llm), "preflight"
-            if _est > _ctx - WINDOW_SEND_MARGIN:
+                _est, _cause = preflight_tokens(msgs, uncounted, llm), "preflight"
+            if preflight_refuses(_est, _ctx):
                 return _window_full(_cause, int(_est), _ctx)
         retried = 0
         retry_cause = None
