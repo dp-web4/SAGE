@@ -1664,6 +1664,118 @@ def measured_preflight_cpt(instance, model, prior: float = None) -> dict:
     return out
 
 
+# A BEING THAT IS STILL REFUSED NEVER CALIBRATES (McNugget on #774). measured_preflight_cpt learns only from a
+# step-1 generate that was SENT, so a seed over the line at the declared or default ratio (a model switch with
+# no config: 16,450 estimated against 16,384 in pub's 11-17 trial) is trimmed or refused at that ratio, no
+# sample is ever taken, and the being stays where #582 found it. In that state alone (uncalibrated, and the
+# refit had to act) the heartbeat asks the server: the untrimmed seed, once, num_predict 1, with truncation
+# and context shift OFF, so the reply is either a count of the whole prompt or a refusal, never a count of
+# what survived a cut. The prefill is the one step 1 would pay anyway; an unchanged seed then reuses it.
+SEED_PROBE_TIMEOUT_S = 600
+
+
+def _ollama_post(url: str, payload: dict, timeout: float) -> dict:
+    import urllib.request
+    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"),
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read())
+
+
+def probe_seed_count(llm, msgs, tools, *, num_ctx, prior: float = None, act_form: str = "tools",
+                     post=None) -> dict:
+    """The server's own count of `msgs` sent with `tools`, as the tool loop's step 1 would send them.
+
+    {"result", "prompt_chars", "prompt_eval_count", "ratio", "value", "s", "error"}. `value` (the ratio less
+    MEASURED_CPT_MARGIN) is set only for result "counted": a whole count whose ratio is plausible (1.5..8, at
+    most prior x MEASURED_CPT_MAX_OVER_PRIOR). Unlike measured_preflight_cpt, a count near the window's edge
+    is kept: truncation is off, so it is a count of the whole prompt, and it is the being that most needs one.
+    "refused_by_server" means the seed does not fit num_ctx at all, which is itself the answer."""
+    import urllib.error
+    from sage.gateway.being_tool_loop import _convo_chars, uncounted_chars
+    out = {"result": None}
+    if act_form == "json":
+        out["result"] = "skipped_json_form"       # the JSON form sends another prompt shape (see #774)
+        return out
+    host, model = getattr(llm, "ollama_host", None), getattr(llm, "model_name", None)
+    try:
+        ctx = int(num_ctx or 0)
+    except (TypeError, ValueError):
+        ctx = 0
+    if not host or not model or ctx <= 0:
+        out["result"] = "skipped_no_server"
+        return out
+    chars = _convo_chars(msgs) + uncounted_chars(tools, act_form)
+    out["prompt_chars"] = chars
+    payload = {"model": model, "messages": msgs, "stream": False, "truncate": False, "shift": False,
+               "options": {"num_predict": 1, "num_ctx": ctx}}
+    if tools:
+        payload["tools"] = tools
+    if getattr(llm, "think", None) is not None:
+        payload["think"] = llm.think               # the same template branch step 1 renders
+    try:
+        from sage.irp.plugins.ollama_irp import _keep_alive
+        payload["keep_alive"] = _keep_alive()
+    except Exception:
+        pass
+    t0 = time.time()
+    try:
+        raw = (post or _ollama_post)(f"{host}/api/chat", payload, SEED_PROBE_TIMEOUT_S)
+    except urllib.error.HTTPError as e:
+        try:
+            detail = e.read().decode("utf-8", errors="replace")[:200]
+        except Exception:
+            detail = ""
+        out.update(result="refused_by_server", error=f"HTTP {e.code}: {detail}".strip())
+        return out
+    except Exception as e:
+        out.update(result="error", error=f"{type(e).__name__}: {e}"[:200])
+        return out
+    out["s"] = round(time.time() - t0, 1)
+    toks = (raw or {}).get("prompt_eval_count")
+    if not isinstance(toks, int) or isinstance(toks, bool) or toks <= 0:
+        out["result"] = "no_count"
+        return out
+    ratio = chars / toks
+    out.update(prompt_eval_count=toks, ratio=round(ratio, 3))
+    if not 1.5 <= ratio <= 8.0 or (prior and ratio > prior * MEASURED_CPT_MAX_OVER_PRIOR):
+        out["result"] = "implausible"
+        return out
+    out.update(result="counted", value=round(ratio * MEASURED_CPT_MARGIN, 3))
+    return out
+
+
+def fit_seed_calibrating(fit, probe, llm, cal: dict):
+    """fit_seed_to_preflight's result (`fit()`, at llm's current ratio), asking the server first when it must.
+
+    UNCALIBRATED AND CUT: ASK THE SERVER, ONCE (McNugget on #774). Only when no measured ratio stands
+    (`cal["source"]`) and the fit had to act at the declared or default ratio: `probe()` (probe_seed_count on
+    the untrimmed seed) is run, and a plausible count sets that seed's own ratio on `llm` and re-runs the fit
+    from the same untrimmed blocks. The seed is then sent and its step 1 recorded, so the measured ratio
+    takes over after MEASURED_CPT_MIN_SAMPLES beats and probing stops. The probe, and what the fit at the
+    prior would have done, go on the record (`cal["probe"]`); a failed probe leaves the first fit standing."""
+    from sage.gateway.being_tool_loop import preflight_cpt
+    res = fit()
+    iv = res[4]
+    if not iv or cal.get("source") == "measured":
+        return res
+    try:
+        p = probe()
+    except Exception as e:          # a measurement never costs the being its beat
+        p = {"result": "error", "error": f"{type(e).__name__}: {e}"[:200]}
+    p["fit_at_prior"] = {k: iv.get(k) for k in ("estimated_before", "estimated_after", "still_refused")}
+    cal["probe"] = p
+    if not p.get("value"):
+        return res
+    try:
+        llm.preflight_cpt_measured = p["value"]
+        cal.update(used=preflight_cpt(llm), source="probe")
+        return fit()
+    except Exception as e:
+        p["refit_error"] = f"{type(e).__name__}: {e}"[:200]
+        return res
+
+
 def fit_seed_to_preflight(render, measure, *, num_ctx, rung_index: int, digest: str, recall: str,
                           cpt: float):
     """Fit the COMPOSED seed to the tool loop's step-1 preflight, measured the way the loop measures it.
@@ -5271,10 +5383,21 @@ def main(argv=None) -> int:
             _states[rung] = _build_state(*rung)
         return _compose_seed(_states[rung], recall_text, digest_text)
 
-    (seed, posture_turn), _seed_rung, digest, recall, _seed_iv = fit_seed_to_preflight(
-        _render_seed, lambda r: preflight_tokens(r[0], _seed_uncounted, llm),
-        num_ctx=_num_ctx, rung_index=CONV_LADDER.index(conv_rung) if conv_rung in CONV_LADDER else 0,
-        digest=digest, recall=recall, cpt=preflight_cpt(llm))
+    _rung_index0 = CONV_LADDER.index(conv_rung) if conv_rung in CONV_LADDER else 0
+    _digest0, _recall0 = digest, recall
+
+    def _fit_seed():
+        return fit_seed_to_preflight(
+            _render_seed, lambda r: preflight_tokens(r[0], _seed_uncounted, llm),
+            num_ctx=_num_ctx, rung_index=_rung_index0, digest=_digest0, recall=_recall0,
+            cpt=preflight_cpt(llm))
+
+    _probe_form = explore_turn_mode(instance)       # the form explore will send the seed in
+    (seed, posture_turn), _seed_rung, digest, recall, _seed_iv = fit_seed_calibrating(
+        _fit_seed,
+        lambda: probe_seed_count(llm, _render_seed(CONV_LADDER[_rung_index0], _digest0, _recall0)[0],
+                                 _explore_specs, num_ctx=_num_ctx, prior=_cpt_prior, act_form=_probe_form),
+        llm, _cpt_cal)
     if _seed_rung != conv_rung:
         conv_rung, state_block = _seed_rung, _states[_seed_rung]
     # CALIBRATION IS EVIDENCE, NOT A SILENT CHANGE (NOVA on #774): the sent seed's estimate at the ratio used
@@ -5285,7 +5408,7 @@ def main(argv=None) -> int:
         _cpt_cal["seed_est_used"] = int(_seed_chars / _cpt_cal["used"])
         _cpt_cal["seed_est_prior"] = int(_seed_chars / _cpt_prior)
         _cpt_cal["admitted_by_calibration"] = bool(
-            _cpt_cal["source"] == "measured" and isinstance(_num_ctx, int)
+            _cpt_cal["source"] in ("measured", "probe") and isinstance(_num_ctx, int)
             and _cpt_cal["seed_est_prior"] > _num_ctx - _WSM >= _cpt_cal["seed_est_used"])
     except Exception:
         pass
