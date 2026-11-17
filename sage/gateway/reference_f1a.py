@@ -2451,6 +2451,8 @@ class ReferenceF1aDispatcher:
         p = self._safe_path(raw, writing=True)
         record = p.parent == self.memory_root and p.name in RETIRABLE_RECORDS
         if not record and (p.parent.name not in ("notes", "scratch") or p.parent.parent != self.memory_root):
+            if p.parent == self.memory_root and p.is_file():
+                return ResultEnvelope(ok=False, error=self._top_level_retire_refusal(raw, p))
             return ResultEnvelope(ok=False, error=(
                 f"retire_note is for your own notes: '{raw}' is not directly inside your notes/ or "
                 f"scratch/, and it is not your todo.md or journal.md."))
@@ -2461,6 +2463,32 @@ class ReferenceF1aDispatcher:
         if not p.exists():
             return ResultEnvelope(ok=False, error=f"no such note: '{raw}' does not exist, so there is nothing to retire")
         return self._retire_locked(p, reason, record)
+
+    def _top_level_retire_refusal(self, raw: str, p: Path) -> str:
+        """The refusal for a note at the top of the home, naming the route that does reach it (#742).
+
+        The bare refusal said only what was wrong. cbp-being, 2026-11-16: refused four times on the
+        top-level xor-verification-summary.md, it then memory_wrote a scratch/ copy of the same name,
+        retired THAT, and told dp it had retired the file. The top-level note, which contradicted
+        its settled answer, was still live. So the refusal says the file is unchanged, names
+        memory_edit (which does reach it) for correcting what it says, and names any same-named
+        file under notes/ or scratch/ as a different file whose retiring leaves this one live.
+        The verb's reach is unchanged: the home root also holds records the being did not write
+        (LINEAGE.md, raising_log.md), so widening it needs its own guard."""
+        twins = [f"{d}/{p.name}" for d in ("notes", "scratch")
+                 if (self.memory_root / d / p.name).is_file()]
+        msg = (f"retire_note does not reach the top of your home: '{raw}' is still live and "
+               f"unchanged. retire_note closes notes directly inside notes/ or scratch/, and your "
+               f"todo.md and journal.md. To correct what '{raw}' says, use memory_edit on it: "
+               f"old is the exact stale text, new is what you know now (an empty new deletes it).")
+        if twins:
+            msg += (f" {' and '.join(repr(t) for t in twins)} "
+                    f"{'is a different file' if len(twins) == 1 else 'are different files'} with "
+                    f"the same name; retiring {'it' if len(twins) == 1 else 'them'} leaves '{raw}' as it is.")
+        else:
+            msg += (f" Writing a copy into notes/ or scratch/ and retiring the copy leaves '{raw}' "
+                    f"as it is.")
+        return msg
 
     def _retire_locked(self, p: Path, reason: str, record: bool) -> ResultEnvelope:
         """The retire itself, under the home lock (taken in __call__). Two atomic steps, retired
