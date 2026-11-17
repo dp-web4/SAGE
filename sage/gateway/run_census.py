@@ -27,6 +27,14 @@ being's records or closes its items; it closes them itself (interactive selectio
     for /etc/resolv.conf and whether /usr is writable. Cached in the instance as run_census.json and
     re-measured after MAX_AGE_S, or as soon as a site-packages directory is newer than the cache (an
     apt or pip install on the host touches it, so an affordance change shows the next beat).
+  * measure_host(): the same module imports once more, on the HOST, the way the seat's
+    `request_run` answer runs a file (seat_run_requests.py: this interpreter, no -I, the operator's
+    environment, so the user site is visible). Added for SAGE #701: on cbp, torch and sklearn live
+    only in the user site, so the box said "These do not: torch" every beat and nothing said where
+    torch DOES import. The being read the box line as a fact about the host ("torch isn't installed
+    in the host environment", seq 15631, an hour after the seat had trained its torch script on the
+    host) and filed host installers for a package the host had. Measuring both places is the
+    census's own move (reading replaces asking); it changes nothing about what the box can reach.
   * render(): the census as a block for the NOW part of the window.
   * todo_notes(): open todo items that name a measured module or tool, or an install/DNS step, each
     quoted beside what was measured.
@@ -43,6 +51,7 @@ import json
 import os
 import re
 import shlex
+import site
 import subprocess
 import sys
 import sysconfig
@@ -95,6 +104,28 @@ out["usr_writable"] = os.access("/usr/lib", os.W_OK)
 print(json.dumps(out))
 '''
 
+#: The host half: only the module imports (no DNS lookup, no PATH census: the host's reach is not the
+#: question, only which of the box's missing modules a `request_run` answer would find).
+HOST_PROBE = r'''
+import json, sys
+from importlib import metadata
+mods, dist = json.loads(sys.argv[1]), json.loads(sys.argv[2])
+out = {"python": sys.version.split()[0], "executable": sys.executable, "modules": {}}
+for m in mods:
+    try:
+        mod = __import__(m)
+    except Exception as e:
+        out["modules"][m] = None if isinstance(e, ImportError) else "import fails: " + type(e).__name__
+        continue
+    v = ""
+    try:
+        v = metadata.version(dist.get(m, m))
+    except Exception:
+        v = str(getattr(mod, "__version__", "") or "")
+    out["modules"][m] = v or "present"
+print(json.dumps(out))
+'''
+
 
 def _interp() -> str:
     return os.path.dirname(os.path.dirname(sys.executable))
@@ -107,6 +138,12 @@ def site_dirs() -> List[str]:
         p = sysconfig.get_paths().get(k)
         if p and p not in out:
             out.append(p)
+    try:
+        user = site.getusersitepackages()       # a `pip install --user` lands here (cbp's torch, sklearn)
+    except Exception:
+        user = ""
+    if user and user not in out:
+        out.append(user)
     ver = f"python3.{sys.version_info.minor}"
     for p in ("/usr/lib/python3/dist-packages", f"/usr/local/lib/{ver}/dist-packages",
               f"/usr/lib/{ver}/dist-packages"):
@@ -166,8 +203,25 @@ def measure(modules=DEFAULT_MODULES, tools=TOOLS, runner=subprocess.run) -> Dict
     return data
 
 
-def census(instance: Path, modules=None, force: bool = False, measure_fn=None) -> Dict:
-    """The cached census, re-measured when stale or when the host's site-packages changed."""
+def measure_host(modules=DEFAULT_MODULES, runner=subprocess.run) -> Dict:
+    """The same imports on the host, run as seat_run_requests runs a being's file: this interpreter,
+    no -I, the inherited environment (user site visible). GPUs hidden, as the seat hides them by
+    default. Never raises: a failure is returned as {"error": ...}."""
+    env = dict(os.environ, CUDA_VISIBLE_DEVICES="", PYTHONDONTWRITEBYTECODE="1")
+    try:
+        with tempfile.TemporaryDirectory(prefix="sage-census-host-") as cwd:
+            r = runner([sys.executable, "-c", HOST_PROBE, json.dumps(list(modules)), json.dumps(_DIST)],
+                       cwd=cwd, env=env, capture_output=True, text=True, timeout=PROBE_TIMEOUT_S)
+        line = (r.stdout or "").strip().splitlines()[-1:] or [""]
+        return json.loads(line[0])
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+
+
+def census(instance: Path, modules=None, force: bool = False, measure_fn=None, host_fn=None) -> Dict:
+    """The cached census, re-measured when stale or when the host's site-packages changed.
+    The host half is measured with the box by `measure_host` unless a box measurement is injected
+    (tests): then only an injected `host_fn` measures it."""
     p = Path(instance) / CACHE
     cached = None
     try:
@@ -175,13 +229,17 @@ def census(instance: Path, modules=None, force: bool = False, measure_fn=None) -
     except Exception:
         cached = None
     mods = tuple(modules) if modules else DEFAULT_MODULES
+    host_fn = host_fn or (measure_host if measure_fn is None else None)
     fresh = (cached and not cached.get("error")
+             and (host_fn is None or "host" in cached)
              and time.time() - float(cached.get("ts", 0)) < MAX_AGE_S
              and float(cached.get("ts", 0)) >= _newest_site_mtime()
              and list(cached.get("modules", {}).keys()) == list(mods))
     if fresh and not force:
         return cached
     data = (measure_fn or measure)(mods)
+    if host_fn is not None and not data.get("error"):
+        data["host"] = host_fn(mods)
     if data.get("error") and cached and not cached.get("error"):
         cached["stale_because"] = data["error"]     # keep the last good measurement, say why
         return cached
@@ -212,6 +270,13 @@ def render(c: Dict, fold: str = "") -> str:
         lines.append("- These import: " + ", ".join(f"{m} {v}" if v != "present" else m for m, v in has.items()))
     if lacks:
         lines.append("- These do not: " + ", ".join(lacks))
+    on_host = _has(c.get("host") or {})
+    host_only = [m for m in lacks if m in on_host]
+    if host_only:
+        lines.append("- On the host, these of them DO import, already installed: "
+                     + ", ".join(f"{m} {on_host[m]}" if on_host[m] != "present" else m for m in host_only)
+                     + ". The host is where a `request_run` script runs, if the seat runs it. No install "
+                       "is needed there, and no install can add them to this box.")
     if on or off:
         lines.append("- On PATH: " + (", ".join(on) or "none of the checked tools")
                      + (("; not on PATH: " + ", ".join(off)) if off else ""))
@@ -244,6 +309,7 @@ def todo_notes(c: Dict, items: List, most: int = 6) -> List[str]:
     if not c or c.get("error"):
         return []
     has = _has(c)
+    on_host = _has(c.get("host") or {})
     mods = list((c.get("modules") or {}).keys())
     tools = c.get("tools") or {}
     found = []          # (rank, line): a named module or tool says the most, a generic install/DNS step least
@@ -255,7 +321,9 @@ def todo_notes(c: Dict, items: List, most: int = 6) -> List[str]:
             if re.search(rf"(?<![\w.-]){re.escape(m.lower())}(?![\w-])", low):
                 rank = min(rank, 0)
                 said.append(f"{m} imports in your box ({has[m]})" if m in has
-                            else f"{m} does not import in your box")
+                            else f"{m} does not import in your box" + (
+                                f" but imports on the host ({on_host[m]}), where request_run runs"
+                                if m in on_host else ""))
         installing = bool(_INSTALL.search(t))
         for tool, where in tools.items():
             # a present tool beside an install step reads as "use this instead" (pip beside "uv pip
