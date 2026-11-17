@@ -222,12 +222,19 @@ LEAN_POINTER = "({d} {n}: what each parameter means.)"
 # an argument, not something to write into the file), memory_read.find (literal, not a regex; ignores the
 # line range), memory_edit.old (exact and unique), game.game (the valid ids are prose, not an enum).
 # Add a pair here when a lean being's per-verb failures show a dropped line was load-bearing.
+# settle.id / settle.reopen: from the same trial (11-16..17). Under brief nomad-being passed reopen in 0
+# of 31 settles and id in 5; under lean it passed BOTH in 3 of 3, all refused: an invented id slug
+# twice, and once a real id ('s22') beside a question that belonged to another entry. Those two lines
+# say id is an s-number for changing an existing entry and reopen=true REMOVES it; without them a
+# small model fills every optional field, and a real id with a matching question would overwrite
+# a conclusion it never meant to change.
 # check.target: added from the first lean trial (nomad-being, 2026-11-16 01:01Z). Two beats into lean it
 # passed a file path as the target and the gate refused it; under brief it had used target 'tests'
 # correctly the day before. The values a target may take ('tests', a suite, suite::test) are prose here,
 # not an enum, so lean dropped them with the rest.
 LEAN_KEEP = frozenset({("run", "data"), ("request_run", "rerun"), ("memory_read", "find"),
-                       ("memory_edit", "old"), ("game", "game"), ("check", "target")})
+                       ("memory_edit", "old"), ("game", "game"), ("check", "target"),
+                       ("settle", "id"), ("settle", "reopen")})
 
 
 def tool_descriptions_mode(cfg: Optional[dict]) -> str:
