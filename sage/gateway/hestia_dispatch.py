@@ -3608,12 +3608,12 @@ class HestiaF1aDispatcher:
         try:
             return self._run_staged(stage, staged, cmd, budget, bound_by,
                                     grant_mounts=run_grant_mounts(ctx),
-                                    run_key=_run_key(intent.args, staged))
+                                    run_key=_run_keys(intent.args, staged))
         finally:
             _release_stage_lock(lock_path, lock_fd)
 
     def _run_staged(self, stage, staged, cmd, budget, bound_by,
-                    grant_mounts=((), (), False), run_key: str = "") -> ResultEnvelope:
+                    grant_mounts=((), (), False), run_key=()) -> ResultEnvelope:
         """The staged part of `run`, called only with the stage's lock held (see _do_run).
         `grant_mounts` is run_grant_mounts' answer for the line in `cmd`, for the receipt."""
         import os
@@ -5812,17 +5812,38 @@ RUN_LOG = "run_log.jsonl"
 RUN_LOG_READ_BYTES = 256 * 1024
 
 
+# THE SAME BYTES UNDER ANOTHER SPELLING WERE A NEW RUN. sprout-being, 2026-11-17 03:37Z: it named a script
+# by its absolute path that it had run twice on 11-16 as scratch/<name>, unchanged since, and the receipt
+# read as a first run. `path` and `data` are how the files were found, not what ran: the run sees only
+# their base names and bytes, which `staged` carries in order, so they are left out of the key.
+_RUN_KEY_SPELLING = ("path", "data")
+
+
 def _run_key(args: dict, staged: list) -> str:
-    """One digest of what a run was given: its arguments and every named file's bytes, in order."""
-    h = hashlib.sha256(json.dumps(args or {}, sort_keys=True, default=str).encode())
+    """One digest of what a run was given: its other arguments and every named file's base name and
+    bytes, in order. However a file was spelled, the same bytes under the same name are the same run."""
+    rest = {k: v for k, v in (args or {}).items() if k not in _RUN_KEY_SPELLING}
+    h = hashlib.sha256(json.dumps(rest, sort_keys=True, default=str).encode())
     for base, data in staged:
         h.update(b"\0" + base.encode() + b"\0" + hashlib.sha256(data).digest())
     return h.hexdigest()
 
 
-def _run_seen_note(home, key: str, rc: int, said: str, now: Optional[float] = None) -> str:
+def _run_keys(args: dict, staged: list) -> tuple:
+    """The key, then the key as it was made before 11-17 (spelling included), so a run logged then is
+    still found after the change. Only the first is written."""
+    h = hashlib.sha256(json.dumps(args or {}, sort_keys=True, default=str).encode())
+    for base, data in staged:
+        h.update(b"\0" + base.encode() + b"\0" + hashlib.sha256(data).digest())
+    return (_run_key(args, staged), h.hexdigest())
+
+
+def _run_seen_note(home, key, rc: int, said: str, now: Optional[float] = None) -> str:
     """Look the key up in the home's run log, append this run, and say what an earlier run of the same
-    bytes did. Empty when these bytes never ran before."""
+    bytes did. Empty when these bytes never ran before. `key` may be a tuple: any of them matches, and
+    the first is the one logged."""
+    keys = (key,) if isinstance(key, str) else tuple(key)
+    key = keys[0]
     now = time.time() if now is None else now
     p = Path(home) / RUN_LOG
     said_h = hashlib.sha256(said.encode(errors="replace")).hexdigest()[:16]
@@ -5837,7 +5858,7 @@ def _run_seen_note(home, key: str, rc: int, said: str, now: Optional[float] = No
                 r = json.loads(line)
             except ValueError:
                 continue
-            if r.get("key") == key:
+            if r.get("key") in keys:
                 prev, runs = r, runs + 1
     except OSError:
         pass

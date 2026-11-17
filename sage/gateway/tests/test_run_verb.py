@@ -1108,6 +1108,36 @@ def test_a_rerun_of_the_same_bytes_says_when_they_ran_before(tmp_path):
     assert _run_key({"path": "scratch/b.py"}, [("b.py", b"print(1)\n")]) != k
 
 
+def test_the_same_bytes_named_another_way_are_the_same_run():
+    # sprout-being 11-17: a script run as scratch/<name> on 11-16 was named by its absolute path a day
+    # later, unchanged, and the receipt read as a first run
+    from sage.gateway.hestia_dispatch import _run_key
+    st = [("a.py", b"print(1)\n"), ("in.txt", b"x\n")]
+    k = _run_key({"path": "scratch/a.py", "data": ["scratch/in.txt"]}, st)
+    assert _run_key({"path": "/home/m/scratch/a.py", "data": ["/home/m/scratch/in.txt"]}, st) == k
+    assert _run_key({"path": "./scratch/a.py", "data": "scratch/in.txt"}, st) == k
+    # what the run sees still counts: another data file, another order, another argument
+    assert _run_key({"path": "scratch/a.py"}, st[:1]) != k
+    assert _run_key({"path": "scratch/a.py"}, st[::-1]) != k
+    assert _run_key({"path": "scratch/a.py", "data": ["scratch/in.txt"], "args": ["1"]}, st) != k
+
+
+def test_a_run_logged_under_the_old_key_is_still_found(tmp_path):
+    import json
+    from sage.gateway.hestia_dispatch import RUN_LOG, _run_keys, _run_seen_note
+    st = [("a.py", b"print(1)\n")]
+    new, old = _run_keys({"path": "scratch/a.py"}, st)
+    assert new != old
+    (tmp_path / RUN_LOG).write_text(json.dumps({"t": 1000.0, "key": old, "exit": 1, "said": "x"}) + "\n")
+    again = _run_seen_note(tmp_path, (new, old), 1, "", now=1000.0 + 600)
+    assert again.startswith("The same run as at 1970-01-01 00:16Z (10 min ago)")
+    # the new key is the one logged, so the next spelling finds that run
+    assert json.loads((tmp_path / RUN_LOG).read_text().splitlines()[-1])["key"] == new
+    abs_keys = _run_keys({"path": "/home/m/scratch/a.py"}, st)
+    assert _run_seen_note(tmp_path, abs_keys, 1, "", now=1000.0 + 900).startswith(
+        "The same run as at 1970-01-01 00:26Z (5 min ago)")
+
+
 @needs_sandbox
 def test_run_receipt_carries_same_as_before_on_an_unchanged_rerun(tmp_path):
     d, home = _run_dispatcher(tmp_path)
