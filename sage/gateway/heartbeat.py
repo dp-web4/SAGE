@@ -1599,6 +1599,71 @@ def _trim_block(key: str, text: str, keep: int) -> str:
 SEED_REFIT_HEADROOM = 512
 
 
+# MEASURED, NOT DECLARED (#582 part 2). The step-1 preflight divides by a chars-per-token that was set by
+# hand per family (2.9 default; llama3.1 3.6, gemma4 3.3) and still over-counted by 12-49% against the
+# server's own counts, so a being near the edge lost digest, recall or the whole beat to an estimate. Every
+# explore step-1 generate now records `prompt_chars` (what was sent, in the preflight's units) beside
+# `prompt_eval_count`; this reads them back. The lowest recent ratio, less a margin, still errs high against
+# every count it was taken from, and a new model calibrates itself after a few counted beats.
+MEASURED_CPT_MIN_SAMPLES = 5
+MEASURED_CPT_WINDOW = 40          # samples, newest first, same model
+MEASURED_CPT_MARGIN = 0.97        # applied to the lowest ratio seen
+MEASURED_CPT_TAIL_BYTES = 8 << 20
+# A COUNT THAT IS TOO LOW TO BE A WHOLE PROMPT IS NOT A SAMPLE (NOVA on #774). A server count of less than
+# the whole prompt (a cached prefix not re-counted, a prompt truncated to the window) reads as a HIGHER
+# chars-per-token, which would WIDEN the preflight's allowance. min() already ignores a minority of them;
+# these bound the rest: a ratio above prior x MEASURED_CPT_MAX_OVER_PRIOR (measured families sit 1.14-1.35x
+# over the 2.9 default), or a count at the window's edge, is rejected rather than believed.
+MEASURED_CPT_MAX_OVER_PRIOR = 1.6
+
+
+def measured_preflight_cpt(instance, model, prior: float = None) -> dict:
+    """{"value": float|None, "samples": n, "rejected": n, "min": .., "median": ..} from this being's own
+    recent beats on `model`: explore's first generate, with prompt_chars and a whole server count. None below
+    MEASURED_CPT_MIN_SAMPLES, and the caller keeps the declared or default ratio (`prior`)."""
+    from sage.gateway.being_tool_loop import WINDOW_SEND_MARGIN
+    out = {"value": None, "samples": 0, "rejected": 0}
+    path = Path(instance) / "heartbeats.jsonl"
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - MEASURED_CPT_TAIL_BYTES))
+            lines = f.read().split(b"\n")
+    except OSError:
+        return out
+    ratios = []
+    for raw in reversed(lines):
+        if len(ratios) >= MEASURED_CPT_WINDOW:
+            break
+        try:
+            r = json.loads(raw)
+        except Exception:
+            continue
+        if not isinstance(r, dict) or r.get("model") != model:
+            continue
+        gens = (r.get("explore") or {}).get("generates") if isinstance(r.get("explore"), dict) else None
+        g = gens[0] if gens and isinstance(gens[0], dict) else {}
+        chars, toks = g.get("prompt_chars"), g.get("prompt_eval_count")
+        if not (isinstance(chars, int) and isinstance(toks, int) and toks > 0) or g.get("server_cut"):
+            continue
+        ratio = chars / toks
+        ctx = r.get("num_ctx")
+        if (not 1.5 <= ratio <= 8.0
+                or (prior and ratio > prior * MEASURED_CPT_MAX_OVER_PRIOR)
+                or (isinstance(ctx, int) and toks >= ctx - WINDOW_SEND_MARGIN)):
+            out["rejected"] += 1
+            continue
+        ratios.append(ratio)
+    out["samples"] = len(ratios)
+    if ratios:
+        s = sorted(ratios)
+        out["min"], out["median"] = round(s[0], 3), round(s[len(s) // 2], 3)
+    if len(ratios) >= MEASURED_CPT_MIN_SAMPLES:
+        out["value"] = round(min(ratios) * MEASURED_CPT_MARGIN, 3)
+    return out
+
+
 def fit_seed_to_preflight(render, measure, *, num_ctx, rung_index: int, digest: str, recall: str,
                           cpt: float):
     """Fit the COMPOSED seed to the tool loop's step-1 preflight, measured the way the loop measures it.
@@ -5182,6 +5247,22 @@ def main(argv=None) -> int:
     # above budget from parts; this measures what will be sent and trims only if the loop would
     # refuse it. A beat whose seed the loop accepts is unchanged.
     from sage.gateway.being_tool_loop import uncounted_chars, preflight_tokens, preflight_cpt
+    from sage.gateway.being_tool_loop import _convo_chars as btl_convo_chars, WINDOW_SEND_MARGIN as _WSM
+    # the step-1 ratio, measured on this being's own recent beats when there are enough (#582 part 2)
+    try:
+        llm.preflight_cpt_measured = None      # the prior is the declared/default ratio, never last beat's
+    except Exception:
+        pass
+    _cpt_prior = preflight_cpt(llm)
+    _cpt_cal = measured_preflight_cpt(instance, args.model, prior=_cpt_prior)
+    try:
+        # set every beat, None included: a process that outlives a model switch must not keep the old ratio
+        llm.preflight_cpt_measured = _cpt_cal.get("value")
+    except Exception:
+        _cpt_cal["value"] = None
+    _cpt_cal["prior"] = _cpt_prior
+    _cpt_cal["used"] = preflight_cpt(llm)
+    _cpt_cal["source"] = "measured" if _cpt_cal.get("value") else "declared_or_default"
     _seed_uncounted = uncounted_chars(_explore_specs, explore_turn_mode(instance))
     _states = {conv_rung: state_block}
 
@@ -5196,6 +5277,18 @@ def main(argv=None) -> int:
         digest=digest, recall=recall, cpt=preflight_cpt(llm))
     if _seed_rung != conv_rung:
         conv_rung, state_block = _seed_rung, _states[_seed_rung]
+    # CALIBRATION IS EVIDENCE, NOT A SILENT CHANGE (NOVA on #774): the sent seed's estimate at the ratio used
+    # and at the prior, so a beat the measured ratio admitted (or a cut it caused) is visible against the
+    # server's own count of the same prompt, explore.generates[0].prompt_eval_count.
+    try:
+        _seed_chars = btl_convo_chars(seed) + _seed_uncounted
+        _cpt_cal["seed_est_used"] = int(_seed_chars / _cpt_cal["used"])
+        _cpt_cal["seed_est_prior"] = int(_seed_chars / _cpt_prior)
+        _cpt_cal["admitted_by_calibration"] = bool(
+            _cpt_cal["source"] == "measured" and isinstance(_num_ctx, int)
+            and _cpt_cal["seed_est_prior"] > _num_ctx - _WSM >= _cpt_cal["seed_est_used"])
+    except Exception:
+        pass
     try:
         _prompt_parts = prompt_parts(seed=seed, posture_turn=posture_turn, posture=posture(),
                                      state=state_block, recall=recall, inbox=inbox, digest=digest,
@@ -5696,6 +5789,7 @@ def main(argv=None) -> int:
         # principle): a guard that silences without saying what it silenced trades a
         # confident wrong for a confident silence.
         "interventions": interventions,
+        "preflight_cpt": _cpt_cal,
         # a failed turn selection, by name: without it, "no one is waiting" and "selection broke" are one record
         "selection_error": LAST_SELECTION_ERROR,
         # which waiting turn this beat chose, and whether it asked: "never selected" vs "selected, not answered"

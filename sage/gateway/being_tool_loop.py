@@ -1063,7 +1063,15 @@ def preflight_cpt(llm) -> float:
     from 2026-10-27 07:46Z was refused before it was sent — 125 beats with no step (SAGE #582).
     A family declares `preflight_chars_per_token` in its model config, from a measured ratio and
     BELOW every measured value, so the guard still errs high. Absent, unreadable or implausible
-    (outside 1.5..8) -> PREFLIGHT_CPT, so no undeclared model changes behaviour."""
+    (outside 1.5..8) -> PREFLIGHT_CPT, so no undeclared model changes behaviour.
+
+    MEASURED BEATS DECLARED (#582 part 2). A heartbeat that has this being's own recent step-1 counts for
+    this model sets `llm.preflight_cpt_measured` (heartbeat.measured_preflight_cpt: the lowest recent ratio,
+    less a margin, so it still errs high against every count it was taken from). It wins over the declared
+    value, so a new model calibrates itself from its first counted beats instead of waiting for a config."""
+    m = getattr(llm, "preflight_cpt_measured", None)
+    if isinstance(m, (int, float)) and not isinstance(m, bool) and 1.5 <= m <= 8.0:
+        return float(m)
     try:
         v = llm._adapter.capabilities.preflight_chars_per_token
     except AttributeError:
@@ -1862,6 +1870,16 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                  "attempts": [dict(a) for a in attempts]}
         if retry_cause:
             entry["retry_cause"] = retry_cause   # what the FIRST attempt hit; the counts above are the retry's
+        # WHAT WAS SENT, IN THE PREFLIGHT'S OWN UNITS (#582 part 2). Beside the server's count of the same
+        # prompt it is a measured chars-per-token for this model on this being's real seed, which the next
+        # beat's preflight calibrates from (heartbeat.measured_preflight_cpt). The phase's first generate
+        # only, native form only (the JSON form sends an extra ask and no schemas), and never a cut count.
+        # PAIRED WITH THE SAME PROMPT (NOVA on #774): only a first attempt that stood. A retry may append a
+        # nudge or be retaken as a JSON act (another prompt shape, no schemas), and its count is of that.
+        if (raw.get("prompt_eval_count") and not _server_cut and act_form != "json"
+                and not retried and not response_from_json_act
+                and not generates and _tail in (None, _TAIL_USER)):
+            entry["prompt_chars"] = _convo_chars(msgs) + uncounted
         if _server_cut:
             entry["server_cut"] = _server_cut
             entry["window_full"] = "server_cut"
