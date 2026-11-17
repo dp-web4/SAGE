@@ -129,10 +129,12 @@ def test_relative_memory_path_is_judged_at_the_being_memory_root():
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
+    # realpath: on macOS /tmp is a link to /private/tmp, and the gate judges the resolved path.
+    want = [os.path.realpath("/tmp/being-home/notes/x.md")]
     c.gate(BeingIntent("memory_write", {"path": "notes/x.md", "content": "x"}))
-    assert seen["paths"] == ["/tmp/being-home/notes/x.md"], seen["paths"]
+    assert seen["paths"] == want, seen["paths"]
     c.gate(BeingIntent("memory_read", {"path": "/tmp/being-home/notes/x.md"}))
-    assert seen["paths"] == ["/tmp/being-home/notes/x.md"]
+    assert seen["paths"] == want
 
 
 def test_pr_review_is_judged_as_the_gh_command_the_seat_runs():
@@ -704,8 +706,10 @@ def test_the_judged_command_round_trips_even_when_seat_paths_contain_spaces():
     for label, cmd in (("git_read", git_read_command({"op": "show", "path": "sage"}, ctx)),
                        ("search", search_command({"pattern": "def x", "path": "sage"}, ctx))):
         argv = shlex.split(cmd)
-        assert argv[-1] == f"{wt}/sage", f"{label}: pathspec split into {argv[-3:]}"
-        assert wt in argv[argv.index("-C") + 1] if "-C" in argv else True
+        # realpath: on macOS /home is a link into /System/Volumes/Data, and the worktree is resolved.
+        rwt = os.path.realpath(wt)
+        assert argv[-1] == f"{rwt}/sage", f"{label}: pathspec split into {argv[-3:]}"
+        assert os.path.realpath(argv[argv.index("-C") + 1]) == rwt if "-C" in argv else True
 
     # and the being-supplied pattern stays one element beside them
     argv = shlex.split(search_command({"pattern": "seed, posture = compose"}, ctx))
@@ -869,7 +873,9 @@ def test_check_runs_exactly_one_test_in_one_file(tmp_path):
     """legion-being 2026-10-07, fixing #360: it typed 'gateway::test_pr_read::test_x' (refused
     "bare identifier") and 'gateway::test_pr_readtest_x' (collected nothing), then ran the whole
     file every step. '<suite>::<file>::<test>' runs exactly that pytest node id."""
-    from sage.gateway.being_gate_client import check_command, CHECK_TARGETS
+    from sage.gateway.being_gate_client import check_command, CHECK_TARGETS, sandbox_available
+    if not sandbox_available():
+        pytest.skip("check composes only where its bubblewrap sandbox exists (Linux); it refuses elsewhere")
     wt = tmp_path / "wt"
     for rel in CHECK_TARGETS.values():
         (wt / rel).mkdir(parents=True, exist_ok=True)
@@ -925,7 +931,8 @@ def test_single_gate_judges_a_runs_script_in_the_home():
     assert ev["raw"]["path"] == "scratch/t.py", "raw keeps what the being said"
     assert ev["cwd"] == "/tmp/ws"
     c.gate(BeingIntent("run", {"path": "/tmp/being-home/scratch/t.py"}))
-    assert calls[-1][0]["tool_input"]["path"] == os.path.realpath("/tmp/being-home/scratch/t.py")
+    # left alone, as given (on macOS /tmp is a link, so this is not its realpath)
+    assert calls[-1][0]["tool_input"]["path"] == "/tmp/being-home/scratch/t.py"
 
 
 def test_a_relative_write_is_never_redirected_to_a_granted_file():
