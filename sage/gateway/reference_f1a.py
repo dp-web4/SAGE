@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import posixpath
 import re
 import textwrap
 import contextlib
@@ -370,6 +371,69 @@ def _whole_lines_once(text: str, new: str) -> bool:
     at_line_start = i == 0 or text[i - 1] == "\n"
     at_line_end = j == len(text) or text[j] == "\n" or new.endswith("\n")
     return at_line_start and at_line_end
+
+
+def _once_past_indent(text: str, ns: str) -> bool:
+    """`ns` (stripped) is in `text` exactly once, preceded on its line only by indentation and
+    ending at a line end: the being's new text with its indent dropped, found whole (#763)."""
+    if not ns or text.count(ns) != 1:
+        return False
+    i = text.find(ns)
+    j = i + len(ns)
+    line_start = text.rfind("\n", 0, i) + 1
+    return (text[line_start:i].strip(" \t") == ""
+            and (j == len(text) or text[j] == "\n"))
+
+
+def _lines_within(ns: str, rep: str) -> bool:
+    """The lines of `ns` are whole lines of `rep`, in a row, indentation aside."""
+    a = [ln.strip() for ln in ns.strip().splitlines()]
+    b = [ln.strip() for ln in rep.splitlines()]
+    return bool(a) and any(b[i:i + len(a)] == a for i in range(len(b) - len(a) + 1))
+
+
+#: How far back the being's own landed edits are looked for, in its beat records (#763).
+EARLIER_EDIT_HOURS = 24
+EARLIER_EDIT_TAIL_BYTES = 8_000_000
+
+
+def _edits_in_records(home: Path, hours: float = EARLIER_EDIT_HOURS,
+                      tail: int = EARLIER_EDIT_TAIL_BYTES) -> list:
+    """(path, new, ts) for every memory_edit that came back ok in the being's recent beat records
+    (heartbeats.jsonl, its last `tail` bytes, beats within `hours`). Unreadable gives []."""
+    p = home / "heartbeats.jsonl"
+    out = []
+    try:
+        size = p.stat().st_size
+        with open(p, "rb") as f:
+            f.seek(max(0, size - tail))
+            chunk = f.read()
+    except OSError:
+        return out
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    lines = chunk.split(b"\n")
+    if size > tail:
+        lines = lines[1:]                     # the first is cut mid-record
+    for raw in lines:
+        if b'"memory_edit"' not in raw:
+            continue
+        try:
+            beat = json.loads(raw)
+        except ValueError:
+            continue
+        ts = str(beat.get("ts") or "")
+        if ts < cutoff:
+            continue
+        for phase in beat.values():
+            trace = phase.get("trace") if isinstance(phase, dict) else None
+            for e in trace if isinstance(trace, list) else ():
+                if (isinstance(e, dict) and e.get("effector") == "memory_edit" and e.get("ok")
+                        and isinstance(e.get("args"), dict)):
+                    a = e["args"]
+                    new = next((a[k] for k in ("new", "new_text", "new_str", "new_string") if k in a), None)
+                    if isinstance(new, str) and new.strip():
+                        out.append((posixpath.normpath(str(a.get("path", "")).strip()), new, ts))
+    return out
 
 
 def _indent_only_miss(have: str, old: str, new: str, first_line: int) -> str:
@@ -2104,6 +2168,25 @@ class ReferenceF1aDispatcher:
                 gone = _spaces_verdict(lines, s0, s1, removed, new) + gone
             return self._commit_edit(p, path, text, new_text, what, gone, replacement=new)
         hits = text.count(old)
+        earlier = (self._earlier_edit(path, new) if hits == 0 and new.strip() and new not in old
+                   and _once_past_indent(text, new.strip()) else None)
+        if earlier:
+            # ALREADY MADE, BY THE BEING'S OWN RECEIPT (#763). cbp-being 2026-11-17: a one-line fix
+            # landed at 10:44:36 (ok=true); at 10:47:46 it sent it three more times, 37 characters
+            # and without the line's indent, so the length-and-whole-line guess below missed it,
+            # and each retry got "that text is not in the file". Reflect then remembered the fix
+            # as not made. Here the evidence is its own earlier landed edit of this file whose new
+            # text holds this one, and this text on disk exactly once: no length floor is needed,
+            # since a common short line elsewhere does not come with that receipt.
+            ns = new.strip()
+            at = text.count("\n", 0, text.find(ns)) + 1
+            when = earlier if earlier == "earlier in this beat" else f"at {earlier}"
+            return ResultEnvelope(ok=True, result=(
+                f"already in place; nothing changed. Your memory_edit of '{path}' {when} made this "
+                f"change: your new text is on line {at}, exactly once, and the old text is no longer "
+                f"in the file. Nothing was written: '{path}' is unchanged, byte for byte. This is not "
+                f"a failed edit, and it is not a new one."),
+                witness_id=self._witness(f"memory_edit {p.name} (already in place by own edit; unchanged)"))
         if hits == 0 and len(new.strip()) >= 40 and new not in old and _whole_lines_once(text, new):
             # ALREADY MADE. Measured 2026-10-07 10:20Z: cbp-being's pandas-import edit landed
             # (ok=true), then the same beat sent it twice more. Both retries got the
@@ -2234,6 +2317,21 @@ class ReferenceF1aDispatcher:
         return self._commit_edit(p, path, text, text.replace(old, new, 1),
                                  "replaced 1 occurrence", "", replacement=new)
 
+    def _earlier_edit(self, path: str, new: str) -> Optional[str]:
+        """When the being's own landed memory_edit of `path` carried `new` (stripped, as all or part
+        of its new text): "earlier in this beat", or the beat time it is recorded under. Else None."""
+        key, ns = posixpath.normpath(path.strip()), new.strip()
+        for pth, rep, _ in reversed(self.__dict__.get("_edits_made", [])):
+            if pth == key and _lines_within(ns, rep):
+                return "earlier in this beat"
+        try:
+            for pth, rep, ts in reversed(_edits_in_records(self.memory_root)):
+                if pth == key and _lines_within(ns, rep):
+                    return ts
+        except Exception:
+            return None
+        return None
+
     def _commit_edit(self, p, path: str, text: str, new_text: str, what: str,
                      gone: str, replacement: Optional[str] = None) -> ResultEnvelope:
         """Write an edit atomically and say what it did. Shared by the text and line modes.
@@ -2298,6 +2396,12 @@ class ReferenceF1aDispatcher:
             return ResultEnvelope(ok=False, error=(
                 f"the edit could not be written ({e}); '{path}' is unchanged. Nothing was "
                 f"lost — the file is exactly as it was before you asked."))
+        if replacement and replacement.strip():
+            # this beat's own landed edits, for the ALREADY MADE receipt (#763)
+            made = self.__dict__.setdefault("_edits_made", [])
+            made.append((posixpath.normpath(path), replacement,
+                         datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")))
+            del made[:-50]
         # COUNTED THE WAY memory_read COUNTS (splitlines). This was count("\n") + 1, one
         # higher than memory_read for any file ending in a newline: 2026-09-21 the receipt said
         # 1637 lines while memory_read said 1636, and line numbers are now what the being edits
