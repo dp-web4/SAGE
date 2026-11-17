@@ -234,7 +234,34 @@ LEAN_POINTER = "({d} {n}: what each parameter means.)"
 # not an enum, so lean dropped them with the rest.
 LEAN_KEEP = frozenset({("run", "data"), ("request_run", "rerun"), ("memory_read", "find"),
                        ("memory_edit", "old"), ("game", "game"), ("check", "target"),
-                       ("settle", "id"), ("settle", "reopen")})
+                       ("settle", "id"), ("settle", "reopen")}) | frozenset({
+    # THE RULE, applied to every optional parameter (SAGE #708; HUB on #753: apply it now, not
+    # near-miss by near-miss). Both lean-trial regressions came from one behaviour: without the
+    # prose, a small model fills EVERY listed parameter. So the prose stays when misfilling would
+    # act on existing state, or when the valid values are a closed set written as prose:
+    ("memory_edit", "start_line"), ("memory_edit", "end_line"),  # pick which lines get replaced
+    ("skill", "retire"), ("skill", "distinct"),                  # remove a skill / write beside one
+    ("retire_thread", "preview"), ("retire_thread", "confirmation"),  # dry run vs. a real retire
+    ("pr_amend", "body"),                                        # overwrites the PR body
+    ("tune", "value"),                                           # 'default' resets the parameter
+    ("pr_sync", "op"), ("identity_edit", "field"),               # closed sets written as prose
+})
+# Every other optional parameter was REVIEWED and its prose may go: free text the being writes in
+# its own words, or a read-only selector whose misfill costs a re-read, not a change. A parameter
+# in neither set fails test_every_optional_parameter_is_classified, so a new one can't slip
+# through lean unclassified.
+LEAN_DROP_REVIEWED = frozenset({
+    ("camera", "device"), ("camera", "out_path"), ("game", "expect"), ("gaze", "target"),
+    ("gaze", "words"), ("git_read", "n"), ("git_read", "path"), ("git_read", "rev"),
+    ("git_read", "rev2"), ("identity_edit", "text"), ("identity_edit", "why"),
+    ("memory_read", "end_line"), ("memory_read", "start_line"), ("pr_read", "repo"),
+    ("pr_read", "last"), ("pr_sync", "message"), ("recall", "query"), ("recall", "top_k"),
+    ("recall", "idx"), ("remember", "tags"), ("request_run", "why"), ("retire_thread", "reason"),
+    ("search", "path"), ("search", "n"), ("settle", "question"), ("settle", "answer"),
+    ("settle", "evidence"), ("settle", "why"), ("skill", "name"), ("skill", "query"),
+    ("skill", "description"), ("skill", "when"), ("skill", "body"), ("skill", "why"),
+    ("tune", "name"), ("tune", "why"),
+})
 
 
 def tool_descriptions_mode(cfg: Optional[dict]) -> str:
