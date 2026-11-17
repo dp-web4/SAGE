@@ -1071,15 +1071,68 @@ def refused_this_beat(*turns) -> Optional[bool]:
     return any(bool(i[1].refused) for i in items)
 
 
-def reflect_prompt(optional=(), refused=True, **kw) -> str:
+# A FAILED ACT IS NOT A CLEAN BEAT (#745). "No act refused" is true of an act that ran and failed
+# (ok=False, refused=False), and a small model reads it as "everything worked". cbp-being, 2026-11-16
+# 20:30Z: two memory_edit calls failed ("that text is not in ..."), the prompt said no act was refused,
+# and reflect recorded both edits as done ("now on disk"), a remember carried that premise into the next
+# beat. The harness knows which acts failed; it names them. A failure later followed by a success of
+# the same verb on the same target is not named: it was fixed in the beat.
+_FAILED_TARGET_ARGS = ("path", "game", "pattern", "name")
+FAILED_SHOWN = 5
+
+
+def failed_this_beat(*turns) -> list:
+    """One line per act in these turns' traces that ran and FAILED (ok=False, not refused, an error
+    given) and was not later made to work on the same verb and target. Empty when nothing failed or
+    the traces cannot be read (refused_this_beat says unknown for that)."""
+    items = []
+    for t in turns:
+        tr = getattr(t, "trace", None) if t is not None else None
+        if isinstance(tr, list):
+            items.extend(i for i in tr if isinstance(i, tuple) and len(i) == 2)
+    pending: dict = {}
+    for intent, env in items:
+        eff = str(getattr(intent, "effector", "") or "?")
+        args = getattr(intent, "args", None) or {}
+        target = next((str(args[a]).strip() for a in _FAILED_TARGET_ARGS
+                       if isinstance(args, dict) and args.get(a)), "")
+        key = (eff, target)
+        if getattr(env, "ok", True):
+            pending.pop(key, None)
+            continue
+        err = getattr(env, "error", None)
+        if getattr(env, "refused", False) or not err:
+            continue
+        first = str(err).strip().splitlines()[0] if str(err).strip() else ""
+        if len(first) > 160:
+            first = first[:157] + "..."
+        pending.pop(key, None)                    # the latest failure on a target is the one named
+        pending[key] = f"{eff} {target}".strip() + f": {first}"
+    return list(pending.values())
+
+
+def _failed_sentence(failed) -> str:
+    shown = list(failed)[:FAILED_SHOWN]
+    more = len(failed) - len(shown)
+    return (" These acts of yours this beat FAILED and did not do what you asked, so do not record them as"
+            " done: " + "; ".join(shown) + (f"; and {more} more" if more > 0 else "") + ".")
+
+
+def reflect_prompt(optional=(), refused=True, failed=(), **kw) -> str:
     """REFLECT, with the records in `optional` offered rather than required, and the refusal question
-    unless `refused` is False (known: nothing recorded as refused). True and None (unknown) keep it."""
+    unless `refused` is False (known: nothing recorded as refused). True and None (unknown) keep it.
+    `failed` (failed_this_beat) names acts that ran and failed; when any did, "no act refused" is not
+    said alone, the failures are named beside it."""
     body = REFLECT.format(**kw)
     for r in optional:
         old, new = _REFLECT_OPTIONAL_LINE[r]
         body = body.replace(old, new, 1)
+    tail = _failed_sentence(failed) if failed else ""
     if refused is False:
-        body = body.replace(*_REFLECT_REFUSED, 1)
+        old, new = _REFLECT_REFUSED
+        body = body.replace(old, new + tail, 1)
+    elif tail:
+        body = body.replace(_REFLECT_REFUSED[0], _REFLECT_REFUSED[0] + tail, 1)
     return body
 
 
@@ -5085,6 +5138,7 @@ def main(argv=None) -> int:
                 convo.append({"role": "user", "content": _wo})
             convo.append({"role": "user", "content": reflect_prompt(
                 reflect_optional_for(instance_config(instance)), refused=refused_this_beat(explore, after),
+                failed=failed_this_beat(explore, after),
                 date=f"{now:%Y-%m-%d %H:%M} UTC", say_line=say_line, say_first=say_first)})
             # One extra step when someone is waiting, because the routine three fill the budget exactly.
             # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
