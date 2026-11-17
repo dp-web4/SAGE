@@ -397,6 +397,12 @@ _SEARCH_HOME_POINTER = (
     "with the file's path and find: it lists matching line numbers in that file.")
 
 GIT_OPS =("log", "show", "diff", "status", "blame", "cat")
+#: Ops a being reaches for that the grammar already serves under another name. `ls` on a
+#: directory is `cat`: `git show <rev>:<dir>` prints the tree's entries. mcnugget-being sent
+#: `{"op": "ls", "path": "sage/gateway/"}` 6 times in 2026-11 while searching for file names
+#: that do not exist (`being_in_drain*.py`); each was refused, so the one read that would have
+#: settled the question never ran. The published enum stays GIT_OPS (a name, not a new verb).
+GIT_OP_ALIASES = {"ls": "cat"}
 
 # A revision the being may name: a hex sha, HEAD with optional ~n/^n, or a plain branch or
 # tag name. Deliberately excludes anything containing a flag, a space, or a path separator
@@ -440,6 +446,7 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     if not worktree:
         raise ValueError(NO_WORKTREE_REFUSAL["git_read"])
     op = str(args.get("op", "")).strip()
+    op = GIT_OP_ALIASES.get(op, op)
     if op not in GIT_OPS:
         raise ValueError(f"git_read 'op' must be one of {list(GIT_OPS)}, got {op!r}")
 
@@ -543,7 +550,8 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
         return f"{base} diff --no-ext-diff --no-textconv {span}" + (f" -- {shlex.quote(path)}" if path else "")
     if op == "cat":
         if not path:
-            raise ValueError("git_read op='cat' needs a 'path': the file whose content you want")
+            raise ValueError("git_read op='cat' needs a 'path': the file whose content you want, "
+                             "or a directory whose entries you want")
         # `<rev>:<path>` is ONE argument to git and the being supplies neither half raw —
         # the rev passed _REV, the path was resolved absolute inside the worktree above. The
         # path must be repo-relative here, so it is relativised back; an absolute path after
@@ -1635,7 +1643,7 @@ def run_names(args: dict, ctx: Optional[dict] = None) -> List[str]:
             parsed = _json.loads(data)
         except ValueError:
             parsed = None
-        if isinstance(parsed, list):
+        if isinstance(parsed, (list, dict)):
             data = parsed
         else:
             # A LIST OF PATHS ARRIVES AS PROSE. Measured 2026-09-18 06:46Z: it sent
@@ -1646,6 +1654,33 @@ def run_names(args: dict, ctx: Optional[dict] = None) -> List[str]:
             # space is still refused, by the per-path check below, where the message is about
             # that path rather than about the blob.
             data = [x for x in _re.split(r"[,\s]+", data.strip()) if x]
+    if isinstance(data, dict):
+        # A MAPPING ARRIVES AND IS READ AS PROSE. cbp-being, 2026-10-23..11-16: 189 run calls
+        # sent `data` as a JSON object, and none ran. The prose split above cut the object at
+        # whitespace, so the first "path" was `{"name.py":` and the refusal said "you gave a
+        # base name with no directory", which was false about what it sent; it re-sent the
+        # same object 6 times in one beat (11-16 02:44). Its objects take two forms. 58 entries
+        # were {base name: source path}: exactly the name the stager gives that source anyway,
+        # so the values are taken as the list. The rest rename a file ({"test_image": ".../
+        # test_image.npy"}) or pass settings ({"verbose": true}), and run does neither, so the
+        # refusal says which, and spells out the list to send instead.
+        import json
+        vals = list(data.values())
+        if all(isinstance(v, str) and v.strip() and isinstance(k, str)
+                        and k.strip() == os.path.basename(v.strip().rstrip("/"))
+                        for k, v in data.items()):
+            data = [v.strip() for v in vals]
+        else:
+            paths = [v.strip() for v in vals if isinstance(v, str) and v.strip()]
+            route = (f" If the values are the files you want, send data={json.dumps(paths)}; "
+                     f"each appears in the sandbox under its own base name"
+                     if paths else "")
+            raise ValueError(
+                f"run 'data' is a LIST of files to copy into the sandbox, and you sent a mapping "
+                f"(keys {json.dumps([str(k) for k in data][:4])}). A file appears in the sandbox "
+                f"under its source's base name, which a key cannot change, and run passes no "
+                f"arguments or settings to the script: write those into the script itself."
+                + route)
     if not isinstance(data, (list, tuple)):
         raise ValueError(f"run 'data' must be a list of paths in your home, got {type(data).__name__}")
     names = [path] + [str(d).strip() for d in data]
@@ -3046,7 +3081,7 @@ _TOOL_SCHEMAS = {
                  "beats, and to compare a `check` result's tree block against what is "
                  "actually in the history.",
                  {"op": "one of " + ", ".join(repr(o) for o in GIT_OPS)
-                        + " ('cat' reads a file's content at a revision, and needs 'path')",
+                        + " ('cat' reads a file or lists a directory at a revision; needs 'path')",
                   "rev": "optional: a commit sha, HEAD, HEAD~2, or a branch name",
                   "rev2": "optional, for op='diff': the second revision of the span",
                   "path": "optional: a path inside your worktree to narrow the answer to",

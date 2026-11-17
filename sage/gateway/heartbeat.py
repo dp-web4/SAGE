@@ -2265,6 +2265,13 @@ _RUNNING_CLAIM = re.compile(
     r"results? (?:are |is )?(?:pending|coming|on (?:its|their|the) way)|"
     r"await\w*[^.\n]{0,60}results?|waiting (?:for|on)[^.\n]{0,60}results?)")
 _RUN_ANSWER = re.compile(r"^\[request_run\] I (ran|did not run) (\S+?)[.,;:]?(?:\s|$)")
+# A seat answer written without the prefix ("I did not run scratch/x.py (sha ...)"): read only when the
+# path is plainly a runnable file, so "I ran into ..." is never taken for an answer.
+_RUN_ANSWER_BARE = re.compile(r"^I (ran|did not run) (\S+?\.(?:py|sh))[.,;:]?(?:\s|$)")
+# The receipt line request_run writes on a repeat of bytes the seat already answered (hestia_dispatch,
+# "UNCHANGED since ..."). Group 1 is the seq of that answer; group "ran" is set when it was a run.
+_UNCHANGED_REPEAT = re.compile(r"^UNCHANGED since (?:the request at seq \d+; the seat answered|"
+                               r"(?P<ran>the seat ran this exact file)) at seq (\d+)\.", re.M)
 _RUN_VERDICT = re.compile(r"(exit code -?\d+|timed out after [^.—]+)")
 _RUN_SHA = re.compile(r"sha(?:256)?[:= ]\s*([0-9a-f]{12})")
 _REQUEST = "[request_run]"
@@ -2416,9 +2423,16 @@ def _runs_by_file(instance: Path, member: str) -> tuple:
     conversation the being is in, keyed by the path RELATIVE TO THE HOME, so notes/a.py and
     a.py are two files. A run answer is someone else's turn starting `[request_run] I ran
     <path>` (or `I did not run`); a request is the being's own `[request_run] <path>` with no
-    answer for that path after it."""
+    answer for that path after it.
+
+    A REPEAT OF ANSWERED BYTES IS NOT WAITING (sprout-being, 2026-11-16). A request whose receipt says
+    UNCHANGED (the same bytes the seat already answered at seq Y) adds nothing to wait for; requests for
+    the path made after Y (other bytes) still wait. Counted as pending, it stood in this block every beat as "waiting to be run": 9 requests,
+    8 of them repeats, the oldest from 11-03, most of them scripts to restart the seat it had settled
+    needed no restart. Each beat this block told it otherwise, as a measurement. The third dict maps
+    such a path to (answer seq, ran) from the request's own receipt line."""
     from sage.gateway import conversations as _conv
-    last, pending = {}, {}
+    last, pending, repeated = {}, {}, {}
     try:
         convs = [m for m in _conv.listing(instance) if member in m.get("participants", [])]
     except Exception:
@@ -2430,14 +2444,28 @@ def _runs_by_file(instance: Path, member: str) -> tuple:
             continue
         for t in turns:
             text = (t.get("text") or "").strip()
-            if not text.startswith(_REQUEST):
+            bare = t.get("from") != member and _RUN_ANSWER_BARE.match(text)
+            if not text.startswith(_REQUEST) and not bare:
                 continue
             first = text.splitlines()[0]
+            if bare and not first.startswith(_REQUEST):
+                first = f"{_REQUEST} {first}"
             if t.get("from") == member:
                 rest = first[len(_REQUEST):].strip()
                 f = _rel(instance, rest.split()[0]) if rest else ""
                 if f:
-                    pending.setdefault(f, []).append(int(t.get("seq") or 0))
+                    rep = _UNCHANGED_REPEAT.search(text)
+                    if rep:
+                        # the seat's answer at seq y closes the requests made before it, not the ones after
+                        y = int(rep.group(2))
+                        repeated[f] = (y, bool(rep.group("ran")))
+                        keep = [s for s in pending.get(f, []) if s > y]
+                        if keep:
+                            pending[f] = keep
+                        else:
+                            pending.pop(f, None)
+                    else:
+                        pending.setdefault(f, []).append(int(t.get("seq") or 0))
                 continue
             mm = _RUN_ANSWER.match(first)
             if not mm:
@@ -2452,7 +2480,8 @@ def _runs_by_file(instance: Path, member: str) -> tuple:
                        "verdict": v.group(1) if v else ("declined" if mm.group(1) != "ran" else "no verdict"),
                        "sha": sh.group(1) if sh else None}
             pending.pop(f, None)      # an answer for a path answers every request for it before it
-    return last, pending
+            repeated.pop(f, None)
+    return last, pending, repeated
 
 
 # Where a being keeps runnable code: its home's top level and the two directories it writes
@@ -2479,7 +2508,7 @@ def files_and_runs(instance: Path, member: str, now: Optional[float] = None,
                     found[str(p.resolve().relative_to(home))] = p
         except (OSError, ValueError):
             continue
-    last, pending = _runs_by_file(instance, member) if member else ({}, {})
+    last, pending, repeated = _runs_by_file(instance, member) if member else ({}, {}, {})
     # a path a run or request names is the being's file too, wherever it lives
     for rel in list(last) + list(pending):
         p = instance / rel
@@ -2524,8 +2553,13 @@ def files_and_runs(instance: Path, member: str, now: Optional[float] = None,
                         f"start_line {r['seq']}).")
             else:
                 row += f" Last request was declined at seq {r['seq']} ({when})."
+        elif rel in repeated and repeated[rel][1]:
+            row += f" The seat ran these exact bytes at seq {repeated[rel][0]}."
         else:
             row += " Never run."
+        if rel in repeated and rel not in pending:
+            row += (f" Your last request for it repeated bytes the seat had already answered (seq "
+                    f"{repeated[rel][0]}), so it adds nothing to wait for.")
         if rel in pending:
             row += f" Your request (seq {', '.join(map(str, pending[rel]))}) is waiting to be run."
         row += " Running now." if running and rel in running else ""
@@ -2697,6 +2731,27 @@ _BARE_TAG = re.compile(r"^\s*(\[(?:still open|open|added|done|completed)\].*\S)\
 # outside a done: section, so the parser read it as nothing and nothing closed.
 _BARE_ALL = re.compile(r"^\s*(?:(20\d\d-\d\d-\d\d)(?:[ T](\d\d:\d\d)(?::\d\d)?)?\s*(?:UTC|Z)?\s*:?\s*)?"
                        r"((?:all|every)\s*:\s*\S.*?)\s*$", re.I)
+# A `done: <item>` line is a closing act, not a section header. Measured on cbp-being 2026-11-14: its todo history
+# holds 1,034 such lines (16 in the 19:43Z retired file alone) and the parser read none of them: _SECTION wants
+# the line to END after "done:", and _ITEM wants a dash. Told at seq 15045 to mark "Proceed with mechanism train
+# once torch version is confirmed" done, it wrote that closing four times; the retire_note at 19:43Z carried the
+# item forward as open, and the being, which had written the closing, told the seat it was "already done".
+_BARE_DONE = re.compile(r"^\s*(?:done|completed)\s*:\s*(\S.*\S)\s*$", re.I)
+# THE VIEW'S OWN WORDS ARE NOT PART OF THE ITEM. todo_view shows each item as `- [ ] <text> (since <date> UTC)`,
+# and a being that closes an item by copying the line it was shown copies the suffix too (424 closings on
+# cbp-being). The suffix is ~27 chars, enough to put a 60-char item under the 0.85 ratio, so the closing named
+# the item and closed nothing. A trailing `(done at <seq>...)` note -- the shape the seat asked for at 15045 --
+# misses the same way. Both are cut before the item is compared.
+_VIEW_SUFFIX = re.compile(r"\s*(?:\(since 20\d\d-\d\d-\d\d[ T]\d\d:\d\d(?: ?UTC|Z)?\)"
+                          r"|\((?:done|closed|completed)(?: at| in)?\b[^()]*\)"
+                          r"|\s+—\s+\d+ open items mention .*; this is the newest of them)\s*$", re.I)
+
+
+def _strip_view_suffix(body: str) -> str:
+    prev = None
+    while prev != body:
+        prev, body = body, _VIEW_SUFFIX.sub("", body)
+    return body
 
 
 def _canonical_todo(text: str) -> str:
@@ -2718,6 +2773,10 @@ def _canonical_todo(text: str) -> str:
             if a.group(1):
                 out.append(stamp(a.group(1), a.group(2)))
             out.append(f"- [done] {a.group(3)}")
+            continue
+        d = _BARE_DONE.match(line)
+        if d:
+            out.append(f"- [done] {d.group(1)}")
             continue
         m = _INLINE_ITEM.match(line)
         if m:
@@ -2800,7 +2859,10 @@ def _parse_todo(text: str, closures: Optional[list] = None) -> dict:
                 body = t.group(2)
             elif section:
                 status = "done" if section in ("done", "completed") else "open"
-        if not status or len(body) < 4:
+        if not status:
+            continue
+        body = _strip_view_suffix(body)
+        if len(body) < 4:
             continue
         n = _norm(body)
         if status == "open":

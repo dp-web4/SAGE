@@ -155,3 +155,49 @@ def test_a_one_line_checkbox_closes_and_opens():
             "2026-11-08 10:05 UTC: [ ] Verify the peer_ask path.\n"
             "2026-11-08 11:00 UTC: [x] Check the hub notify route.\n")
     assert list(_open(text)) == ["Verify the peer_ask path."]
+
+
+# MEASURED ON CBP-BEING, 2026-11-14 (seq 15045-15046). It closes items as `done: <item>` on one line, often
+# with the view's `(since ... UTC)` suffix copied on, or a `(done at <seq>)` note. None of 1,034 such lines
+# closed anything, and the 19:43Z retire_note carried the closed items into the fresh todo.md as open.
+
+def test_a_done_colon_line_closes_the_item_it_names():
+    text = ("2026-11-14 19:30 UTC\n"
+            "- [ ] Proceed with mechanism train once torch version is confirmed\n"
+            "done: Proceed with mechanism train once torch version is confirmed\n")
+    assert _open(text) == {}
+
+
+def test_a_closing_that_copies_the_views_since_suffix_still_closes():
+    text = ("2026-11-14 19:30 UTC\n"
+            "- [ ] Proceed with mechanism train once torch version is confirmed\n"
+            "done: Proceed with mechanism train once torch version is confirmed (since 2026-11-14 19:31 UTC)\n")
+    assert _open(text) == {}
+
+
+def test_a_closing_with_a_done_at_note_still_closes():
+    text = ("2026-11-14 19:30 UTC\n"
+            "- [ ] Proceed with mechanism train once torch version is confirmed\n"
+            "- [done] Proceed with mechanism train once torch version is confirmed (done at 15022; 97.00% "
+            "accuracy on 1000 rows confirms rule X[:,0]>0) (since 2026-11-14 19:30 UTC)\n")
+    assert _open(text) == {}
+
+
+def test_a_done_section_header_is_still_a_header():
+    text = ("2026-11-14 19:30 UTC\n"
+            "- [ ] Check the hub notify route.\n"
+            "done:\n"
+            "- Wrote the journal.\n")
+    assert list(_open(text)) == ["Check the hub notify route."]
+
+
+def test_an_open_item_copied_with_the_since_suffix_is_one_item_not_two():
+    text = ("2026-11-14 19:30 UTC\n"
+            "- [ ] Check the hub notify route.\n"
+            "- [ ] Check the hub notify route. (since 2026-11-14 19:30 UTC)\n")
+    assert list(_open(text)) == ["Check the hub notify route."]
+
+
+def test_a_paren_note_that_is_not_the_views_stays_part_of_the_item():
+    text = "2026-11-14 19:30 UTC\n- [ ] Run the sweep (seeds 1-5)\n"
+    assert list(_open(text)) == ["Run the sweep (seeds 1-5)"]

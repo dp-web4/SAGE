@@ -187,6 +187,35 @@ def test_run_data_accepts_the_shapes_a_model_actually_emits():
         run_command({"path": "e.py", "data": 7}, ctx)
 
 
+@needs_bwrap
+def test_run_data_mapping_of_base_names_to_sources_is_the_list_it_names():
+    """cbp-being 2026-11-16 02:44: data='{"m.py": "scratch/m.py"}' six times, refused each
+    time as 'a base name with no directory'. A {base name: source} map is the stager's own
+    naming, so its values are the list."""
+    from sage.gateway.being_gate_client import run_command
+    ctx = {"memory_root": "/home/x/inst", "member": "b"}
+    want = run_command({"path": "scratch/e.py", "data": ["scratch/m.py"]}, ctx)
+    assert run_command({"path": "scratch/e.py", "data": '{"m.py": "scratch/m.py"}'}, ctx) == want
+    assert run_command({"path": "scratch/e.py", "data": {"m.py": "scratch/m.py"}}, ctx) == want
+    two = run_command({"path": "e.py", "data": ["scratch/a.npy", "b.md"]}, ctx)
+    assert run_command({"path": "e.py", "data": '{"a.npy": "scratch/a.npy", "b.md": "b.md"}'}, ctx) == two
+
+
+def test_run_data_mapping_that_renames_or_passes_settings_is_refused_with_the_list_to_send():
+    from sage.gateway.being_gate_client import run_command
+    ctx = {"memory_root": "/home/x/inst", "member": "b"}
+    # a rename: the key is not the source's base name
+    with pytest.raises(ValueError, match=r'a mapping .*send data=\["scratch/test_image.npy"\]') as e:
+        run_command({"path": "e.py", "data": '{"test_image": "scratch/test_image.npy"}'}, ctx)
+    assert "{\"test_image\":" not in str(e.value).split("keys")[0]  # not the old prose misread
+    # settings, not files: no list to offer, but the reason is named
+    with pytest.raises(ValueError, match="passes no arguments or settings") as e:
+        run_command({"path": "e.py", "data": '{"verbose": true}'}, ctx)
+    assert "send data=" not in str(e.value)
+    # an empty mapping is no data, as an empty list is (3 of its calls sent {})
+    assert run_command({"path": "e.py", "data": "{}"}, ctx) == run_command({"path": "e.py"}, ctx)
+
+
 def test_run_mounts_the_worktree_read_only_on_the_import_path(tmp_path, monkeypatch):
     from sage.gateway import being_gate_client as B
     monkeypatch.setattr(B, "sandbox_available", lambda: True)
@@ -1139,3 +1168,37 @@ def test_a_plural_pid_a_probe_prints_is_said_to_be_part_of_the_run():
     from sage.gateway.hestia_dispatch import _run_note
     note = _run_note(0, "", ["a.py"], "daemon: PIDs 1 and 2 confirmed")
     assert "if PID 1 here came from such a listing" in note and "own process space" in note, note
+
+
+def test_a_run_that_asks_for_its_arguments_is_told_run_passes_none():
+    """sprout-being, 2026-11-13 02:10Z: its port check printed its usage line and exited 1, and it
+    passed the port as `data` twice. The receipt now says the script gets no arguments, for a
+    usage line on either stream, argparse's complaint, or an IndexError through sys.argv."""
+    from sage.gateway.hestia_dispatch import _run_note
+    said = "sys.argv holds only the script's name"
+    assert said in _run_note(1, "", ["p.py"], "Usage: p.py <port>")
+    assert said in _run_note(2, "usage: p.py [-h] port\np.py: error: the following arguments are "
+                                "required: port", ["p.py"])
+    assert said in _run_note(1, 'Traceback (most recent call last):\n  File "/work/p.py", line 4, in '
+                                '<module>\n    port = int(sys.argv[1])\nIndexError: list index out of '
+                                'range', ["p.py"])
+    assert said not in _run_note(0, "", ["p.py"], "usage: p.py <port>")      # it ran fine: no note
+    assert said not in _run_note(1, "", ["p.py"], "connect: refused")       # failed, not for argv
+    assert said not in _run_note(1, "", ["p.py"], "see the usage: section")  # not a usage line
+    # argv[0] is the script's own name, always present: a failure through it is not a missing argument
+    assert said not in _run_note(1, 'Traceback (most recent call last):\n  File "/work/p.py", line 3, in '
+                                    '<module>\n    open(os.path.join(os.path.dirname(sys.argv[0]), '
+                                    '"cfg.json"))\nFileNotFoundError: cfg.json', ["p.py"])
+
+
+@needs_sandbox
+def test_a_value_passed_as_data_is_told_data_only_stages_files(tmp_path):
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "p.py").write_text("print('hi')\n")
+    v = d._do_run(BeingIntent("run", {"path": "scratch/p.py", "data": ["30001"]}))
+    assert v.ok is False and "no such file in your home: 30001" in v.error
+    assert "does not hand values to your script" in v.error and "base name with no directory" not in v.error
+    g = d._do_run(BeingIntent("run", {"path": "scratch/p.py", "data": ["ghost.md"]}))
+    assert "base name with no directory" in g.error and "hand values" not in g.error
+    s = d._do_run(BeingIntent("run", {"path": "nope"}))                  # the script itself: no value hint
+    assert s.ok is False and "hand values" not in s.error

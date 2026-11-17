@@ -3020,8 +3020,11 @@ class HestiaF1aDispatcher:
             rk = relevance.Ranker([f"{e['question']} {e.get('answer', '')}" for e in entries])
             mine = [entries[i] for _, i in rk.related(relevance.request_subject(query))][:3]
         if mine:
-            out["you_settled"] = ("You settled this, or something close to it, in your own words:\n"
+            out["you_settled"] = ("You settled this, or something close to it, in your own words. These are "
+                                  "your conclusions, not this run's output:\n"
                                   + "\n".join("- " + being_settled._line(e, being_settled.RENDER_ENTRY_CHARS)
+                                              + ("" if e.get("evidence") else
+                                                 " (no evidence given: nothing run or read is behind it)")
                                               for e in mine))
         if found:
             said = relevance.earlier_requests_said(found)
@@ -3753,6 +3756,13 @@ class HestiaF1aDispatcher:
                             hint = (f". You gave a base name; name the SOURCE path instead: "
                                     + ", ".join(rels) +
                                     " — inside the sandbox it still appears as " + n)
+                        elif i > 0 and "." not in n:
+                            # A VALUE, NOT A FILE (2026-11-13 02:10Z, _NO_ARGV_NOTE): a port number
+                            # passed as `data` was told it was a base name missing its directory.
+                            hint = (". `data` only stages files; it does not hand values to your "
+                                    "script, which gets no command-line arguments (sys.argv holds "
+                                    "only its name). Write the value into the script, or into a "
+                                    "file you name here")
                         else:
                             hint = (". You gave a base name with no directory. `data` takes SOURCE "
                                     "paths (relative to your home, or absolute in your reach); the "
@@ -5091,13 +5101,16 @@ class HestiaF1aDispatcher:
                     "has gone out for this run yet"
                     + ("; it does not make the file run, and the seat still decides" if declined else "")
                     + ". It is not a line in your file.")
-        return ResultEnvelope(ok=True, witness_id=said.witness_id, result={
-            **result,
-            "requested": rel,
-            "asked": seat_conv,
-            "ran": False,
-            "note": note,
-        })
+        # WHAT YOU SETTLED COMES AFTER "NOTHING HAS RUN YET", not before it. cbp 2026-11-14 (heartbeat
+        # 02:43:35, seq 14877/14881): you_settled led the receipt with s499, an evidence-less answer
+        # holding an expectation ("expected to achieve 80-90%+"), the note came last, and the beat's
+        # reflect reported 80-90% as the run's result while the real run (seq 14879) exited 1 with no
+        # accuracy line. Seat answers (unchanged, earlier_on_this) stay above the note; its "above" names them.
+        settled = result.pop("you_settled", None)
+        body = {**result, "requested": rel, "asked": seat_conv, "ran": False, "note": note}
+        if settled:
+            body["you_settled"] = settled
+        return ResultEnvelope(ok=True, witness_id=said.witness_id, result=body)
 
     def _skips_answered_run_wake(self) -> bool:
         """instance.json `answered_run_wake: "skip"` (per-instance; heartbeat.answered_run_wake_for).
@@ -5770,7 +5783,26 @@ def _run_note(rc: int, stderr: str, files: list, stdout: str = "", seatbelt: boo
     absent = _missing_file(stderr)
     if absent:
         note += " " + _missing_file_note(absent, files)
+    if rc != 0 and _ARGV_SAID.search(said):
+        note += " " + _NO_ARGV_NOTE
     return note
+
+
+#: A run that ended asking for its arguments: a usage line, argparse's complaint, or an IndexError
+#: traceback through sys.argv[1..] (argv[0], the script's own name, is always there: legion on #733).
+_ARGV_SAID = re.compile(r"^\s*usage:|the following arguments are required|sys\.argv\[[1-9]", re.I | re.M)
+
+#: A SCRIPT THAT WANTS AN ARGUMENT NEVER GETS ONE. sprout-being, 2026-11-13 02:10Z: it wrote a port
+#: check to find out whether anything listens on 30001. The script printed its usage line and exited 1.
+#: It passed the port as `data` twice and was told it had named a base name without its directory. The beat ended
+#: with no answer, and 38 minutes later it settled that the port was listening. In 967 runs
+#: (11-05..11-15), 24 ended on a usage line or an argv error, and 5 were followed by a value passed as
+#: `data`. The run tool's long description says sys.argv holds only the script's name. The receipt
+#: did not, and the receipt is what the being reads when the script fails.
+_NO_ARGV_NOTE = ("This run was given no command-line arguments, and `run` cannot pass any: inside the "
+                 "sandbox sys.argv holds only the script's name. If the script stopped because it "
+                 "wanted one, write the value into the script, or into a file you pass as `data` and "
+                 "open by its base name.")
 
 
 def _daemon_answered_note(action_id: str) -> str:

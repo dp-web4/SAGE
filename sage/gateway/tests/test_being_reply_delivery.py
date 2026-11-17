@@ -230,7 +230,7 @@ def test_a_second_retire_of_the_same_name_on_the_same_day_keeps_both():
         assert body in texts, "every retired copy survives"
     names = {k.name for k in kept}
     for r in results:
-        assert r.split(" -> ")[1] in names, "the receipt names the file it actually wrote"
+        assert r.split(" -> ")[1].split(". ")[0] in names, "the receipt names the file it actually wrote"
     assert all(k.suffix == ".py" for k in kept), "the extension stays last"
 
 

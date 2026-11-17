@@ -1598,6 +1598,34 @@ class ReferenceF1aDispatcher:
                 continue
         return out
 
+    def _same_name_note(self, p: Path, *, created: bool) -> str:
+        """One sentence naming files that share `p`'s name one directory away, or "".
+
+        THE ABSENCE TEXT WAS THE ROUTE TO A DUPLICATE. Measured 2026-11-16 06:23Z on cbp-being
+        (beat heartbeat-5d75f0a150eb): the seat asked for two memory_edit range deletions on
+        scratch/xor_not_linearly_separable.py (401 lines). The being sent the bare name, got
+        "does not exist ... memory_write creates a file", did exactly that, and the receipt
+        said "created xor_not_linearly_separable.py with 2059 chars". It then edited, read and
+        ran the NEW 66-line top-level file as if it were the one it was asked to trim; the
+        scratch/ file never changed, and the script that imports it would have run the old
+        401 lines. memory_read already names a same-name file on a miss (#140); edit and the
+        create receipt did not. Matches are listed neutrally, as memory_read does."""
+        near = self._same_name_elsewhere(p)
+        if not near:
+            return ""
+        shown = near[:_SAME_NAME_SHOWN]
+        where = ", ".join(f"'{n}'" for n in shown)
+        more = f" and {len(near) - len(shown)} more" if len(near) > len(shown) else ""
+        if created:
+            return (f" A file with this name already exists elsewhere: {where}{more}. It was "
+                    f"NOT changed; this write made a separate new file. Anything that imports or "
+                    f"runs {where if len(near) == 1 else 'one of those'} still sees the old text.")
+        if len(near) == 1:
+            return (f" But a file with that name DOES exist at '{near[0]}': to edit it, send the "
+                    f"same memory_edit with path \"{near[0]}\".")
+        return (f" But {len(near)} files with that name exist: {where}{more}. Nothing tells "
+                f"which you mean; send memory_edit with the full path of the one you mean.")
+
     @staticmethod
     def _existence(p: Path) -> str:
         """'absent' | 'present' | 'unknown'. Never guesses.
@@ -2230,7 +2258,9 @@ class ReferenceF1aDispatcher:
         if not p.exists():
             return ResultEnvelope(ok=False, error=(
                 f"nothing to edit: '{path}' does not exist. This is an absence, not a "
-                f"refusal. memory_write creates a file; memory_edit changes one that is there."))
+                f"refusal." + (self._same_name_note(p, created=False) or
+                               " memory_write creates a file; memory_edit changes one that is "
+                               "there.")))
         if p.is_dir():
             return ResultEnvelope(ok=False, error=f"'{path}' is a directory.")
         text = p.read_text(errors="replace")
@@ -2610,6 +2640,16 @@ class ReferenceF1aDispatcher:
             result += f". {said}"
         else:
             p.unlink()
+            # SAY THE WHOLE FILE MOVED (cbp-being, 2026-11-15 21:53Z). A memory_write had appended a
+            # second script below a working 26-line one; the being called retire_note with the reason
+            # "Retiring it leaves only the valid XOR verification script (lines 1-26)", got back only
+            # "retired X -> Y", and filed the cleanup as done while nothing was left at the path. The
+            # receipt now says what left and names the call that removes only some lines.
+            n_lines = len(body.splitlines())
+            result += (f". The whole file ({n_lines} line{'' if n_lines == 1 else 's'}) moved there; nothing is left at "
+                       f"{p.parent.name}/{p.name}. retire_note always takes the whole file. To drop only "
+                       f"some lines and keep the rest in place, use memory_edit with start_line, "
+                       f"end_line and an empty new.")
         return ResultEnvelope(ok=True, result=result,
                               witness_id=self._witness(f"retire_note {p.name} -> {dest.name}: {reason[:120]}"))
 
@@ -2759,7 +2799,8 @@ class ReferenceF1aDispatcher:
                          f"mode='restore' puts it back." if kept else ""))
         elif not existed:
             result = (f"created {p.name} with {len(content)} chars at {p} — was 0 bytes, now "
-                      f"{after_bytes}.{where_line}")
+                      f"{after_bytes}.{where_line}"
+                      + self._same_name_note(p, created=True))
         else:
             # SAY APPENDED WHEN IT APPENDED, and name the door for a one-line change: a beat
             # after memory_edit shipped the being "fixed" a function by appending a new copy

@@ -143,8 +143,8 @@ def test_recovery_distinguishes_provider_token_count_from_returned_thinking(tmp_
             "provider did not report an output token count") in nudge
     assert "149 thinking characters were returned" in nudge
     assert "whole budget deliberating" not in nudge and "whole deliberation" not in nudge
-    assert "thinking text returned by the provider is saved as" in nudge
-    assert "memory_read" in nudge and "one tool call" in nudge
+    # still kept on disk, but 149 returned chars are not offered as a draft (cbp-being 11-16)
+    assert "saved as" not in nudge and "one tool call" in nudge
     saved = list((tmp_path / btl.EMPTY_THINKING_DIR).iterdir())
     assert len(saved) == 1 and saved[0].read_text().endswith(draft)
     assert len(seen) == 2 and result.reply == "done" and result.trace == []
@@ -181,3 +181,11 @@ def test_stopped_thinking_nudge_names_the_file_only_when_worth_reusing(tmp_path,
     assert ("saved as" in seen[1]) is named
     assert "one tool call" in seen[1]
     assert len(list((tmp_path / btl.EMPTY_THINKING_DIR).iterdir())) == 1  # kept either way
+
+
+@pytest.mark.parametrize("chars,named", [(704, False), (3999, False), (4000, True), (12320, True)])
+def test_length_cut_is_named_by_returned_size_not_by_the_cut(chars, named):
+    """cbp-being 2026-11-16 02:25Z: a 704-char `length` cut restated an unrun claim as a premise;
+    named as a draft, it was read back and journaled as a result."""
+    raw = {"done_reason": "length", "eval_count": 6000}
+    assert btl.empty_thinking_worth_naming(raw, "x" * chars) is named

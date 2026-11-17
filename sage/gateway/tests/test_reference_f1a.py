@@ -539,6 +539,18 @@ def test_the_todo_can_be_retired_and_starts_fresh_with_what_is_still_open():
     assert "old thing again" in fresh and kept[0] in fresh, fresh
 
 
+def test_retiring_a_scratch_file_says_the_whole_file_moved():
+    """cbp-being, 2026-11-15 21:53Z: it retired a file to drop an appended second half ("leaves only
+    lines 1-26"), and the receipt "retired X -> Y" did not say the whole file was gone."""
+    disp, root = _disp()
+    disp(BeingIntent("memory_write", {"path": "scratch/two.py", "content": "a = 1\nb = 2\nc = 3"}), _ALLOW)
+    ret = disp(BeingIntent("retire_note", {"path": "scratch/two.py", "reason": "drop lines 2-3"}), _ALLOW)
+    assert ret.ok, ret.error
+    assert "whole file (3 lines)" in ret.result and "nothing is left at scratch/two.py" in ret.result, ret.result
+    assert "memory_edit" in ret.result and "start_line" in ret.result, ret.result
+    assert not os.path.exists(os.path.join(root, "scratch", "two.py"))
+
+
 def test_appending_to_the_journal_does_not_offer_retire_note():
     """The journal is meant to grow, so an append to it does not suggest starting it fresh; the
     being can still retire it when it chooses (test_home_records_start_fresh)."""

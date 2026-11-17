@@ -628,6 +628,33 @@ def test_search_refuses_what_its_grammar_cannot_represent():
         assert "worktree" in str(e)
 
 
+def test_git_read_ls_lists_a_directory_through_cat():
+    """mcnugget-being sent {"op": "ls", "path": "sage/gateway/"} 6 times in 2026-11 while looking
+    for file names that do not exist; each was refused, so the listing that would have settled it
+    never ran. `cat` on a directory already lists it (`git show <rev>:<dir>`), so `ls` is that op
+    under the name the being reaches for. It composes exactly what `cat` composes, the published
+    enum is unchanged, and an unknown op is still refused with the valid set."""
+    from sage.gateway.being_gate_client import git_read_command, GIT_OPS, ollama_tools
+
+    ctx = {"worktree": "/wt"}
+    for path in ("sage/gateway/", "sage/gateway"):
+        assert (git_read_command({"op": "ls", "path": path}, ctx)
+                == git_read_command({"op": "cat", "path": path}, ctx)), path
+    assert git_read_command({"op": "ls", "path": "sage/gateway/"}, ctx).endswith(" show --no-ext-diff "
+                                                                                 "--no-textconv HEAD:sage/gateway")
+    assert "ls" not in GIT_OPS, "an alias, not a new verb in the published enum"
+    try:
+        git_read_command({"op": "ls"}, ctx)
+        assert False, "ls with no path must refuse like cat"
+    except ValueError as e:
+        assert "needs a 'path'" in str(e) and "directory" in str(e), e
+    try:
+        git_read_command({"op": "tree", "path": "sage"}, ctx)
+        assert False, "an op that is neither verb nor alias is still refused"
+    except ValueError as e:
+        assert "must be one of" in str(e), e
+
+
 def test_git_read_refuses_what_its_grammar_cannot_represent():
     """The being names an op, a revision and a path; it never supplies a flag. Anything the
     grammar cannot represent raises, and the refusal names its own valid set — a refusal the
