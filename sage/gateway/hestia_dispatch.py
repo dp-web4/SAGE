@@ -4496,6 +4496,31 @@ class HestiaF1aDispatcher:
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
         if not p.exists():
+            # A MISS ONE DIRECTORY AWAY IS NOT AN ABSENCE — here too. Measured 2026-11-17
+            # 04:55Z on cbp-being: its previous beat had read notes/mechanism-training-numpy.py;
+            # this beat it asked request_run for the bare name, was told only "does not exist",
+            # then tried an underscore spelling, paged the 464-entry home listing (entries 1-10),
+            # and told the seat "the file is missing ... it may need to be recreated". memory_read
+            # and memory_edit already name the same-name file one directory over
+            # (_same_name_elsewhere); request_run was the one door that still said "absent".
+            near = []
+            try:
+                near = self._local._same_name_elsewhere(p)
+            except Exception:  # noqa: BLE001 — a hint must never turn a miss into a crash
+                near = []
+            if len(near) == 1:
+                return ResultEnvelope(ok=False, error=(
+                    f"nothing to run: '{raw}' does not exist, but a file with that name DOES "
+                    f"exist at '{near[0]}'. Nothing was sent to the seat. To ask for that file: "
+                    f"request_run {{\"path\": \"{near[0]}\"}}. The file is not missing; only "
+                    f"the path you gave was."))
+            if near:
+                where = ", ".join(f"'{n}'" for n in near[:5])
+                more = f" and {len(near) - 5} more" if len(near) > 5 else ""
+                return ResultEnvelope(ok=False, error=(
+                    f"nothing to run: '{raw}' does not exist, but {len(near)} files with that "
+                    f"name exist: {where}{more}. Nothing tells which one you mean; ask for it "
+                    f"by its full path. Nothing was sent to the seat."))
             return ResultEnvelope(ok=False, error=(
                 f"nothing to run: '{raw}' does not exist, so there is no file to hand the "
                 f"seat. This is an absence, not a refusal. Check the name — memory_read on "
