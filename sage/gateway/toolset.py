@@ -245,22 +245,27 @@ LEAN_KEEP = frozenset({("run", "data"), ("request_run", "rerun"), ("memory_read"
     ("pr_amend", "body"),                                        # overwrites the PR body
     ("tune", "value"),                                           # 'default' resets the parameter
     ("pr_sync", "op"), ("identity_edit", "field"),               # closed sets written as prose
+    # HUB on #759: three anchors the first pass dropped. Each picks WHAT a kept flag or write acts on.
+    ("camera", "out_path"),        # a write destination: ffmpeg overwrites whatever path it names
+    ("tune", "name"),              # picks which parameter `value` sets or resets
+    ("skill", "name"),             # the anchor for a rewrite ("writing it again replaces it") and retire
 })
 # Every other optional parameter was REVIEWED and its prose may go: free text the being writes in
 # its own words, or a read-only selector whose misfill costs a re-read, not a change. A parameter
 # in neither set fails test_every_optional_parameter_is_classified, so a new one can't slip
-# through lean unclassified.
+# through lean unclassified. The test proves every optional parameter is CLASSIFIED, not that each
+# is classified CORRECTLY: that is a review question, and HUB's review of #759 moved three entries.
 LEAN_DROP_REVIEWED = frozenset({
-    ("camera", "device"), ("camera", "out_path"), ("game", "expect"), ("gaze", "target"),
+    ("camera", "device"), ("game", "expect"), ("gaze", "target"),
     ("gaze", "words"), ("git_read", "n"), ("git_read", "path"), ("git_read", "rev"),
     ("git_read", "rev2"), ("identity_edit", "text"), ("identity_edit", "why"),
     ("memory_read", "end_line"), ("memory_read", "start_line"), ("pr_read", "repo"),
     ("pr_read", "last"), ("pr_sync", "message"), ("recall", "query"), ("recall", "top_k"),
     ("recall", "idx"), ("remember", "tags"), ("request_run", "why"), ("retire_thread", "reason"),
     ("search", "path"), ("search", "n"), ("settle", "question"), ("settle", "answer"),
-    ("settle", "evidence"), ("settle", "why"), ("skill", "name"), ("skill", "query"),
+    ("settle", "evidence"), ("settle", "why"), ("skill", "query"),
     ("skill", "description"), ("skill", "when"), ("skill", "body"), ("skill", "why"),
-    ("tune", "name"), ("tune", "why"),
+    ("tune", "why"),
 })
 
 
