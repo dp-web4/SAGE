@@ -53,7 +53,7 @@ mkdir -p "$DEST/heartbeats"
 rsync -a --delete --delete-excluded --filter="protect heartbeats/" \
   --filter="protect heartbeat.partial.jsonl.gz" \
   --exclude 'identity.sealed*' --exclude 'heartbeat.log' --exclude 'heartbeats.jsonl' \
-  --exclude 'atp_shadow.jsonl*' --exclude 'heartbeat.partial.jsonl' \
+  --exclude 'atp_shadow.jsonl*' --exclude 'heartbeat.partial.jsonl' --exclude 'turn_capture.jsonl*' \
   --exclude 'heartbeats/' --exclude '__pycache__/' --exclude '*.tmp' --exclude '.git' \
   "$INSTANCE/" "$DEST/" || die "rsync"
 mkdir -p "$DEST/heartbeats"   # excluded above, so --delete leaves it alone
@@ -142,7 +142,7 @@ print(f"heartbeats: {n} beats in {len(months)} day file(s)" + (f"; {elided_rows}
 PY
 
 # counts: what the being has vs what the mirror holds (the two known exclusions aside)
-src_n=$(cd "$INSTANCE" && find . -type f ! -name 'identity.sealed*' ! -name heartbeat.log ! -name heartbeats.jsonl ! -name 'atp_shadow.jsonl*' ! -path '*/__pycache__/*' ! -name '*.tmp' | wc -l)
+src_n=$(cd "$INSTANCE" && find . -type f ! -name 'identity.sealed*' ! -name heartbeat.log ! -name heartbeats.jsonl ! -name 'atp_shadow.jsonl*' ! -name 'turn_capture.jsonl*' ! -path '*/__pycache__/*' ! -name '*.tmp' | wc -l)
 dst_n=$(cd "$DEST" && find . -type f ! -path './heartbeats/*' | wc -l)
 # BSD `wc -l` (macOS) pads its count with spaces, and the `|| echo 0` arm below does not, so a
 # being with no heartbeats.jsonl failed here as "0 vs        0" (McNugget, 2026-09-20). Compare numbers.

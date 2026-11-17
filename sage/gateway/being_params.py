@@ -81,6 +81,10 @@ PARAMS: Dict[str, Param] = {p.name: p for p in (
     Param("expect_trial", "choice", "off", choices=("off", "on", "alternate"), self_tunable=False,
           doc="the expect trial (seat-run): whether game's `expect` (a checked prediction) is offered "
               "every beat (on), never (off), or on alternate beats (alternate)"),
+    Param("turn_capture", "choice", "off", choices=("off", "on"), self_tunable=False,
+          doc="seat-run model trial: whether each model call in your tool turns is kept whole (what "
+              "was sent, the tools offered, what came back) in turn_capture.jsonl in your home, so a "
+              "candidate model can be scored on your real turns. It stays on this machine"),
     Param("answer_reserve", "int", 6144, lo=2048, hi=16384,
           doc="tokens compaction keeps free for your next reply, thinking included. More holds "
               "less of your earlier work in view and gives each reply more room before it hits the "
