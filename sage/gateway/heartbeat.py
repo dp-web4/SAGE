@@ -1609,13 +1609,20 @@ MEASURED_CPT_MIN_SAMPLES = 5
 MEASURED_CPT_WINDOW = 40          # samples, newest first, same model
 MEASURED_CPT_MARGIN = 0.97        # applied to the lowest ratio seen
 MEASURED_CPT_TAIL_BYTES = 8 << 20
+# A COUNT THAT IS TOO LOW TO BE A WHOLE PROMPT IS NOT A SAMPLE (NOVA on #774). A server count of less than
+# the whole prompt (a cached prefix not re-counted, a prompt truncated to the window) reads as a HIGHER
+# chars-per-token, which would WIDEN the preflight's allowance. min() already ignores a minority of them;
+# these bound the rest: a ratio above prior x MEASURED_CPT_MAX_OVER_PRIOR (measured families sit 1.14-1.35x
+# over the 2.9 default), or a count at the window's edge, is rejected rather than believed.
+MEASURED_CPT_MAX_OVER_PRIOR = 1.6
 
 
-def measured_preflight_cpt(instance, model) -> dict:
-    """{"value": float|None, "samples": n, "min": .., "median": ..} from this being's own recent beats on
-    `model`: explore's first generate, with prompt_chars and a whole server count. None below
-    MEASURED_CPT_MIN_SAMPLES, and the caller keeps the declared or default ratio."""
-    out = {"value": None, "samples": 0}
+def measured_preflight_cpt(instance, model, prior: float = None) -> dict:
+    """{"value": float|None, "samples": n, "rejected": n, "min": .., "median": ..} from this being's own
+    recent beats on `model`: explore's first generate, with prompt_chars and a whole server count. None below
+    MEASURED_CPT_MIN_SAMPLES, and the caller keeps the declared or default ratio (`prior`)."""
+    from sage.gateway.being_tool_loop import WINDOW_SEND_MARGIN
+    out = {"value": None, "samples": 0, "rejected": 0}
     path = Path(instance) / "heartbeats.jsonl"
     try:
         with open(path, "rb") as f:
@@ -1638,9 +1645,16 @@ def measured_preflight_cpt(instance, model) -> dict:
         gens = (r.get("explore") or {}).get("generates") if isinstance(r.get("explore"), dict) else None
         g = gens[0] if gens and isinstance(gens[0], dict) else {}
         chars, toks = g.get("prompt_chars"), g.get("prompt_eval_count")
-        if (isinstance(chars, int) and isinstance(toks, int) and toks > 0 and not g.get("server_cut")
-                and 1.5 <= chars / toks <= 8.0):
-            ratios.append(chars / toks)
+        if not (isinstance(chars, int) and isinstance(toks, int) and toks > 0) or g.get("server_cut"):
+            continue
+        ratio = chars / toks
+        ctx = r.get("num_ctx")
+        if (not 1.5 <= ratio <= 8.0
+                or (prior and ratio > prior * MEASURED_CPT_MAX_OVER_PRIOR)
+                or (isinstance(ctx, int) and toks >= ctx - WINDOW_SEND_MARGIN)):
+            out["rejected"] += 1
+            continue
+        ratios.append(ratio)
     out["samples"] = len(ratios)
     if ratios:
         s = sorted(ratios)
@@ -5233,13 +5247,20 @@ def main(argv=None) -> int:
     # above budget from parts; this measures what will be sent and trims only if the loop would
     # refuse it. A beat whose seed the loop accepts is unchanged.
     from sage.gateway.being_tool_loop import uncounted_chars, preflight_tokens, preflight_cpt
+    from sage.gateway.being_tool_loop import _convo_chars as btl_convo_chars, WINDOW_SEND_MARGIN as _WSM
     # the step-1 ratio, measured on this being's own recent beats when there are enough (#582 part 2)
-    _cpt_cal = measured_preflight_cpt(instance, args.model)
+    try:
+        llm.preflight_cpt_measured = None      # the prior is the declared/default ratio, never last beat's
+    except Exception:
+        pass
+    _cpt_prior = preflight_cpt(llm)
+    _cpt_cal = measured_preflight_cpt(instance, args.model, prior=_cpt_prior)
     try:
         # set every beat, None included: a process that outlives a model switch must not keep the old ratio
         llm.preflight_cpt_measured = _cpt_cal.get("value")
     except Exception:
         _cpt_cal["value"] = None
+    _cpt_cal["prior"] = _cpt_prior
     _cpt_cal["used"] = preflight_cpt(llm)
     _cpt_cal["source"] = "measured" if _cpt_cal.get("value") else "declared_or_default"
     _seed_uncounted = uncounted_chars(_explore_specs, explore_turn_mode(instance))
@@ -5256,6 +5277,18 @@ def main(argv=None) -> int:
         digest=digest, recall=recall, cpt=preflight_cpt(llm))
     if _seed_rung != conv_rung:
         conv_rung, state_block = _seed_rung, _states[_seed_rung]
+    # CALIBRATION IS EVIDENCE, NOT A SILENT CHANGE (NOVA on #774): the sent seed's estimate at the ratio used
+    # and at the prior, so a beat the measured ratio admitted (or a cut it caused) is visible against the
+    # server's own count of the same prompt, explore.generates[0].prompt_eval_count.
+    try:
+        _seed_chars = btl_convo_chars(seed) + _seed_uncounted
+        _cpt_cal["seed_est_used"] = int(_seed_chars / _cpt_cal["used"])
+        _cpt_cal["seed_est_prior"] = int(_seed_chars / _cpt_prior)
+        _cpt_cal["admitted_by_calibration"] = bool(
+            _cpt_cal["source"] == "measured" and isinstance(_num_ctx, int)
+            and _cpt_cal["seed_est_prior"] > _num_ctx - _WSM >= _cpt_cal["seed_est_used"])
+    except Exception:
+        pass
     try:
         _prompt_parts = prompt_parts(seed=seed, posture_turn=posture_turn, posture=posture(),
                                      state=state_block, recall=recall, inbox=inbox, digest=digest,

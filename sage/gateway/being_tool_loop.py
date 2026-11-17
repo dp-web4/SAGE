@@ -1874,7 +1874,10 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # prompt it is a measured chars-per-token for this model on this being's real seed, which the next
         # beat's preflight calibrates from (heartbeat.measured_preflight_cpt). The phase's first generate
         # only, native form only (the JSON form sends an extra ask and no schemas), and never a cut count.
+        # PAIRED WITH THE SAME PROMPT (NOVA on #774): only a first attempt that stood. A retry may append a
+        # nudge or be retaken as a JSON act (another prompt shape, no schemas), and its count is of that.
         if (raw.get("prompt_eval_count") and not _server_cut and act_form != "json"
+                and not retried and not response_from_json_act
                 and not generates and _tail in (None, _TAIL_USER)):
             entry["prompt_chars"] = _convo_chars(msgs) + uncounted
         if _server_cut:

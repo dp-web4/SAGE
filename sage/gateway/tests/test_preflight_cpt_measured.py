@@ -59,7 +59,7 @@ def test_cut_counts_records_without_chars_and_garbage_are_skipped(tmp_path):
 
 
 def test_no_file_is_no_calibration(tmp_path):
-    assert measured_preflight_cpt(tmp_path, "m:1") == {"value": None, "samples": 0}
+    assert measured_preflight_cpt(tmp_path, "m:1") == {"value": None, "samples": 0, "rejected": 0}
 
 
 def test_a_measured_ratio_wins_over_the_declared_one_and_none_falls_back():
@@ -113,3 +113,103 @@ def test_round_trip_a_recorded_beat_calibrates_the_next(tmp_path):
     recs = [{"model": "m:1", "explore": {"generates": [g]}} for g in gens]
     cal = measured_preflight_cpt(_home(tmp_path, recs), "m:1")
     assert cal["value"] == round(gens[0]["prompt_chars"] / 6400 * MEASURED_CPT_MARGIN, 3)
+
+
+# --- NOVA on #774: density that varies by prompt shape -------------------------------------------------
+
+PROSE, CODE = 3.9, 3.3      # one model, two plausible prompt shapes, 18% apart
+
+
+def test_with_both_shapes_in_the_window_the_denser_one_sets_the_ratio(tmp_path):
+    recs = [_beat("m:1", 40000, int(40000 / PROSE))] * 6 + [_beat("m:1", 40000, int(40000 / CODE))] * 2
+    cal = measured_preflight_cpt(_home(tmp_path, recs), "m:1")
+    assert cal["value"] <= CODE * MEASURED_CPT_MARGIN + 1e-3
+    chars = 50000
+    assert chars / cal["value"] >= chars / CODE, "a code-dense seed is still over-counted, not under"
+
+
+def test_a_denser_shape_not_yet_seen_is_under_counted_and_the_next_beat_corrects_it(tmp_path):
+    """The known limit, pinned rather than hidden: the ratio is empirical. A shape denser than every sample
+    is estimated low (the server-anchored estimate and server-cut path still apply from step 2), and one
+    counted beat of that shape lowers the ratio below it."""
+    path = _home(tmp_path, [_beat("m:1", 40000, int(40000 / PROSE))] * 8)
+    cal = measured_preflight_cpt(path, "m:1")
+    assert 50000 / cal["value"] < 50000 / CODE, "documented: an unseen denser shape is under-counted"
+    with open(path / "heartbeats.jsonl", "a") as f:
+        f.write(json.dumps(_beat("m:1", 40000, int(40000 / CODE))) + "\n")
+    cal = measured_preflight_cpt(path, "m:1")
+    assert 50000 / cal["value"] >= 50000 / CODE
+
+
+# --- NOVA on #774: a count too low to be the whole prompt cannot silently widen the allowance -----------
+
+PRIOR = 2.9
+
+
+def test_a_minority_of_low_counts_changes_nothing(tmp_path):
+    """A cached prefix or a truncation reads as fewer tokens, i.e. a higher ratio. min() ignores it."""
+    honest = [_beat("m:1", 36000, 10000)] * 6                       # 3.6
+    low = [_beat("m:1", 36000, 8500)] * 3                           # 4.24: plausible-looking, too low
+    a = measured_preflight_cpt(_home(tmp_path, honest), "m:1", prior=PRIOR)["value"]
+    b = measured_preflight_cpt(_home(tmp_path, honest + low), "m:1", prior=PRIOR)["value"]
+    assert a == b == round(3.6 * MEASURED_CPT_MARGIN, 3)
+
+
+def test_counts_far_below_the_prior_are_rejected_not_believed(tmp_path):
+    """Every sample low: beyond MEASURED_CPT_MAX_OVER_PRIOR x the prior they are rejected, and the
+    preflight keeps the prior rather than widening on them."""
+    from sage.gateway.heartbeat import MEASURED_CPT_MAX_OVER_PRIOR
+    too_low = [_beat("m:1", 36000, int(36000 / (PRIOR * MEASURED_CPT_MAX_OVER_PRIOR * 1.1)))] * 10
+    cal = measured_preflight_cpt(_home(tmp_path, too_low), "m:1", prior=PRIOR)
+    assert cal["value"] is None and cal["rejected"] == 10 and cal["samples"] == 0
+
+
+def test_a_count_at_the_windows_edge_is_a_truncation_not_a_sample(tmp_path):
+    recs = [dict(_beat("m:1", 70000, 16300), num_ctx=16384)] * 10
+    cal = measured_preflight_cpt(_home(tmp_path, recs), "m:1", prior=PRIOR)
+    assert cal["value"] is None and cal["rejected"] == 10
+
+
+def test_the_widest_allowance_calibration_can_grant_is_bounded_by_the_prior(tmp_path):
+    from sage.gateway.heartbeat import MEASURED_CPT_MAX_OVER_PRIOR
+    """Samples above the bound are dropped; what remains can widen the allowance at most to the bound."""
+    recs = [_beat("m:1", 100000, int(100000 / r)) for r in (4.2, 4.5, 5.0, 6.0)] * 3
+    cal = measured_preflight_cpt(_home(tmp_path, recs), "m:1", prior=PRIOR)
+    assert cal["rejected"] == 6 and cal["samples"] == 6
+    assert cal["value"] is not None
+    assert cal["value"] <= PRIOR * MEASURED_CPT_MAX_OVER_PRIOR * MEASURED_CPT_MARGIN
+
+
+# --- NOVA on #774: prompt_chars pairs with the same first attempted prompt ------------------------------
+
+class _Scripted:
+    num_ctx = 16384
+
+    def __init__(self, replies):
+        self.replies = list(replies)
+
+    def get_chat_response(self, messages, tools=None, **kw):
+        return self.replies.pop(0)
+
+
+def test_a_retried_first_generate_records_no_prompt_chars():
+    """A transport error then a reply: the standing count is the retry's, so no pairing is claimed."""
+    llm = _Scripted([{"content": "[OllamaIRP: Error: boom]", "tool_calls": [], "raw": {}},
+                     {"content": "done", "tool_calls": [], "raw": {"prompt_eval_count": 6000, "eval_count": 3}}])
+    r = run_ollama_tool_turn(_Client(), llm, SEED, max_steps=1, tools=TOOLS)
+    assert r.generates[0]["retried"] == 1
+    assert "prompt_chars" not in r.generates[0]
+
+
+def test_only_the_first_step_records_prompt_chars():
+    from sage.gateway.being_gate_client import ResultEnvelope
+
+    class _OK:
+        def dispatch(self, intent):
+            return ResultEnvelope(ok=True, result="x" * 100)
+
+    calls = [{"function": {"name": "witness", "arguments": {}}}]
+    llm = _Scripted([{"content": "", "tool_calls": calls, "raw": {"prompt_eval_count": 6000, "eval_count": 3}},
+                     {"content": "done", "tool_calls": [], "raw": {"prompt_eval_count": 6100, "eval_count": 3}}])
+    r = run_ollama_tool_turn(_OK(), llm, SEED, max_steps=2, tools=TOOLS)
+    assert "prompt_chars" in r.generates[0] and "prompt_chars" not in r.generates[1]
