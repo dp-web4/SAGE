@@ -4076,7 +4076,8 @@ def frames_the_model_can_read(frames: list, model: str, reads=None) -> list:
 ANSWER_FRAME_MAX_AGE_S = 24 * 3600
 
 
-def answer_frame(instance: Path, worktree: Optional[str], model: str, now: Optional[float] = None, reads=None):
+def answer_frame(instance: Path, worktree: Optional[str], model: str, now: Optional[float] = None, reads=None,
+                 extra=()):
     """(b64 or None, line, meta) for the answer turn: the newest frame on disk and how old it is.
 
     THE ANSWER TURN SPOKE ABOUT THE ROOM WITHOUT ITS EYES. sprout-being, 2026-11-17 03:07Z: dp told it a view it
@@ -4089,10 +4090,19 @@ def answer_frame(instance: Path, worktree: Optional[str], model: str, now: Optio
     Not `fresh_frame`'s rule. A beat is shown only what it asked to see since the last beat, because there a frame is
     presented as now. Here the frame is the being's last look, said with its time, so an older one is still
     evidence, up to ANSWER_FRAME_MAX_AGE_S. No frame on disk is (None, "", {}): nothing is claimed about eyes it has
-    not used."""
+    not used.
+
+    WHEREVER THE BEING SAVED IT (`extra`, legion-claude on #762): the frames its camera acts wrote outside
+    scratch/camera/, last beat's and this one's (camera_paths_this_beat). Without them a look saved to
+    scratch/test-vision.jpg a minute ago lost to a 5 h old frame under scratch/camera/, and the answer was told
+    that old frame was its last look.
+
+    LATENCY: an unknown vision answer is not cached (model_reads_images), so with Ollama busy this ask can cost
+    up to 5 s + 15 s, and a beat that also carries a frame into explore asks twice. Chosen over telling the being
+    its model is blind."""
     now = time.time() if now is None else now
     best = None
-    for p in _frame_paths(instance, worktree):
+    for p in _frame_paths(instance, worktree, extra=extra):
         try:
             st = p.stat()
         except OSError:
@@ -4118,6 +4128,17 @@ def answer_frame(instance: Path, worktree: Optional[str], model: str, now: Optio
                       f"through your eyes was at {when}."), dict(meta, why=why)
     return b64, (f"The image with this message is your last look through your eyes, taken at {when}. "
                  f"The room may have changed since."), dict(meta, carried=True)
+
+
+def camera_paths_this_beat(instance: Path, **turns) -> list:
+    """camera_frame_paths for turns of the running beat (`explore=res, posture=res, ...`), whose traces are still
+    (intent, effect) pairs and not yet in the beat record."""
+    rec = {}
+    for phase, res in turns.items():
+        rec[phase] = {"trace": [{"effector": i.effector, "args": dict(i.args or {}), "ok": e.ok,
+                                 "result": e.result if isinstance(e.result, dict) else None}
+                                for i, e in (getattr(res, "trace", None) or [])]}
+    return camera_frame_paths(rec, instance)
 
 
 def fresh_frames(instance: Path, worktree: Optional[str], since: Optional[float], extra=()) -> list:
@@ -5255,7 +5276,11 @@ def main(argv=None) -> int:
                                                    if answer_context_on(instance) else ""),
                                           temperature=answer_temperature(instance),
                                           abilities=abilities_line(_unavail),
-                                          frame=(answer_frame(instance, _wt, args.model)
+                                          frame=(answer_frame(instance, _wt, args.model,
+                                                              extra=camera_frame_paths(last, instance)
+                                                              + camera_paths_this_beat(instance, explore=explore,
+                                                                                       posture=after,
+                                                                                       reflect=reflect))
                                                  if "camera" not in (_unavail or {}) else None))
             else:
                 answer = run_ollama_tool_turn(

@@ -62,3 +62,20 @@ def test_the_answer_turn_carries_the_image_and_the_line_and_records_it(tmp_path)
     llm = LLM(json.dumps({"answer": False, "message": ""}))
     res = hb.answer_turn_json(Client(), llm, hb.SelectedTurn("dp", TURN), name="s", machine="s", member="s")
     assert "images" not in llm.calls[0]["messages"][1] and "frame" not in res.answer_form
+
+
+def test_a_newer_look_saved_outside_scratch_camera_wins(tmp_path):
+    # legion-claude on #762: the being names its own out_path; a look saved to scratch/test-vision.jpg a minute ago
+    # must win over a 5 h old frame under scratch/camera/, found through this beat's own camera act.
+    from types import SimpleNamespace as NS
+    now = time.time()
+    _jpeg(tmp_path / "scratch/camera/old.jpg", now - 5 * 3600)
+    _jpeg(tmp_path / "scratch/test-vision.jpg", now - 60)
+    explore = NS(trace=[(NS(effector="camera", args={"out_path": "scratch/test-vision.jpg"}),
+                         NS(ok=True, result={"out_path": "scratch/test-vision.jpg"}))])
+    extra = hb.camera_paths_this_beat(tmp_path, explore=explore, posture=None, reflect=None)
+    b64, line, meta = hb.answer_frame(tmp_path, None, "m", now=now, reads=lambda m: True, extra=extra)
+    assert meta["path"].endswith("test-vision.jpg") and "(1 min ago)" in line, (meta, line)
+    # without the act's path the old frame is all it finds: the failure this guards
+    _, line, meta = hb.answer_frame(tmp_path, None, "m", now=now, reads=lambda m: True)
+    assert meta["path"].endswith("old.jpg")
