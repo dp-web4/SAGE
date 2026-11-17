@@ -1382,7 +1382,15 @@ def preflight_cpt(llm) -> float:
     from 2026-10-27 07:46Z was refused before it was sent — 125 beats with no step (SAGE #582).
     A family declares `preflight_chars_per_token` in its model config, from a measured ratio and
     BELOW every measured value, so the guard still errs high. Absent, unreadable or implausible
-    (outside 1.5..8) -> PREFLIGHT_CPT, so no undeclared model changes behaviour."""
+    (outside 1.5..8) -> PREFLIGHT_CPT, so no undeclared model changes behaviour.
+
+    MEASURED BEATS DECLARED (#582 part 2). A heartbeat that has this being's own recent step-1 counts for
+    this model sets `llm.preflight_cpt_measured` (heartbeat.measured_preflight_cpt: the lowest recent ratio,
+    less a margin, so it still errs high against every count it was taken from). It wins over the declared
+    value, so a new model calibrates itself from its first counted beats instead of waiting for a config."""
+    m = getattr(llm, "preflight_cpt_measured", None)
+    if isinstance(m, (int, float)) and not isinstance(m, bool) and 1.5 <= m <= 8.0:
+        return float(m)
     try:
         v = llm._adapter.capabilities.preflight_chars_per_token
     except AttributeError:
@@ -1392,6 +1400,36 @@ def preflight_cpt(llm) -> float:
     except (TypeError, ValueError):
         return PREFLIGHT_CPT
     return v if 1.5 <= v <= 8.0 else PREFLIGHT_CPT
+
+
+# ONE COUNT FOR THE SEED, USED BY THE LOOP THAT SENDS IT AND BY THE HEARTBEAT THAT BUILDS IT (SAGE #582).
+# The heartbeat's seed fitter budgeted the seed from parts (posture, state, inbox, measured schemas, and
+# constants for the header and template), while this loop's step-1 preflight counted the whole message list
+# it was about to send. The two disagreed by ~9-10k chars on hub-being (2026-10-27), so the fitter found
+# nothing to trim and the preflight refused every explore with `interventions: []`: hub-being silent 11 h,
+# pub-being 125 beats, mcnugget-being from 2026-11-17 15:40Z (a 235-char schema change on a seed ~28 tokens
+# under the line). Per-model ratios (#592, #629) and trimming schema text (#769) each moved the line; none
+# made the two sides count the same thing. These functions are the step-1 preflight; the heartbeat calls
+# them on the composed seed, so it can never hand this loop a seed the loop will refuse without knowing it.
+def uncounted_chars(tools, act_form: str = "native") -> int:
+    """Chars a prompt carries beyond its messages: the tool schemas as sent (none in the JSON act form,
+    which sends no tools with the request) plus the chat template."""
+    return (len(json.dumps(tools)) if (tools is not None and act_form != "json") else 0) + _TEMPLATE_CHARS
+
+
+def preflight_tokens(msgs, uncounted: int, llm) -> float:
+    """The step-1 preflight's estimate of a prompt with no server count yet: whole prompt over this
+    model's preflight chars-per-token. The tool loop refuses to send above num_ctx - WINDOW_SEND_MARGIN."""
+    return (_convo_chars(msgs) + uncounted) / preflight_cpt(llm)
+
+
+def preflight_refuses(est: float, num_ctx) -> bool:
+    """Whether the step-1 preflight would end the phase unsent ("window_full: preflight")."""
+    try:
+        ctx = int(num_ctx or 0)
+    except (TypeError, ValueError):
+        return False
+    return ctx > 0 and est > ctx - WINDOW_SEND_MARGIN
 
 # A count far below a server-anchored estimate means the server truncated what was sent: the
 # server's prompt_eval_count is then of what survived its own cut, not of the list we sent.
@@ -1732,7 +1770,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     # guard exists to prevent (a seed that passes, then is cut by the server). The tools list is in
     # hand here, so it is measured, as heartbeat._schema_chars_for measures it (len of the JSON). In
     # the JSON act form no schemas are sent with the request (_json_act), so only the template counts.
-    uncounted = (len(json.dumps(tools)) if act_form != "json" else 0) + _TEMPLATE_CHARS
+    uncounted = uncounted_chars(tools, act_form)
     # Keep the think block per generate: when a small model narrates instead of acting,
     # whether it decided not to call or failed to format the call is only visible here.
     thoughts: List[str] = []
@@ -1908,10 +1946,10 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 _est, _cause = _est_tokens(_convo_chars(msgs), measured), "over_window"
                 if not _same_tail and _tail == _TAIL_USER:
                     # anchored on a count made WITHOUT the tool schemas, which this prompt carries
-                    _est = max(_est, (_convo_chars(msgs) + uncounted) / preflight_cpt(llm))
+                    _est = max(_est, preflight_tokens(msgs, uncounted, llm))
             else:
-                _est, _cause = (_convo_chars(msgs) + uncounted) / preflight_cpt(llm), "preflight"
-            if _est > _ctx - WINDOW_SEND_MARGIN:
+                _est, _cause = preflight_tokens(msgs, uncounted, llm), "preflight"
+            if preflight_refuses(_est, _ctx):
                 return _window_full(_cause, int(_est), _ctx)
         try:
             _room = int(getattr(llm, "num_ctx", 0) or 0) - reserve
@@ -2203,6 +2241,16 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
         # would break every caller that compares the entry exactly
         if compacted and compacted[-1]["step"] == len(thoughts) - 1:
             entry["compacted"] = compacted[-1]
+        # WHAT WAS SENT, IN THE PREFLIGHT'S OWN UNITS (#582 part 2). Beside the server's count of the same
+        # prompt it is a measured chars-per-token for this model on this being's real seed, which the next
+        # beat's preflight calibrates from (heartbeat.measured_preflight_cpt). The phase's first generate
+        # only, native form only (the JSON form sends an extra ask and no schemas), and never a cut count.
+        # PAIRED WITH THE SAME PROMPT (NOVA on #774): only a first attempt that stood. A retry may append a
+        # nudge or be retaken as a JSON act (another prompt shape, no schemas), and its count is of that.
+        if (raw.get("prompt_eval_count") and not _server_cut and act_form != "json"
+                and not retried and not nudged and not response_from_json_act
+                and not generates and _tail in (None, _TAIL_USER)):
+            entry["prompt_chars"] = _convo_chars(msgs) + uncounted
         if _server_cut:
             entry["server_cut"] = _server_cut
             entry["window_full"] = "server_cut"

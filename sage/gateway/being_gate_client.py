@@ -377,9 +377,17 @@ NO_WORKTREE_REFUSAL = {
         "pr_sync brings a pull request you opened up to date with its base branch, by merging "
         "inside your code-repository checkout (a worktree), and this seat has none, so pr_sync "
         "cannot update your proposal here."),
+    # #637: cbp-being meant "retire scratch/svd-compress-tests.py", was told only that git_clean
+    # had nothing to delete, and then memory_edited the file into one that failed to run; on
+    # 11-15 it sent 61 git_clean calls in one phase. retire_note is the verb that closes a file
+    # in notes/ or scratch/ (it renames, nothing is deleted), so the refusal names it, and says
+    # that leaving the file is also fine, so the refusal does not push the being into an edit.
     "git_clean": (
         "git_clean deletes one untracked file you added to your code-repository checkout (a "
-        "worktree), and this seat has none, so there is nothing here for git_clean to delete."),
+        "worktree), not files in your home, and this seat has none, so there is nothing here for "
+        "git_clean to delete. To close one of your own files in notes/ or scratch/, use "
+        "retire_note with its path and a reason: it is renamed .retired-<date> and kept, so "
+        "nothing is lost. No tool deletes a file in your home, and leaving one in place is fine."),
     # CAMERA'S HONEST ALTERNATIVE IS DIFFERENT: there is none. It never reads a worktree (the
     # frame lands in the being's home); the requirement is the policy hold described in
     # camera_command. So it says it is not enabled, says why without pointing at a step the
@@ -1069,6 +1077,25 @@ HOME_ROOTED = ("todo.md", "journal.md", "notes", "scratch", "conversations")
 
 
 
+def search_mode(pattern: str) -> str:
+    """`-E` for a pattern that is a valid regex, `-F` (literal text) for one that is not.
+
+    A PATTERN GIT CANNOT PARSE NEVER RUNS. The being searches for code as it appears in source:
+    `drain_once(` failed `git grep -E` with exit 128 ("parentheses not balanced") 6 times on
+    mcnugget-being in 6 hours on 2026-11-17, each with a receipt telling it to add a backslash,
+    and the next beat sent the same text again. Read literally, that text has one meaning, so
+    it is searched literally and the result says so. The mode is chosen HERE, before the law
+    judges the command, so judged == executed still holds: no retry with a different command.
+    Python's `re` is the validity test; it rejects what git's ERE rejects for the shapes seen
+    (`(` unbalanced, `=**` nothing to repeat)."""
+    import re
+    try:
+        re.compile(pattern)
+        return "-E"
+    except re.error:
+        return "-F"
+
+
 def search_command(args: dict, ctx: Optional[dict] = None) -> str:
     """The shell command the seat runs for a `search` intent.
 
@@ -1158,9 +1185,9 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
         # walks, -I skips binaries, and grep cannot write. `.git` is excluded because it is
         # the one subtree whose plaintext — config remotes carrying tokens — is worth more
         # than its searchability.
-        return (f"grep -rn -I -E --max-count={n} --exclude-dir=.git "
+        return (f"grep -rn -I {search_mode(pattern)} --max-count={n} --exclude-dir=.git "
                 f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
-    return (f"git --no-pager -C {shlex.quote(worktree)} grep -n -I -E --max-count={n} "
+    return (f"git --no-pager -C {shlex.quote(worktree)} grep -n -I {search_mode(pattern)} --max-count={n} "
             f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
 
 
@@ -1208,7 +1235,7 @@ def _reach_search_command(pattern: str, n: int, path: str, ctx: dict) -> str:
     if not os.path.exists(target):
         raise ValueError(f"search 'path' {path!r} does not exist, so there is nothing there to "
                          f"search. Name a folder or file that exists, by its absolute path.")
-    return (f"grep -r -n -I -E -s --max-count={n} --exclude-dir=.git "
+    return (f"grep -r -n -I {search_mode(pattern)} -s --max-count={n} --exclude-dir=.git "
             f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
 
 
@@ -3085,7 +3112,11 @@ _TOOL_SCHEMAS = {
                   "rev": "optional: a commit sha, HEAD, HEAD~2, or a branch name",
                   "rev2": "optional, for op='diff': the second revision of the span",
                   "path": "optional: a path inside your worktree to narrow the answer to",
-                  "n": "optional, for op='log': how many commits (1-50, default 20)"},
+                  "n": "optional, for op='log': how many commits (1-50, default 20)",
+                  # Kept to one clause: each part of a long cat already names the start_line
+                  # that reads on. The longer text cost 235 schema chars, and that tipped
+                  # mcnugget-being's step-1 preflight over 16,384 (2026-11-17 15:40Z; SAGE #582).
+                  "start_line": "optional, for op='cat': the line to start from (default 1)"},
                  ["op"]),
     "search": ("Find where something IS, without reading the file it is in. Give a pattern "
                "(text, or an extended regex) and optionally a path to narrow it; you get "
@@ -3235,7 +3266,8 @@ _TOOL_SCHEMAS = {
     # and asked the seat about the device again on each of them. A conclusion in a 12k-line journal does
     # not reach the next beat; this list does (being_settled).
     "settle": ("Keep something you have concluded, as a question and your answer in your own words, "
-               "shown to you every beat. Settling a question again replaces its answer (the old one is "
+               "shown to you every beat; when many are kept, older ones show only the start of their "
+               "answer. Settling a question again replaces its answer (the old one is "
                "logged). No arguments lists them. What did not work is worth keeping too.",
                {"question": "what you settled",
                 "answer": "what you concluded",

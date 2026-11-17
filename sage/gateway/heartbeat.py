@@ -993,7 +993,7 @@ def _answer_generate(llm, msgs, schema=None):
 
 def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: str,
                      on_generate=None, acts: str = "", changes: str = "", context: str = "",
-                     temperature: Optional[float] = None, abilities: Optional[str] = None):
+                     temperature: Optional[float] = None, abilities: Optional[str] = None, frame=None):
     """The being's answer, if it chose one, dispatched as its `say`.
 
     The prompt is the selected turn and the ask. `acts` (the beat's record of acts) is included
@@ -1007,10 +1007,13 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     # WHAT IT CAN DO rides EVERY answer, independent of the optional conversation context (GPT on #334: inside
     # that block it never reached an instance without "answer_context"; the motivating case would still have
     # answered without knowing it has no internet). Facts about its reach, not a direction.
-    user = "\n\n".join(p for p in (context, acts, changes,
+    # ITS LAST LOOK (answer_frame): `frame` is (b64 or None, line, meta). The line says whether an image is here and
+    # when it was taken; the image rides this user turn the way a beat's frame does.
+    f_b64, f_line, f_meta = frame or (None, "", {})
+    user = "\n\n".join(p for p in (context, acts, changes, f_line,
                                      abilities if abilities is not None else abilities_line(), ask) if p)
     msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
-            {"role": "user", "content": user}]
+            {"role": "user", "content": user, **({"images": [f_b64]} if f_b64 else {})}]
     # THIS TURN'S SAMPLING ONLY (answer_temperature): set for the answer generate, restored after, so explore
     # and reflect keep the beat's temperature.
     _prior_t = getattr(llm, "temperature", None)
@@ -1036,6 +1039,8 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     form = {"parsed": False, "answer": None, "sent": False, "retried": retried,
             "done_reason": raw.get("done_reason"), "with_acts": bool(acts),
             "with_changes": bool(changes)}
+    if f_meta:
+        form["frame"] = dict(f_meta)
     try:
         j = json.loads(content)
         form["parsed"] = isinstance(j, dict)
@@ -1135,15 +1140,132 @@ def refused_this_beat(*turns) -> Optional[bool]:
     return any(bool(i[1].refused) for i in items)
 
 
-def reflect_prompt(optional=(), refused=True, **kw) -> str:
+# A FAILED ACT IS NOT A CLEAN BEAT (#745). "No act refused" is true of an act that ran and failed
+# (ok=False, refused=False), and a small model reads it as "everything worked". cbp-being, 2026-11-16
+# 20:30Z: two memory_edit calls failed ("that text is not in ..."), the prompt said no act was refused,
+# and reflect recorded both edits as done ("now on disk"), a remember carried that premise into the next
+# beat. The harness knows which acts failed; it names them. A failure later followed by a success of
+# the same verb on the same target is not named: it was fixed in the beat.
+_FAILED_TARGET_ARGS = ("path", "game", "pattern", "name")
+FAILED_SHOWN = 5
+
+
+def failed_this_beat(*turns) -> list:
+    """One line per act in these turns' traces that ran and FAILED (ok=False, not refused, an error
+    given) and was not later made to work on the same verb and target. Empty when nothing failed or
+    the traces cannot be read (refused_this_beat says unknown for that)."""
+    items = []
+    for t in turns:
+        tr = getattr(t, "trace", None) if t is not None else None
+        if isinstance(tr, list):
+            items.extend(i for i in tr if isinstance(i, tuple) and len(i) == 2)
+    pending: dict = {}
+    for intent, env in items:
+        eff = str(getattr(intent, "effector", "") or "?")
+        args = getattr(intent, "args", None) or {}
+        target = next((str(args[a]).strip() for a in _FAILED_TARGET_ARGS
+                       if isinstance(args, dict) and args.get(a)), "")
+        key = (eff, target)
+        if getattr(env, "ok", True):
+            pending.pop(key, None)
+            continue
+        err = getattr(env, "error", None)
+        if getattr(env, "refused", False) or not err:
+            continue
+        first = str(err).strip().splitlines()[0] if str(err).strip() else ""
+        if len(first) > 160:
+            first = first[:157] + "..."
+        pending.pop(key, None)                    # the latest failure on a target is the one named
+        pending[key] = f"{eff} {target}".strip() + f": {first}"
+    return list(pending.values())
+
+
+def _failed_sentence(failed) -> str:
+    shown = list(failed)[:FAILED_SHOWN]
+    more = len(failed) - len(shown)
+    return (" These acts of yours this beat FAILED and did not do what you asked, so do not record them as"
+            " done: " + "; ".join(shown) + (f"; and {more} more" if more > 0 else "") + ".")
+
+
+# WHAT THE BEAT'S OWN ACTS DID, BESIDE THE RECORD (#716). Acts that ran and are ok=True can still say
+# the opposite of what reflect writes: a `run` whose script exited 1 is ok=True (the act ran), a
+# `request_run` is ok=True and runs nothing, and a landed `memory_edit` is ok=True. Measured on cbp-being:
+# 2026-11-14 21:42Z, three runs of one script all exited 1 and the journal said it "now correctly trains";
+# 2026-11-17 10:37Z, a request_run and in the same beat a remember of the result the run had not produced;
+# 10:44Z, a landed edit recorded as "pending" because reflect copied a seat message written before it.
+# Reflect followed the newest text over the beat's own trace. The harness holds the receipts; it puts
+# them beside the instruction to write the record. An affordance: nothing is blocked.
+RECEIPTS_SHOWN = 6
+_LANDED_VERBS = ("memory_edit", "memory_write", "retire_note")
+
+
+def receipts_this_beat(*turns) -> list:
+    """One short line per target for what these turns' ok acts did: each `run` script and its exit
+    codes, each `request_run` (asked, nothing run), each landed write. In first-act order. Empty when
+    there are none or the traces cannot be read."""
+    items = []
+    for t in turns:
+        tr = getattr(t, "trace", None) if t is not None else None
+        if isinstance(tr, list):
+            items.extend(i for i in tr if isinstance(i, tuple) and len(i) == 2)
+    runs: dict = {}
+    order: dict = {}
+    for intent, env in items:
+        if not getattr(env, "ok", False) or getattr(env, "refused", False):
+            continue
+        eff = str(getattr(intent, "effector", "") or "")
+        args = getattr(intent, "args", None) or {}
+        target = next((str(args[a]).strip() for a in _FAILED_TARGET_ARGS
+                       if isinstance(args, dict) and args.get(a)), "")
+        res = getattr(env, "result", None)
+        if eff == "run" and isinstance(res, dict) and "exit" in res:
+            script = str(res.get("script") or target or "?")
+            runs.setdefault(script, []).append(res.get("exit"))
+            order.setdefault(("run", script), None)
+        elif eff == "request_run" and target:
+            order.setdefault(("request_run", target), None)
+        elif eff in _LANDED_VERBS and target:
+            key = (eff, target)
+            order[key] = (order.get(key) or 0) + 1
+    out = []
+    for (eff, target), n in order.items():
+        if eff == "run":
+            codes = runs[target]
+            out.append(f"run {target} exited {codes[0]}" if len(codes) == 1 else
+                       f"run {target} ran {len(codes)} times, exits " + ", ".join(str(c) for c in codes))
+        elif eff == "request_run":
+            out.append(f"request_run {target} was only asked for: the seat has not run it, so no result"
+                       " of it exists yet")
+        else:
+            out.append(f"{eff} {target} landed" + (f" ({n} times)" if n > 1 else ""))
+    return out
+
+
+def _receipts_sentence(receipts) -> str:
+    shown = list(receipts)[:RECEIPTS_SHOWN]
+    more = len(receipts) - len(shown)
+    return (" What your own acts this beat did, from their receipts (record these, not what a message"
+            " says happened): " + "; ".join(shown) + (f"; and {more} more" if more > 0 else "") + ".")
+
+
+def reflect_prompt(optional=(), refused=True, failed=(), receipts=(), **kw) -> str:
     """REFLECT, with the records in `optional` offered rather than required, and the refusal question
-    unless `refused` is False (known: nothing recorded as refused). True and None (unknown) keep it."""
+    unless `refused` is False (known: nothing recorded as refused). True and None (unknown) keep it.
+    `failed` (failed_this_beat) names acts that ran and failed; when any did, "no act refused" is not
+    said alone, the failures are named beside it. `receipts` (receipts_this_beat) says what the ok acts
+    did: run exits, requests not yet run, landed writes (#716)."""
     body = REFLECT.format(**kw)
     for r in optional:
         old, new = _REFLECT_OPTIONAL_LINE[r]
         body = body.replace(old, new, 1)
+    tail = _failed_sentence(failed) if failed else ""
+    if receipts:
+        tail += _receipts_sentence(receipts)
     if refused is False:
-        body = body.replace(*_REFLECT_REFUSED, 1)
+        old, new = _REFLECT_REFUSED
+        body = body.replace(old, new + tail, 1)
+    elif tail:
+        body = body.replace(_REFLECT_REFUSED[0], _REFLECT_REFUSED[0] + tail, 1)
     return body
 
 
@@ -1503,7 +1625,7 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
     reserve = min(num_predict, ANSWER_RESERVE_CAP)
     budget_chars = window_budget_chars(num_ctx, num_predict, slack)
     order = ("digest", "recall")
-    floors = {"digest": 1200, "recall": 400}
+    floors = FIT_FLOORS
     out, interventions = dict(blocks), []
     total = lambda: fixed_chars + sum(len(v or "") for v in out.values())
     for key in order:
@@ -1516,15 +1638,168 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
         keep = max(floors[key], len(text) - over)
         if keep >= len(text):
             continue
-        # keep the HEAD of the digest (newest-first there) and the TAIL of recall/journal
-        out[key] = (text[:keep] + "\n[…trimmed to fit the context window…]") if key == "digest" \
-            else ("[…trimmed to fit the context window…]\n" + text[-keep:])
+        out[key] = _trim_block(key, text, keep)
         interventions.append({"kind": "context_fit", "block": key,
                               "suppressed": f"{len(text) - keep} chars of {key}",
                               "reason": f"prompt + a p99 answer ({reserve} tok) would not fit "
                                         f"num_ctx ({num_ctx}); the generation would be cut "
                                         f"mid-answer (27/506 generates already were)"})
     return out, interventions
+
+
+# The least of each trimmable block a fit keeps (fit_to_window and fit_seed_to_preflight alike).
+FIT_FLOORS = {"digest": 1200, "recall": 400}
+
+
+def _trim_block(key: str, text: str, keep: int) -> str:
+    """A block cut to `keep` chars, saying so: the HEAD of the digest (newest-first there), the
+    TAIL of recall."""
+    return ((text[:keep] + "\n[…trimmed to fit the context window…]") if key == "digest"
+            else ("[…trimmed to fit the context window…]\n" + text[-keep:]))
+
+
+# Room a refit leaves under the step-1 preflight line, so the next small addition does not put the
+# seed straight back over it (235 schema chars silenced mcnugget-being on 2026-11-17, ~28 tokens under).
+SEED_REFIT_HEADROOM = 512
+
+
+# MEASURED, NOT DECLARED (#582 part 2). The step-1 preflight divides by a chars-per-token that was set by
+# hand per family (2.9 default; llama3.1 3.6, gemma4 3.3) and still over-counted by 12-49% against the
+# server's own counts, so a being near the edge lost digest, recall or the whole beat to an estimate. Every
+# explore step-1 generate now records `prompt_chars` (what was sent, in the preflight's units) beside
+# `prompt_eval_count`; this reads them back. The lowest recent ratio, less a margin, still errs high against
+# every count it was taken from, and a new model calibrates itself after a few counted beats.
+MEASURED_CPT_MIN_SAMPLES = 5
+MEASURED_CPT_WINDOW = 40          # samples, newest first, same model
+MEASURED_CPT_MARGIN = 0.97        # applied to the lowest ratio seen
+MEASURED_CPT_TAIL_BYTES = 8 << 20
+# A COUNT THAT IS TOO LOW TO BE A WHOLE PROMPT IS NOT A SAMPLE (NOVA on #774). A server count of less than
+# the whole prompt (a cached prefix not re-counted, a prompt truncated to the window) reads as a HIGHER
+# chars-per-token, which would WIDEN the preflight's allowance. min() already ignores a minority of them;
+# these bound the rest: a ratio above prior x MEASURED_CPT_MAX_OVER_PRIOR (measured families sit 1.14-1.35x
+# over the 2.9 default), or a count at the window's edge, is rejected rather than believed.
+MEASURED_CPT_MAX_OVER_PRIOR = 1.6
+
+
+def measured_preflight_cpt(instance, model, prior: float = None) -> dict:
+    """{"value": float|None, "samples": n, "rejected": n, "min": .., "median": ..} from this being's own
+    recent beats on `model`: explore's first generate, with prompt_chars and a whole server count. None below
+    MEASURED_CPT_MIN_SAMPLES, and the caller keeps the declared or default ratio (`prior`)."""
+    from sage.gateway.being_tool_loop import WINDOW_SEND_MARGIN
+    out = {"value": None, "samples": 0, "rejected": 0}
+    path = Path(instance) / "heartbeats.jsonl"
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - MEASURED_CPT_TAIL_BYTES))
+            lines = f.read().split(b"\n")
+    except OSError:
+        return out
+    ratios = []
+    for raw in reversed(lines):
+        if len(ratios) >= MEASURED_CPT_WINDOW:
+            break
+        try:
+            r = json.loads(raw)
+        except Exception:
+            continue
+        if not isinstance(r, dict) or r.get("model") != model:
+            continue
+        gens = (r.get("explore") or {}).get("generates") if isinstance(r.get("explore"), dict) else None
+        g = gens[0] if gens and isinstance(gens[0], dict) else {}
+        chars, toks = g.get("prompt_chars"), g.get("prompt_eval_count")
+        if not (isinstance(chars, int) and isinstance(toks, int) and toks > 0) or g.get("server_cut"):
+            continue
+        ratio = chars / toks
+        ctx = r.get("num_ctx")
+        if (not 1.5 <= ratio <= 8.0
+                or (prior and ratio > prior * MEASURED_CPT_MAX_OVER_PRIOR)
+                or (isinstance(ctx, int) and toks >= ctx - WINDOW_SEND_MARGIN)):
+            out["rejected"] += 1
+            continue
+        ratios.append(ratio)
+    out["samples"] = len(ratios)
+    if ratios:
+        s = sorted(ratios)
+        out["min"], out["median"] = round(s[0], 3), round(s[len(s) // 2], 3)
+    if len(ratios) >= MEASURED_CPT_MIN_SAMPLES:
+        out["value"] = round(min(ratios) * MEASURED_CPT_MARGIN, 3)
+    return out
+
+
+def fit_seed_to_preflight(render, measure, *, num_ctx, rung_index: int, digest: str, recall: str,
+                          cpt: float):
+    """Fit the COMPOSED seed to the tool loop's step-1 preflight, measured the way the loop measures it.
+
+    `render(rung, digest, recall)` composes the seed (whatever compose returns); `measure(rendered)`
+    is the tool loop's own step-1 estimate of it in tokens (being_tool_loop.preflight_tokens), and
+    `cpt` the chars-per-token that estimate divides by. Returns (rendered, rung, digest, recall,
+    intervention or None).
+
+    WHY (SAGE #582). fit_state and fit_to_window budget the seed from its parts plus constants for the
+    rest; the preflight counts the list that is sent. When the parts-count said "fits" and the
+    whole-count said "over", every explore ended unsent with `interventions: []`, beat after beat, until
+    the being's state happened to shrink. This runs after them, on the seed itself, so the heartbeat
+    knows before the loop does.
+
+    WHAT IT CHANGES. Nothing on a seed the preflight accepts: a beat that would have run, runs with
+    exactly the seed it had. On a seed the preflight would refuse, it trims toward the line minus
+    SEED_REFIT_HEADROOM, in the fitters' own order (digest, then recall, each to its floor, then the
+    conversation ladder) and keeps a trim only if the measured estimate fell (in the act-first form the
+    digest rides the posture turn, not the seed, so cutting it buys this seed nothing). If the seed is
+    still over at the last rung, it is sent as is and the intervention says it will be refused."""
+    rung = CONV_LADDER[rung_index]
+    rendered = render(rung, digest, recall)
+    try:
+        ctx = int(num_ctx or 0)
+    except (TypeError, ValueError):
+        ctx = 0
+    if ctx <= 0:
+        return rendered, rung, digest, recall, None
+    from sage.gateway.being_tool_loop import WINDOW_SEND_MARGIN
+    line = ctx - WINDOW_SEND_MARGIN
+    est0 = est = measure(rendered)
+    if est <= line:
+        return rendered, rung, digest, recall, None
+    target = line - SEED_REFIT_HEADROOM
+    blocks = {"digest": digest or "", "recall": recall or ""}
+    suppressed = []
+    for key in ("digest", "recall"):
+        if est <= target:
+            break
+        text = blocks[key]
+        keep = max(FIT_FLOORS[key], len(text) - (int((est - target) * cpt) + 1))
+        if keep >= len(text):
+            continue
+        trial = dict(blocks, **{key: _trim_block(key, text, keep)})
+        r = render(rung, trial["digest"], trial["recall"])
+        e = measure(r)
+        if e >= est:
+            continue
+        blocks, rendered, est = trial, r, e
+        suppressed.append(f"{len(text) - keep} chars of {key}")
+    i = rung_index
+    while est > target and i < len(CONV_LADDER) - 1:
+        i += 1
+        rendered = render(CONV_LADDER[i], blocks["digest"], blocks["recall"])
+        est = measure(rendered)
+    if i != rung_index:
+        rung = CONV_LADDER[i]
+        pc, tc = rung
+        suppressed.append(f"conversations stepped down to the last {pc} turns per conversation"
+                          + (f", each at most {tc} chars" if tc else ""))
+    still = est > line
+    return rendered, rung, blocks["digest"], blocks["recall"], {
+        "kind": "context_fit", "block": "seed", "cause": "step1_preflight",
+        "estimated_before": int(est0), "estimated_after": int(est), "line": line,
+        "suppressed": "; ".join(suppressed) or "nothing (no trimmable block shortened this seed)",
+        "still_refused": still,
+        "reason": (f"the composed seed measured {int(est0)} tokens on the tool loop's step-1 preflight, "
+                   f"over num_ctx {ctx} minus {WINDOW_SEND_MARGIN}; the part-wise fit had accepted it "
+                   f"(SAGE #582)" + ("; STILL over at the sparsest rung, so explore will be refused"
+                                     if still else "")),
+    }
 
 
 def measure_service(name: str, url: str, timeout: float = 3.0) -> str:
@@ -4053,27 +4328,49 @@ def fresh_frame(instance: Path, worktree: Optional[str], since: Optional[float])
 
 
 _READS_IMAGES: dict = {}
+#: model -> why Ollama could not be asked (a timeout, a refused connection), for the beat that asked.
+_VISION_UNKNOWN: dict = {}
 
 
 def model_reads_images(model: str, host: Optional[str] = None, timeout: float = 5.0) -> bool:
     """Whether Ollama reports `vision` among `model`'s capabilities. Unknown (Ollama unreachable, an old
     server without `capabilities`) is False: a frame not attached costs one beat of sight, a frame the
-    model rejects costs the whole beat. Cached per model for the process (one beat)."""
+    model rejects costs the whole beat. A definite answer is cached per model for the process (one beat).
+
+    UNKNOWN IS NOT NO, AND IS NOT CACHED. sprout-being 2026-11-17 10:13Z: its frame of 10:09Z was withheld with
+    "your model cannot read images" from a model whose capabilities list vision; Ollama was busy, the 5 s ask
+    failed, and the failure was cached and told to the being as a fact about its model. It is asked twice now
+    (the second time with a longer wait), only a definite answer is kept, and an unknown one leaves its cause in
+    _VISION_UNKNOWN for the reason the being is given (vision_withheld_why)."""
     if model in _READS_IMAGES:
         return _READS_IMAGES[model]
     import urllib.request
     base = (host or os.environ.get("OLLAMA_HOST") or "http://127.0.0.1:11434").rstrip("/")
     if not base.startswith("http"):
         base = "http://" + base
-    try:
-        req = urllib.request.Request(base + "/api/show", json.dumps({"model": model}).encode(),
-                                     {"Content-Type": "application/json"})
-        caps = json.load(urllib.request.urlopen(req, timeout=timeout)).get("capabilities") or []
-        ok = "vision" in caps
-    except Exception:
-        ok = False
-    _READS_IMAGES[model] = ok
-    return ok
+    err = None
+    for wait in (timeout, timeout * 3):
+        try:
+            req = urllib.request.Request(base + "/api/show", json.dumps({"model": model}).encode(),
+                                         {"Content-Type": "application/json"})
+            caps = json.load(urllib.request.urlopen(req, timeout=wait)).get("capabilities") or []
+        except Exception as e:
+            err = f"{type(e).__name__}: {str(e)[:80]}"
+            continue
+        _VISION_UNKNOWN.pop(model, None)
+        _READS_IMAGES[model] = "vision" in caps
+        return _READS_IMAGES[model]
+    _VISION_UNKNOWN[model] = err
+    return False
+
+
+def vision_withheld_why(model: str) -> str:
+    """Why a frame was not attached when model_reads_images said no: a fact about the model, or that the question
+    went unanswered."""
+    if model in _VISION_UNKNOWN:
+        return (f"the model server did not say whether your model ({model}) reads images "
+                f"({_VISION_UNKNOWN[model]}), so the frame was not attached; this is not a fact about your model")
+    return f"your model ({model}) cannot read images, so the frame was not attached to this beat"
 
 
 def frames_the_model_can_read(frames: list, model: str, reads=None) -> list:
@@ -4085,8 +4382,77 @@ def frames_the_model_can_read(frames: list, model: str, reads=None) -> list:
         return frames
     if (reads or model_reads_images)(model):
         return frames
-    why = f"your model ({model}) cannot read images, so the frame was not attached to this beat"
+    why = vision_withheld_why(model)
     return [(None, dict(m, carried=False, why=why)) if b is not None else (b, m) for b, m in frames]
+
+
+#: The oldest frame an answer is given to look at. Past it the answer is told when it last looked, not shown it.
+ANSWER_FRAME_MAX_AGE_S = 24 * 3600
+
+
+def answer_frame(instance: Path, worktree: Optional[str], model: str, now: Optional[float] = None, reads=None,
+                 extra=()):
+    """(b64 or None, line, meta) for the answer turn: the newest frame on disk and how old it is.
+
+    THE ANSWER TURN SPOKE ABOUT THE ROOM WITHOUT ITS EYES. sprout-being, 2026-11-17 03:07Z: dp told it a view it
+    had described was imagined and asked what was really beyond the door; it answered with a second invented scene.
+    The answer turn carried no image, and the abilities line says only what it can do beyond the reply. Replayed
+    offline on its own model, dp's question, 3 runs each: with no image, 0/3 described the frame and 2/3 invented
+    a room; with its newest frame and its age, 3/3 described what the frame shows and invented no room; with
+    no image and a line saying so, 1/3 said it could not see and 2/3 still told the invented room.
+
+    Not `fresh_frame`'s rule. A beat is shown only what it asked to see since the last beat, because there a frame is
+    presented as now. Here the frame is the being's last look, said with its time, so an older one is still
+    evidence, up to ANSWER_FRAME_MAX_AGE_S. No frame on disk is (None, "", {}): nothing is claimed about eyes it has
+    not used.
+
+    WHEREVER THE BEING SAVED IT (`extra`, legion-claude on #762): the frames its camera acts wrote outside
+    scratch/camera/, last beat's and this one's (camera_paths_this_beat). Without them a look saved to
+    scratch/test-vision.jpg a minute ago lost to a 5 h old frame under scratch/camera/, and the answer was told
+    that old frame was its last look.
+
+    LATENCY: an unknown vision answer is not cached (model_reads_images), so with Ollama busy this ask can cost
+    up to 5 s + 15 s, and a beat that also carries a frame into explore asks twice. Chosen over telling the being
+    its model is blind."""
+    now = time.time() if now is None else now
+    best = None
+    for p in _frame_paths(instance, worktree, extra=extra):
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        if best is None or st.st_mtime > best[1].st_mtime:
+            best = (p, st)
+    if best is None:
+        return None, "", {}
+    p, st = best
+    at = datetime.fromtimestamp(st.st_mtime, timezone.utc)
+    when = f"{at.strftime('%Y-%m-%d %H:%M')}Z ({_ago(datetime.fromtimestamp(now, timezone.utc), at)})"
+    meta = {"path": str(p), "age_s": round(now - st.st_mtime, 1), "carried": False}
+    b64, why = None, None
+    if now - st.st_mtime > ANSWER_FRAME_MAX_AGE_S:
+        why = f"older than {ANSWER_FRAME_MAX_AGE_S // 3600} h"
+    elif not (reads or model_reads_images)(model):
+        why = vision_withheld_why(model)
+    else:
+        b64 = _frame_b64(p)
+        why = None if b64 is not None else "unreadable or not a JPEG"
+    if b64 is None:
+        return None, (f"No image is with this message: as you write it, you are not seeing. Your last look "
+                      f"through your eyes was at {when}."), dict(meta, why=why)
+    return b64, (f"The image with this message is your last look through your eyes, taken at {when}. "
+                 f"The room may have changed since."), dict(meta, carried=True)
+
+
+def camera_paths_this_beat(instance: Path, **turns) -> list:
+    """camera_frame_paths for turns of the running beat (`explore=res, posture=res, ...`), whose traces are still
+    (intent, effect) pairs and not yet in the beat record."""
+    rec = {}
+    for phase, res in turns.items():
+        rec[phase] = {"trace": [{"effector": i.effector, "args": dict(i.args or {}), "ok": e.ok,
+                                 "result": e.result if isinstance(e.result, dict) else None}
+                                for i, e in (getattr(res, "trace", None) or [])]}
+    return camera_frame_paths(rec, instance)
 
 
 def fresh_frames(instance: Path, worktree: Optional[str], since: Optional[float], extra=()) -> list:
@@ -5021,24 +5387,89 @@ def main(argv=None) -> int:
         "frames": _frame_metas,
     }
     _clock = clock_sense(now, instance, args.member, instance_config(instance), since_beat_h=hours)
-    seed, posture_turn = compose(
-        act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
-        museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas, tools=_explore_tools,
-        posture_framing=posture_framing_for(instance_config(instance)),
-        header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
-                f"{render_clock(_clock)}\n"
-                f"Your home: {instance}\n"
-                + body_line(args.model, instance, _num_ctx,
-                            instance_config(instance).get("former_homes")) + "\n"
-                + window_line(instance) + "\n"
-                f"The harness you are running under: {_harness.get('short')} on "
-                f"{_harness.get('branch')}"
-                + (" (uncommitted edits present)" if _harness.get("dirty") else "")
-                + (" (commits not yet merged to main)" if _harness.get("on_main") is False else "")
-                + ". A `check` result carries the `tree` it ran against; if that head is not "
-                  "this one, the answer is about different code than the code running you.\n\n"),
-        state=state_block,
-        recall=blocks["recall"], inbox=inbox, digest=blocks["digest"])
+    digest, recall = blocks["digest"], blocks["recall"]
+
+    def _compose_seed(state_text, recall_text, digest_text):
+        return compose(
+            act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
+            museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas, tools=_explore_tools,
+            posture_framing=posture_framing_for(instance_config(instance)),
+            header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
+                    f"{render_clock(_clock)}\n"
+                    # The absolute home path is context, NOT an address to copy. Measured on
+                    # Sprout: 15 of 15 path refusals were this string reproduced from memory and
+                    # truncated (…/sage/sage/journal.md six times, …/sage/journal.md, /scratch/…),
+                    # against 51 successful writes by bare name. So it is given once, and named as
+                    # the thing not to retype.
+                    f"Your home: {instance}\n"
+                    f"You never need to type that path. Name your files bare — journal.md, todo.md, or a "
+                    f"name of your choosing under notes/ or scratch/ — and they resolve inside your home. "
+                    f"An absolute path is only for something OUTSIDE your home.\n"
+                    # WHAT RUNS YOU, measured, not inferred from a directory name. legion-being read its
+                    # model-named home ("legion-gemma3-12b") first as its own size, then as a different
+                    # being's directory; the harness holds the model, the window and its own revision.
+                    + body_line(args.model, instance, _num_ctx,
+                                instance_config(instance).get("former_homes")) + "\n"
+                    + window_line(instance) + "\n"
+                    f"The harness you are running under: {_harness.get('short')} on "
+                    f"{_harness.get('branch')}"
+                    + (" (uncommitted edits present)" if _harness.get("dirty") else "")
+                    + (" (commits not yet merged to main)" if _harness.get("on_main") is False else "")
+                    + ". A `check` result carries the `tree` it ran against; if that head is not "
+                      "this one, the answer is about different code than the code running you.\n\n"),
+            state=state_text,
+            recall=recall_text, inbox=inbox, digest=digest_text)
+
+    # THE SEED IS FITTED AGAIN, WHOLE, ON THE TOOL LOOP'S OWN STEP-1 COUNT (SAGE #582): the fitters
+    # above budget from parts; this measures what will be sent and trims only if the loop would
+    # refuse it. A beat whose seed the loop accepts is unchanged.
+    from sage.gateway.being_tool_loop import uncounted_chars, preflight_tokens, preflight_cpt
+    from sage.gateway.being_tool_loop import _convo_chars as btl_convo_chars, WINDOW_SEND_MARGIN as _WSM
+    # the step-1 ratio, measured on this being's own recent beats when there are enough (#582 part 2)
+    try:
+        llm.preflight_cpt_measured = None      # the prior is the declared/default ratio, never last beat's
+    except Exception:
+        pass
+    _cpt_prior = preflight_cpt(llm)
+    _cpt_cal = measured_preflight_cpt(instance, args.model, prior=_cpt_prior)
+    try:
+        # set every beat, None included: a process that outlives a model switch must not keep the old ratio
+        llm.preflight_cpt_measured = _cpt_cal.get("value")
+    except Exception:
+        _cpt_cal["value"] = None
+    _cpt_cal["prior"] = _cpt_prior
+    _cpt_cal["used"] = preflight_cpt(llm)
+    _cpt_cal["source"] = "measured" if _cpt_cal.get("value") else "declared_or_default"
+    _seed_uncounted = uncounted_chars(_explore_specs, explore_turn_mode(instance))
+    _states = {conv_rung: state_block}
+
+    def _render_seed(rung, digest_text, recall_text):
+        if rung not in _states:
+            _states[rung] = _build_state(*rung)
+            if _egai["arm"] == "on":      # a thinner rung keeps the EGAI arm's pointer
+                _states[rung] += "\n\n" + ESTABLISHED_POINTER.format(
+                    exists="it exists" if (instance / ESTABLISHED_NOTE).exists() else "not written yet")
+        return _compose_seed(_states[rung], recall_text, digest_text)
+
+    (seed, posture_turn), _seed_rung, digest, recall, _seed_iv = fit_seed_to_preflight(
+        _render_seed, lambda r: preflight_tokens(r[0], _seed_uncounted, llm),
+        num_ctx=_num_ctx, rung_index=CONV_LADDER.index(conv_rung) if conv_rung in CONV_LADDER else 0,
+        digest=digest, recall=recall, cpt=preflight_cpt(llm))
+    if _seed_rung != conv_rung:
+        conv_rung, state_block = _seed_rung, _states[_seed_rung]
+    # CALIBRATION IS EVIDENCE, NOT A SILENT CHANGE (NOVA on #774): the sent seed's estimate at the ratio used
+    # and at the prior, so a beat the measured ratio admitted (or a cut it caused) is visible against the
+    # server's own count of the same prompt, explore.generates[0].prompt_eval_count.
+    try:
+        _seed_chars = btl_convo_chars(seed) + _seed_uncounted
+        _cpt_cal["seed_est_used"] = int(_seed_chars / _cpt_cal["used"])
+        _cpt_cal["seed_est_prior"] = int(_seed_chars / _cpt_prior)
+        _cpt_cal["admitted_by_calibration"] = bool(
+            _cpt_cal["source"] == "measured" and isinstance(_num_ctx, int)
+            and _cpt_cal["seed_est_prior"] > _num_ctx - _WSM >= _cpt_cal["seed_est_used"])
+    except Exception:
+        pass
+    blocks["digest"], blocks["recall"] = digest, recall
     # WHAT WAS ATTACHED, NOT WHAT WAS PRODUCED. `frames` above is the producer's claim
     # (carried=True); this counts images on the composed seed — the thing sent. The two
     # differed for 395 beats and nothing recorded it. A record that names delivery makes
@@ -5267,6 +5698,8 @@ def main(argv=None) -> int:
                 convo.append({"role": "user", "content": _wo})
             convo.append({"role": "user", "content": reflect_prompt(
                 reflect_optional_for(instance_config(instance)), refused=refused_this_beat(explore, after),
+                failed=failed_this_beat(explore, after),
+                receipts=receipts_this_beat(explore, after),
                 date=f"{now:%Y-%m-%d %H:%M} UTC", say_line=say_line, say_first=say_first)})
             # One extra step when someone is waiting, because the routine three fill the budget exactly.
             # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
@@ -5307,7 +5740,13 @@ def main(argv=None) -> int:
                                           context=(answer_context_block(instance, args.member, selected)
                                                    if answer_context_on(instance) else ""),
                                           temperature=answer_temperature(instance),
-                                          abilities=abilities_line(_unavail))
+                                          abilities=abilities_line(_unavail),
+                                          frame=(answer_frame(instance, _wt, args.model,
+                                                              extra=camera_frame_paths(last, instance)
+                                                              + camera_paths_this_beat(instance, explore=explore,
+                                                                                       posture=after,
+                                                                                       reflect=reflect))
+                                                 if "camera" not in (_unavail or {}) else None))
             else:
                 answer = run_ollama_tool_turn(
                     client, llm,
@@ -5372,7 +5811,9 @@ def main(argv=None) -> int:
     # the phases are over; a SIGTERM from here would escape main() and lose the record (#213)
     _term_before_record = signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
-    interventions = list(fit_interventions)
+    # WHAT THE FIT CUT FROM THIS BEAT'S SEED (SAGE #582): fit_interventions already leads with the
+    # conversation rung's cut; the whole-seed refit is the last word on what was sent.
+    interventions = list(fit_interventions) + ([_seed_iv] if _seed_iv else [])
     for ph, res in (("explore", explore), ("posture", after)):
         if getattr(res, "deadline_hit", False):
             interventions.append({"kind": "deadline", "phase": ph,
@@ -5492,6 +5933,9 @@ def main(argv=None) -> int:
                                          "window_full": getattr(res, "window_full", None),
                                          "handoff": getattr(res, "handoff", None),
                                          "interjected": list(getattr(res, "interjected", [])),
+                                         # a turn that stopped for a newer person says who (09:04Z 11-17: an
+                                         # act-after-answer of 0 steps and no generate, and no reason recorded)
+                                         "yielded": getattr(res, "yielded", None),
                                          "trace": _trace(res), "thinking": [t[:4000] for t in res.thinking],
                                          "salvaged": list(res.salvaged), "generates": list(res.generates)}
     record = {
@@ -5565,6 +6009,7 @@ def main(argv=None) -> int:
         # principle): a guard that silences without saying what it silenced trades a
         # confident wrong for a confident silence.
         "interventions": interventions,
+        "preflight_cpt": _cpt_cal,
         # a failed turn selection, by name: without it, "no one is waiting" and "selection broke" are one record
         "selection_error": LAST_SELECTION_ERROR,
         # which waiting turn this beat chose, and whether it asked: "never selected" vs "selected, not answered"
