@@ -206,6 +206,38 @@ def render_pr(pr: dict, target: str, last: int = PR_READ_LAST_DEFAULT) -> str:
     return out
 
 
+# A LINE THAT IS A TOOL CALL, WRITTEN AS WORDS (#718). cbp-being, 2026-11-15 01:38Z: in an answer
+# turn that offers only `say`, it pasted `settle id="s544" question=... answer=...` into the message,
+# then wrote "[DONE] Settled s544 and s545" to its todo. The settled log has no op for either id.
+# A say receipt reports delivery, and a delivered call-text read as a performed call. Anchored at a
+# line start (after quoting, bullets or backticks), the verb name, then `key=` or `(`: prose that
+# merely names a verb ("I will settle this") does not match.
+_CALL_TEXT = re.compile(r"^[\s>*\-`]*([a-z_]+)(?:\s+[a-z_]+\s*=|\s*\()", re.M)
+
+
+def call_text_verbs(text: str) -> List[str]:
+    """The being's own verbs that `text` writes out as calls, in order, once each; say excluded."""
+    try:
+        from sage.gateway.being_gate_client import _TOOL_SCHEMAS
+        names = set(_TOOL_SCHEMAS) - {"say"}
+    except Exception:
+        return []
+    out: List[str] = []
+    for m in _CALL_TEXT.finditer(text or ""):
+        v = m.group(1)
+        if v in names and v not in out:
+            out.append(v)
+    return out
+
+
+def _call_text_note(verbs: List[str]) -> str:
+    calls = " and ".join(f"a {v} call" for v in verbs)
+    return (f"This message contains the text of {calls}. A message only carries words: none of "
+            f"{'it' if len(verbs) == 1 else 'them'} ran, and nothing it would change has changed. "
+            f"To do it, call {' / '.join(verbs)} itself as a tool, in a turn that offers "
+            f"{'it' if len(verbs) == 1 else 'them'}.")
+
+
 def _hestia_error(env: dict) -> Optional[str]:
     """Render a daemon error envelope as the r1 `error` string keyed by hestia's own code."""
     err = env.get("_hestia_error")
@@ -4455,6 +4487,9 @@ class HestiaF1aDispatcher:
                     f"{len(turn['text'])} chars were delivered as seq {turn['seq']}]")
         result = {"conversation": to, "seq": turn["seq"],
                   "said": said, "action_id": action_id}
+        _verbs = call_text_verbs(turn["text"])
+        if _verbs:
+            result["not_performed"] = _call_text_note(_verbs)
         if woke:
             result["woke"] = woke
         elif getattr(self, "_wake_why", ""):
