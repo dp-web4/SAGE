@@ -3134,7 +3134,8 @@ _TOOL_SCHEMAS = {
     # and asked the seat about the device again on each of them. A conclusion in a 12k-line journal does
     # not reach the next beat; this list does (being_settled).
     "settle": ("Keep something you have concluded, as a question and your answer in your own words, "
-               "shown to you every beat. Settling a question again replaces its answer (the old one is "
+               "shown to you every beat; when many are kept, older ones show only the start of their "
+               "answer. Settling a question again replaces its answer (the old one is "
                "logged). No arguments lists them. What did not work is worth keeping too.",
                {"question": "what you settled",
                 "answer": "what you concluded",
