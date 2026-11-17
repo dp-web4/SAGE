@@ -2963,9 +2963,10 @@ _TOOL_SCHEMAS = {
                   "rev2": "optional, for op='diff': the second revision of the span",
                   "path": "optional: a path inside your worktree to narrow the answer to",
                   "n": "optional, for op='log': how many commits (1-50, default 20)",
-                  "start_line": ("optional, for op='cat': the line to start from (default 1). A long "
-                                 "file comes back in parts of whole lines; each part says which lines "
-                                 "it holds and names the start_line that reads on")},
+                  # Kept to one clause: each part of a long cat already names the start_line
+                  # that reads on. The longer text cost 235 schema chars, and that tipped
+                  # mcnugget-being's step-1 preflight over 16,384 (2026-11-17 15:40Z; SAGE #582).
+                  "start_line": "optional, for op='cat': the line to start from (default 1)"},
                  ["op"]),
     "search": ("Find where something IS, without reading the file it is in. Give a pattern "
                "(text, or an extended regex) and optionally a path to narrow it; you get "
