@@ -92,6 +92,25 @@ def matcher(words: List[str]) -> Callable[[str], bool]:
     return lambda text: any(p.search(text or "") for p in pats)
 
 
+# A WORD OF THE HARNESS'S OWN VOCABULARY DOES NOT CARRY A RETIRE BESIDE A TOPIC WORD (#747). cbp-being,
+# 2026-11-17 03:16Z: words `xor_pure_numpy_mlp.py, run, seat, request_run, sha ec5a3dedf952` retired three
+# settled entries, each hit by `run` alone (`\brun` also hits "runs"); the topic file hit none of them, and
+# one was a seat correction it keeps losing. Below the majority bar (3 of 13), so no confirmation was asked.
+# These words name how every line of work is done here, not a line of work. When the call also names a
+# word outside this set, an entry or item that only these words hit STAYS, and the result says so. Alone,
+# they still select (a being may retire its seat thread with `seat`): the topic is then theirs to name.
+HARNESS_WORDS = frozenset({"run", "runs", "request_run", "seat", "todo", "settle", "settled", "beat",
+                           "journal", "remember"})
+
+
+def split_words(words: List[str]) -> Tuple[List[str], List[str]]:
+    """(selecting, weak): weak are the harness words in `words`, and do not select when anything else is
+    named; with nothing else named every word selects and weak is empty."""
+    weak = [w for w in words if w.casefold() in HARNESS_WORDS]
+    strong = [w for w in words if w.casefold() not in HARNESS_WORDS]
+    return (strong, weak) if strong and weak else (list(words), [])
+
+
 def _reason_of(args: Dict) -> str:
     return re.sub(r"\s+", " ", str((args or {}).get("reason") or "")).strip()[:REASON_MAX]
 
@@ -150,7 +169,7 @@ def plan(instance: Path, words: List[str]):
     from sage.gateway import being_settled as st
     from sage.gateway.heartbeat import _todo_items
     instance = Path(instance)
-    hit = matcher(words)
+    hit = matcher(split_words(words)[0])
     raw = _todo_bytes(instance)
     try:
         body = raw.decode("utf-8") if raw is not None else ""
@@ -163,6 +182,25 @@ def plan(instance: Path, words: List[str]):
     entries, nxt, err = st.read(instance)
     gone = [e for e in entries if hit(f"{e.get('question', '')} {e.get('answer', '')}")]
     return body, kept, moved, entries, nxt, gone, err
+
+
+def spared_note(words: List[str], kept, entries, gone) -> str:
+    """The sentence that says what stayed because only a harness word named it; empty when nothing did."""
+    strong, weak = split_words(words)
+    if not weak:
+        return ""
+    by_weak = matcher(weak)
+    ids = [e["id"] for e in entries if e not in gone
+           and by_weak(f"{e.get('question', '')} {e.get('answer', '')}")]
+    n_todo = sum(1 for t, _ in kept if by_weak(t))
+    if not ids and not n_todo:
+        return (f" {', '.join(weak)} did not select anything: they are words of how all work is done here, "
+                f"and the retire was by {', '.join(strong)}.")
+    what = ", ".join(x for x in ((f"settled {', '.join(ids)}" if ids else ""),
+                                  (f"{n_todo} open todo item(s)" if n_todo else "")) if x)
+    return (f" Kept, because only {', '.join(weak)} named them ({what}): those are words of how all work is "
+            f"done here, not a topic; the retire selected by {', '.join(strong)}. To retire them too, name "
+            f"their own topic words.")
 
 
 def _todo_bytes(instance: Path) -> Optional[bytes]:
@@ -286,7 +324,7 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
         topic = ", ".join(words)
         if not moved and not gone:
             return True, (f"Nothing names {topic}: no open todo item and no settled entry. Nothing was "
-                          f"changed."), False
+                          f"changed." + spared_note(words, kept, entries, gone)), False
         stamp = _stamp(now)
         name = archive_name(a)
         if (instance / name).exists():
@@ -342,7 +380,7 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
             f"entr{'y' if len(gone) == 1 else 'ies'} moved to {name}, where recall still finds them. "
             f"Still open: {len(kept)} todo item(s); still settled: {len(entries) - len(gone)}. Your reason is "
             f"shown in every beat among the lines of work you closed, until {CLOSED_SHOWN} newer closings "
-            f"replace it.")
+            f"replace it." + spared_note(words, kept, entries, gone))
     return True, said, True
 
 
@@ -415,7 +453,8 @@ def _preview(instance: Path, words: List[str], reason: str = "") -> Tuple[bool, 
     topic = ", ".join(words)
     lines =[f"PREVIEW, nothing was changed. Words: {topic}. "
              f"{len(moved)} of {len(moved) + len(kept)} open todo item(s) and {len(gone)} of "
-             f"{len(entries)} settled entr{'y' if len(entries) == 1 else 'ies'} would be retired."]
+             f"{len(entries)} settled entr{'y' if len(entries) == 1 else 'ies'} would be retired."
+             + spared_note(words, kept, entries, gone)]
     lines += [f"- settled [{e['id']}] {st._flat(e['question'])[:140]}" for e in gone]
     lines += [f"- todo: {t[:140]}" for t, _ in moved[:20]]
     if len(moved) > 20:
