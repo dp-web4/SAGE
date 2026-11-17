@@ -552,8 +552,8 @@ def _short(e: dict, cap: int, near: Optional[Dict[str, List[str]]] = None) -> st
     A QUESTION WITHOUT ITS ANSWER IS A TOPIC, NOT A CONCLUSION. sprout-being settled at 11-12 23:58Z and 11-13
     02:52Z that its seat needed no restart. Both answers were shown every beat until 11-16 01:41Z, when the 17th
     entry left only the newest whole and the rest as questions. Its next three acts to start the seat came at
-    11-16 04:10Z, 11-17 03:37Z and 04:12Z, with "Does sprout-claude need to be restarted?" in view and its answer
-    not. The answer gets the larger share; the question keeps its floor."""
+    11-16 04:10Z, 11-17 03:37Z and 04:12Z, with both questions in view and neither answer. The answer gets the
+    larger share; the question keeps its floor."""
     tail = f" (settled {str(e.get('at', ''))[:10]})"
     pre = f"[{e['id']}{_near(e, near, 1)}] "
     if cap - len(pre) - len(tail) < SHORT_QUESTION_FLOOR:

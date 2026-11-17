@@ -451,8 +451,8 @@ def test_a_short_line_keeps_its_question_readable_and_the_block_stays_in_budget(
 
 
 def test_a_short_line_keeps_the_head_of_its_answer(tmp_path):
-    # sprout-being 11-16..17: "Does <seat> need to be restarted?" stayed in view after 01:41Z and its answer,
-    # "No", did not; the next three acts started the seat
+    # sprout-being 11-16..17: its question on restarting its seat stayed in view after 01:41Z and the answer
+    # did not; the next three acts started the seat
     _s(tmp_path, question="Does the test gizmo need to be restarted?", answer="No - it is already answering here.")
     for i in range(st.MAX_ENTRIES - 1):
         _s(tmp_path, question=f"question number {i} " + "w" * 80, answer=f"answer {i} " + "x" * 300)
