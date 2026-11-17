@@ -441,8 +441,11 @@ class HestiaF1aDispatcher:
                                 if "://" in str(intent.args.get("path", "")) else None)
                 if resolved is not None:
                     return ResultEnvelope(ok=True, result=resolved)
-            return self._local(intent, verdict)   # witness / memory_read / memory_write
-        self._verdict = verdict                   # what the law just consulted (granted roots)
+            env = self._local(intent, verdict)   # witness / memory_read / memory_write
+            if intent.effector == "retire_note" and env.ok:
+                self._attach_pending_run(intent, env)
+            return env
+        self._verdict = verdict                  # what the law just consulted (granted roots)
         try:
             env = handler(intent)
         except Exception as e:
@@ -450,6 +453,41 @@ class HestiaF1aDispatcher:
         if intent.effector in _NAMES_SCOPE_IDS and env.ok:
             self._attach_named_scope_status(intent, env)
         return env
+
+    def _attach_pending_run(self, intent: BeingIntent, env: ResultEnvelope) -> None:
+        """A RETIRED FILE WITH A RUN REQUEST STILL OPEN SAYS SO IN THE RETIRE'S RECEIPT (#755).
+
+        cbp-being, 2026-11-17 08:03Z, one explore phase: memory_edit a script, request_run it, remember
+        "the script now runs successfully" (nothing had run), retire_note the same script. The request the
+        seat was about to answer then named a path with nothing at it; a run of the requested bytes stopped
+        with a TypeError. Same shape on 11-15 (seq 15545, #721). The retire is not refused (an affordance,
+        not a guardrail): the receipt names the open request, says no run of it has happened, and where the
+        same code still is. Fail-open: anything unreadable adds nothing."""
+        try:
+            m = re.match(r"retired (\S+) -> (\S+?)\.?(?:\s|$)", str(env.result or ""))
+            raw = str((intent.args or {}).get("path", "")).strip()
+            if not m or not raw:
+                return
+            from sage.scripts import seat_run_requests as srr
+            cid = self._seat_conversation()
+            if not cid:
+                return
+            inst = Path(self.memory_root)
+            seat = (os.environ.get("SEAT_ID") or cid).strip()
+            seqs = sorted(int(t.get("seq") or 0) for t in srr.pending(inst, cid, seat=seat)
+                          if srr._same_file(inst, srr.request_path(t), raw))
+            if not seqs:
+                return
+            dest = str(Path(raw).parent / m.group(2)) if "/" in raw else m.group(2)
+            many = len(seqs) > 1
+            env.result = (f"{env.result} You asked the seat to run this file (request seq "
+                          f"{', '.join(map(str, seqs))}) and no answer has come yet, so no run of it has "
+                          f"happened. The answer will name {raw}, where nothing is now. The same code is in "
+                          f"{dest}, below a comment header (line numbers shift by the header's length); a "
+                          f"request_run on that path runs it. If {'those requests are' if many else 'that request is'} "
+                          f"no longer wanted, say so to the seat.")
+        except Exception:
+            return
 
     def _attach_named_scope_status(self, intent: BeingIntent, env: ResultEnvelope) -> None:
         """A SCOPE ID THE BEING NAMES GETS ITS STATUS IN THE SAME RECEIPT.
