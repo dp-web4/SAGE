@@ -929,7 +929,7 @@ def _answer_generate(llm, msgs, schema=None):
 
 def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: str,
                      on_generate=None, acts: str = "", changes: str = "", context: str = "",
-                     temperature: Optional[float] = None, abilities: Optional[str] = None):
+                     temperature: Optional[float] = None, abilities: Optional[str] = None, frame=None):
     """The being's answer, if it chose one, dispatched as its `say`.
 
     The prompt is the selected turn and the ask. `acts` (the beat's record of acts) is included
@@ -943,10 +943,13 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     # WHAT IT CAN DO rides EVERY answer, independent of the optional conversation context (GPT on #334: inside
     # that block it never reached an instance without "answer_context"; the motivating case would still have
     # answered without knowing it has no internet). Facts about its reach, not a direction.
-    user = "\n\n".join(p for p in (context, acts, changes,
+    # ITS LAST LOOK (answer_frame): `frame` is (b64 or None, line, meta). The line says whether an image is here and
+    # when it was taken; the image rides this user turn the way a beat's frame does.
+    f_b64, f_line, f_meta = frame or (None, "", {})
+    user = "\n\n".join(p for p in (context, acts, changes, f_line,
                                      abilities if abilities is not None else abilities_line(), ask) if p)
     msgs = [{"role": "system", "content": ANSWER_SYSTEM.format(name=name, machine=machine, member=member)},
-            {"role": "user", "content": user}]
+            {"role": "user", "content": user, **({"images": [f_b64]} if f_b64 else {})}]
     # THIS TURN'S SAMPLING ONLY (answer_temperature): set for the answer generate, restored after, so explore
     # and reflect keep the beat's temperature.
     _prior_t = getattr(llm, "temperature", None)
@@ -972,6 +975,8 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     form = {"parsed": False, "answer": None, "sent": False, "retried": retried,
             "done_reason": raw.get("done_reason"), "with_acts": bool(acts),
             "with_changes": bool(changes)}
+    if f_meta:
+        form["frame"] = dict(f_meta)
     try:
         j = json.loads(content)
         form["parsed"] = isinstance(j, dict)
@@ -4009,27 +4014,49 @@ def fresh_frame(instance: Path, worktree: Optional[str], since: Optional[float])
 
 
 _READS_IMAGES: dict = {}
+#: model -> why Ollama could not be asked (a timeout, a refused connection), for the beat that asked.
+_VISION_UNKNOWN: dict = {}
 
 
 def model_reads_images(model: str, host: Optional[str] = None, timeout: float = 5.0) -> bool:
     """Whether Ollama reports `vision` among `model`'s capabilities. Unknown (Ollama unreachable, an old
     server without `capabilities`) is False: a frame not attached costs one beat of sight, a frame the
-    model rejects costs the whole beat. Cached per model for the process (one beat)."""
+    model rejects costs the whole beat. A definite answer is cached per model for the process (one beat).
+
+    UNKNOWN IS NOT NO, AND IS NOT CACHED. sprout-being 2026-11-17 10:13Z: its frame of 10:09Z was withheld with
+    "your model cannot read images" from a model whose capabilities list vision; Ollama was busy, the 5 s ask
+    failed, and the failure was cached and told to the being as a fact about its model. It is asked twice now
+    (the second time with a longer wait), only a definite answer is kept, and an unknown one leaves its cause in
+    _VISION_UNKNOWN for the reason the being is given (vision_withheld_why)."""
     if model in _READS_IMAGES:
         return _READS_IMAGES[model]
     import urllib.request
     base = (host or os.environ.get("OLLAMA_HOST") or "http://127.0.0.1:11434").rstrip("/")
     if not base.startswith("http"):
         base = "http://" + base
-    try:
-        req = urllib.request.Request(base + "/api/show", json.dumps({"model": model}).encode(),
-                                     {"Content-Type": "application/json"})
-        caps = json.load(urllib.request.urlopen(req, timeout=timeout)).get("capabilities") or []
-        ok = "vision" in caps
-    except Exception:
-        ok = False
-    _READS_IMAGES[model] = ok
-    return ok
+    err = None
+    for wait in (timeout, timeout * 3):
+        try:
+            req = urllib.request.Request(base + "/api/show", json.dumps({"model": model}).encode(),
+                                         {"Content-Type": "application/json"})
+            caps = json.load(urllib.request.urlopen(req, timeout=wait)).get("capabilities") or []
+        except Exception as e:
+            err = f"{type(e).__name__}: {str(e)[:80]}"
+            continue
+        _VISION_UNKNOWN.pop(model, None)
+        _READS_IMAGES[model] = "vision" in caps
+        return _READS_IMAGES[model]
+    _VISION_UNKNOWN[model] = err
+    return False
+
+
+def vision_withheld_why(model: str) -> str:
+    """Why a frame was not attached when model_reads_images said no: a fact about the model, or that the question
+    went unanswered."""
+    if model in _VISION_UNKNOWN:
+        return (f"the model server did not say whether your model ({model}) reads images "
+                f"({_VISION_UNKNOWN[model]}), so the frame was not attached; this is not a fact about your model")
+    return f"your model ({model}) cannot read images, so the frame was not attached to this beat"
 
 
 def frames_the_model_can_read(frames: list, model: str, reads=None) -> list:
@@ -4041,8 +4068,56 @@ def frames_the_model_can_read(frames: list, model: str, reads=None) -> list:
         return frames
     if (reads or model_reads_images)(model):
         return frames
-    why = f"your model ({model}) cannot read images, so the frame was not attached to this beat"
+    why = vision_withheld_why(model)
     return [(None, dict(m, carried=False, why=why)) if b is not None else (b, m) for b, m in frames]
+
+
+#: The oldest frame an answer is given to look at. Past it the answer is told when it last looked, not shown it.
+ANSWER_FRAME_MAX_AGE_S = 24 * 3600
+
+
+def answer_frame(instance: Path, worktree: Optional[str], model: str, now: Optional[float] = None, reads=None):
+    """(b64 or None, line, meta) for the answer turn: the newest frame on disk and how old it is.
+
+    THE ANSWER TURN SPOKE ABOUT THE ROOM WITHOUT ITS EYES. sprout-being, 2026-11-17 03:07Z: dp told it a view it
+    had described was imagined and asked what was really beyond the door; it answered with a second invented scene.
+    The answer turn carried no image, and the abilities line says only what it can do beyond the reply. Replayed
+    offline on its own model, dp's question, 3 runs each: with no image, 0/3 described the frame and 2/3 invented
+    a room; with its newest frame and its age, 3/3 described what the frame shows and invented no room; with
+    no image and a line saying so, 1/3 said it could not see and 2/3 still told the invented room.
+
+    Not `fresh_frame`'s rule. A beat is shown only what it asked to see since the last beat, because there a frame is
+    presented as now. Here the frame is the being's last look, said with its time, so an older one is still
+    evidence, up to ANSWER_FRAME_MAX_AGE_S. No frame on disk is (None, "", {}): nothing is claimed about eyes it has
+    not used."""
+    now = time.time() if now is None else now
+    best = None
+    for p in _frame_paths(instance, worktree):
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        if best is None or st.st_mtime > best[1].st_mtime:
+            best = (p, st)
+    if best is None:
+        return None, "", {}
+    p, st = best
+    at = datetime.fromtimestamp(st.st_mtime, timezone.utc)
+    when = f"{at.strftime('%Y-%m-%d %H:%M')}Z ({_ago(datetime.fromtimestamp(now, timezone.utc), at)})"
+    meta = {"path": str(p), "age_s": round(now - st.st_mtime, 1), "carried": False}
+    b64, why = None, None
+    if now - st.st_mtime > ANSWER_FRAME_MAX_AGE_S:
+        why = f"older than {ANSWER_FRAME_MAX_AGE_S // 3600} h"
+    elif not (reads or model_reads_images)(model):
+        why = vision_withheld_why(model)
+    else:
+        b64 = _frame_b64(p)
+        why = None if b64 is not None else "unreadable or not a JPEG"
+    if b64 is None:
+        return None, (f"No image is with this message: as you write it, you are not seeing. Your last look "
+                      f"through your eyes was at {when}."), dict(meta, why=why)
+    return b64, (f"The image with this message is your last look through your eyes, taken at {when}. "
+                 f"The room may have changed since."), dict(meta, carried=True)
 
 
 def fresh_frames(instance: Path, worktree: Optional[str], since: Optional[float], extra=()) -> list:
@@ -5179,7 +5254,9 @@ def main(argv=None) -> int:
                                           context=(answer_context_block(instance, args.member, selected)
                                                    if answer_context_on(instance) else ""),
                                           temperature=answer_temperature(instance),
-                                          abilities=abilities_line(_unavail))
+                                          abilities=abilities_line(_unavail),
+                                          frame=(answer_frame(instance, _wt, args.model)
+                                                 if "camera" not in (_unavail or {}) else None))
             else:
                 answer = run_ollama_tool_turn(
                     client, llm,
@@ -5354,7 +5431,10 @@ def main(argv=None) -> int:
                                          "salvaged": list(res.salvaged), "generates": list(res.generates),
                                          "rested": getattr(res, "rested", None),
                                          "looped": getattr(res, "looped", None),
-                                         "window_full": getattr(res, "window_full", None)}
+                                         "window_full": getattr(res, "window_full", None),
+                                         # a turn that stopped for a newer person says who (09:04Z 11-17: an
+                                         # act-after-answer of 0 steps and no generate, and no reason recorded)
+                                         "yielded": getattr(res, "yielded", None)}
     record = {
         # schema: what fields a reader may expect (Legion's amendment 4, 2026-09-05: the
         # consolidation organ counts how many records carry join/account/wake/interventions;
