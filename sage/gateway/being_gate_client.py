@@ -377,9 +377,17 @@ NO_WORKTREE_REFUSAL = {
         "pr_sync brings a pull request you opened up to date with its base branch, by merging "
         "inside your code-repository checkout (a worktree), and this seat has none, so pr_sync "
         "cannot update your proposal here."),
+    # #637: cbp-being meant "retire scratch/svd-compress-tests.py", was told only that git_clean
+    # had nothing to delete, and then memory_edited the file into one that failed to run; on
+    # 11-15 it sent 61 git_clean calls in one phase. retire_note is the verb that closes a file
+    # in notes/ or scratch/ (it renames, nothing is deleted), so the refusal names it, and says
+    # that leaving the file is also fine, so the refusal does not push the being into an edit.
     "git_clean": (
         "git_clean deletes one untracked file you added to your code-repository checkout (a "
-        "worktree), and this seat has none, so there is nothing here for git_clean to delete."),
+        "worktree), not files in your home, and this seat has none, so there is nothing here for "
+        "git_clean to delete. To close one of your own files in notes/ or scratch/, use "
+        "retire_note with its path and a reason: it is renamed .retired-<date> and kept, so "
+        "nothing is lost. No tool deletes a file in your home, and leaving one in place is fine."),
     # CAMERA'S HONEST ALTERNATIVE IS DIFFERENT: there is none. It never reads a worktree (the
     # frame lands in the being's home); the requirement is the policy hold described in
     # camera_command. So it says it is not enabled, says why without pointing at a step the
