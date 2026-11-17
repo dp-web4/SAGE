@@ -3212,7 +3212,10 @@ class HestiaF1aDispatcher:
                 else "the revision(s) produced no differences") +
                 " — an empty diff is a true answer, not a failed read]")
         limit = 6000
-        if len(out) > limit:
+        if op == "cat" and rc == 0:
+            out = cat_window(out, intent.args.get("start_line"), limit,
+                             str(intent.args.get("path", "")).strip(), str(intent.args.get("rev", "")).strip())
+        elif len(out) > limit:
             if op == "log":
                 out = out[:limit] + f"\n[… truncated: {len(out) - limit} more characters of older history …]"
             else:
@@ -6018,6 +6021,43 @@ def _run_note_core(rc: int, stderr: str, files: list) -> str:
             f"{here}. No other file from your home was there, and nothing an earlier run wrote "
             f"is kept; a file passed as 'data' arrives "
             f"under its base name (data/x.npy is x.npy), not in a subdirectory.")
+
+
+# GIT_READ CAT READS A FILE FROM ITS START, IN PARTS THAT SAY WHERE THEY ARE. `cat` was cut like
+# show/diff: the LAST 6,000 characters, behind "[… truncated: N earlier characters withheld …]", with
+# no line numbers and no way to ask for the rest. Measured on mcnugget-being, 2026-11-17: asking how
+# `transport_faults` is handled, it read sage/gateway/egress_drain.py (329 lines, 18.7k chars) with
+# `cat` three times in each of the 13:28 and 14:10 beats, and got the same last third every time;
+# the module docstring and the top of the file were never shown. At 13:28 it sent `start_line: '200'`,
+# which git_read did not take, and the answer was again the same tail. Now a file is shown from line 1
+# (or the start_line given) in whole lines up to the limit, headed with which lines of how many these
+# are, and ended with the start_line that reads on. The command the law judged is unchanged: the
+# window is cut from git's output here.
+def cat_window(text: str, start_raw, limit: int, path: str = "", rev: str = "") -> str:
+    lines = text.split("\n")
+    total = len(lines)
+    try:
+        start = int(str(start_raw).strip()) if start_raw not in (None, "") else 1
+    except (TypeError, ValueError):
+        start = 1
+    start = max(start, 1)
+    at = f"'{path}'" + (f" at {rev}" if rev else "")
+    if start > total:
+        return (f"[{at} has {total} lines, so start_line {start} names no line. "
+                f"start_line 1 reads it from the top.]")
+    shown, size = [], 0
+    for ln in lines[start - 1:]:
+        if shown and size + len(ln) + 1 > limit:
+            break
+        shown.append(ln if len(ln) <= limit else ln[:limit] + " […line cut]")
+        size += len(ln) + 1
+    end = start + len(shown) - 1
+    if start == 1 and end == total:
+        return text
+    head = f"[lines {start}-{end} of {total} of {at}" + (f"; lines 1-{start - 1} are above" if start > 1 else "") + "]"
+    tail = (f"[lines {end + 1}-{total} are not shown: git_read op 'cat' path '{path}'"
+            + (f" rev '{rev}'" if rev else "") + f" start_line {end + 1} reads on]") if end < total else "[that is the end]"
+    return head + "\n" + "\n".join(shown) + "\n" + tail
 
 
 if __name__ == "__main__":  # live smoke against the local daemon: mesh -> member_notify

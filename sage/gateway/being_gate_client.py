@@ -2962,7 +2962,10 @@ _TOOL_SCHEMAS = {
                   "rev": "optional: a commit sha, HEAD, HEAD~2, or a branch name",
                   "rev2": "optional, for op='diff': the second revision of the span",
                   "path": "optional: a path inside your worktree to narrow the answer to",
-                  "n": "optional, for op='log': how many commits (1-50, default 20)"},
+                  "n": "optional, for op='log': how many commits (1-50, default 20)",
+                  "start_line": ("optional, for op='cat': the line to start from (default 1). A long "
+                                 "file comes back in parts of whole lines; each part says which lines "
+                                 "it holds and names the start_line that reads on")},
                  ["op"]),
     "search": ("Find where something IS, without reading the file it is in. Give a pattern "
                "(text, or an extended regex) and optionally a path to narrow it; you get "
