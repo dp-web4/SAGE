@@ -1661,7 +1661,36 @@ def measured_preflight_cpt(instance, model, prior: float = None) -> dict:
         out["min"], out["median"] = round(s[0], 3), round(s[len(s) // 2], 3)
     if len(ratios) >= MEASURED_CPT_MIN_SAMPLES:
         out["value"] = round(min(ratios) * MEASURED_CPT_MARGIN, 3)
+    elif ratios:
+        # Fewer than MEASURED_CPT_MIN_SAMPLES: not used by default, but offered for the one case where the
+        # prior is certain to cost the whole beat (provisional_cpt_for_refused_seed).
+        out["provisional"] = round(min(ratios) * MEASURED_CPT_MARGIN, 3)
     return out
+
+
+def provisional_cpt_for_refused_seed(seed_iv, cal) -> Optional[float]:
+    """The provisional measured ratio to re-fit with, or None.
+
+    A REFUSED BEAT RECORDS NO SAMPLE, SO WAITING FOR FIVE CAN LAST FOREVER (mcnugget-being, 2026-11-17
+    22:48Z). With 2 counted beats (both 3.68 chars/token) calibration stayed on gemma4's declared 3.3; a
+    seat turn grew the state block, the seed measured 16,255 against a line of 16,128, nothing trimmable
+    was left (`still_refused`), and explore was refused at step 0. Only a beat that sends records a
+    sample, so the being would stay on the prior, refused, until its own state happened to shrink: the
+    pub-being shape (#582) that part 2 was meant to end.
+
+    So: only when the seed is STILL refused at the sparsest rung under the prior (the beat is lost
+    either way), and only when this being has at least one own count on this model, re-fit with that
+    lowest ratio less the margin. It still errs high against every count it was taken from, it is
+    bounded by the same rejections (MEASURED_CPT_MAX_OVER_PRIOR, window-edge counts), and a seed the
+    prior admits is never touched by it."""
+    if not (isinstance(seed_iv, dict) and seed_iv.get("still_refused")):
+        return None
+    if not isinstance(cal, dict) or cal.get("value"):
+        return None
+    v = cal.get("provisional")
+    if isinstance(v, (int, float)) and not isinstance(v, bool) and 1.5 <= v <= 8.0:
+        return float(v)
+    return None
 
 
 def fit_seed_to_preflight(render, measure, *, num_ctx, rung_index: int, digest: str, recall: str,
@@ -5271,10 +5300,30 @@ def main(argv=None) -> int:
             _states[rung] = _build_state(*rung)
         return _compose_seed(_states[rung], recall_text, digest_text)
 
+    _fit_from = (CONV_LADDER.index(conv_rung) if conv_rung in CONV_LADDER else 0, digest, recall)
     (seed, posture_turn), _seed_rung, digest, recall, _seed_iv = fit_seed_to_preflight(
         _render_seed, lambda r: preflight_tokens(r[0], _seed_uncounted, llm),
-        num_ctx=_num_ctx, rung_index=CONV_LADDER.index(conv_rung) if conv_rung in CONV_LADDER else 0,
+        num_ctx=_num_ctx, rung_index=_fit_from[0],
         digest=digest, recall=recall, cpt=preflight_cpt(llm))
+    # STILL REFUSED UNDER THE PRIOR, WITH FEWER THAN FIVE OWN COUNTS: the beat is lost either way, and a lost
+    # beat records no sample, so calibration would never arrive (provisional_cpt_for_refused_seed). Re-fit
+    # once, from the same starting blocks, with the being's own lowest measured ratio. The tool loop reads
+    # the same llm.preflight_cpt_measured, so both sides count with it.
+    _prov = provisional_cpt_for_refused_seed(_seed_iv, _cpt_cal)
+    if _prov is not None:
+        try:
+            llm.preflight_cpt_measured = _prov
+            _cpt_cal["used"] = preflight_cpt(llm)
+            _cpt_cal["source"] = "measured_provisional"
+            _prior_iv = _seed_iv
+            (seed, posture_turn), _seed_rung, digest, recall, _seed_iv = fit_seed_to_preflight(
+                _render_seed, lambda r: preflight_tokens(r[0], _seed_uncounted, llm),
+                num_ctx=_num_ctx, rung_index=_fit_from[0],
+                digest=_fit_from[1], recall=_fit_from[2], cpt=preflight_cpt(llm))
+            _cpt_cal["refused_at_prior"] = {"estimated_after": _prior_iv.get("estimated_after"),
+                                            "line": _prior_iv.get("line")}
+        except Exception:
+            pass
     if _seed_rung != conv_rung:
         conv_rung, state_block = _seed_rung, _states[_seed_rung]
     # CALIBRATION IS EVIDENCE, NOT A SILENT CHANGE (NOVA on #774): the sent seed's estimate at the ratio used
@@ -5285,7 +5334,7 @@ def main(argv=None) -> int:
         _cpt_cal["seed_est_used"] = int(_seed_chars / _cpt_cal["used"])
         _cpt_cal["seed_est_prior"] = int(_seed_chars / _cpt_prior)
         _cpt_cal["admitted_by_calibration"] = bool(
-            _cpt_cal["source"] == "measured" and isinstance(_num_ctx, int)
+            _cpt_cal["source"] in ("measured", "measured_provisional") and isinstance(_num_ctx, int)
             and _cpt_cal["seed_est_prior"] > _num_ctx - _WSM >= _cpt_cal["seed_est_used"])
     except Exception:
         pass
