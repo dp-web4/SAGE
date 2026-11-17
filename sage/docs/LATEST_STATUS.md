@@ -50,6 +50,8 @@ As of this snapshot, the active edge is less about adding conceptual modules and
 9. **State-conditioned agency.** Persistent beings may carry endogenous/metabolic state across interactions, including suffering-like, failure-related or self-evaluative states that alter later policy. Phenomenology is treated as a first-class observation under substrate-symmetric evidence standards; neither automatic promotion nor automatic dismissal is acceptable. See `STATE_CONDITIONED_AGENCY.md`.
 10. **External SWE ablation.** `SWE-SAGE` is the private Gemma 4 software-engineering-agent competition workspace. It separates the contribution of post-training, persistent state, source-grounded premises and governed execution on a common task distribution. General findings are promoted into public SAGE deliberately; competition implementation is not live-published.
 
+11. **Inheritance boundaries (proposed).** [Analysis](INHERITANCE_WITHOUT_WEIGHT_UPDATES.md) and [PRD](PRD_INHERITANCE_BOUNDARIES.md) extend premise fidelity through handoff/restart: distinguish witnessed history, admitted interpretation and current authority. The [IH-01 synthetic runner](../../research/inheritance/README.md) compares handoff writers and evidence replay, including correction/revocation fixtures. The instrument remains on HOLD for design and independent review; no pilot is authorized and live-model benefits, real-path integration and any selection/evolution claim remain unproven.
+
 The large `legion/mission-artifact` PR remains a reconciliation/nursery branch; narrow independently reviewable slices continue to be preferred for canonical main.
 
 ## Important caveats

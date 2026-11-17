@@ -1,0 +1,27 @@
+name: inheritance-instrument
+
+on:
+  pull_request:
+    paths:
+      - 'research/inheritance/**'
+      - '.github/workflows/inheritance-instrument.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-instrument:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run synthetic instrument tests
+        run: python -m unittest discover -s research/inheritance -p 'test_*.py' -v
+      - name: Repeat without Python assertions
+        run: python -O -m unittest discover -s research/inheritance -p 'test_*.py' -v
