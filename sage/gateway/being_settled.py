@@ -47,10 +47,11 @@ WHY_MAX_CHARS = 300
 #: refused with the way through (reopen or re-settle one); changing an existing one always works.
 MAX_ENTRIES = 30
 #: What the beat shows: the block up to RENDER_CHARS. It holds the newest entry whole and every other entry
-#: at least as id, question and day (see render). An entry shown with its answer is never cut: the cap is the
-#: longest line the field caps allow, since a conclusion often sits at the end of its answer (pub's review).
+#: at least as id, question, the head of its answer and day (see render). An entry shown whole is never cut:
+#: the cap is the longest line the field caps allow, since a conclusion often sits at the end of its answer
+#: (pub's review). 3200 until 11-17; see _short for why it grew.
 RENDER_ENTRY_CHARS = 40 + QUESTION_MAX_CHARS + ANSWER_MAX_CHARS + EVIDENCE_MAX_CHARS
-RENDER_CHARS = 3200
+RENDER_CHARS = 4400
 
 _UNCHANGED = "unchanged: "
 
@@ -532,21 +533,40 @@ def _commit(instance, entries: List[dict], nxt: int, log: dict, now, ok_msg: str
 #: A short line keeps at least this much of its question; a mark that would take it below is left off the
 #: line (the entry keeps its mark wherever it is shown whole, and in the listing).
 SHORT_QUESTION_FLOOR = 24
+#: A short line carries the head of its answer when that much of it fits beside the question's floor.
+SHORT_ANSWER_FLOOR = 16
+
+
+def _cut(s: str, n: int) -> str:
+    return s if len(s) <= n else s[:max(n - 1, 1)].rstrip() + "…"
 
 
 def _short(e: dict, cap: int, near: Optional[Dict[str, List[str]]] = None) -> str:
-    """An entry as its id, question and day only, the question cut to fit `cap`.
+    """An entry as its id, question, the head of its answer and day, cut to fit `cap`.
 
     ONE ID IN A SHORT LINE'S MARK, AND NEVER AT THE QUESTION'S EXPENSE (legion's review of #661): on legion-being's
     full list, three ids took the median short question from 49 chars to 28, and at every field cap with 3-digit
     ids the block passed RENDER_CHARS and showed 8 chars of a question. A mark asks the being to compare two
-    entries; a question it cannot recognise defeats it."""
+    entries; a question it cannot recognise defeats it.
+
+    A QUESTION WITHOUT ITS ANSWER IS A TOPIC, NOT A CONCLUSION. sprout-being settled at 11-12 23:58Z and 11-13
+    02:52Z that its seat needed no restart. Both answers were shown every beat until 11-16 01:41Z, when the 17th
+    entry left only the newest whole and the rest as questions. Its next three acts to start the seat came at
+    11-16 04:10Z, 11-17 03:37Z and 04:12Z, with both questions in view and neither answer. The answer gets the
+    larger share; the question keeps its floor."""
     tail = f" (settled {str(e.get('at', ''))[:10]})"
     pre = f"[{e['id']}{_near(e, near, 1)}] "
     if cap - len(pre) - len(tail) < SHORT_QUESTION_FLOOR:
         pre = f"[{e['id']}] "
-    q, room = _flat(e["question"]), max(cap - len(pre) - len(tail), 8)
-    return pre + (q if len(q) <= room else q[:room - 1].rstrip() + "…") + tail
+    q, a, room = _flat(e["question"]), _flat(e.get("answer", "")), max(cap - len(pre) - len(tail), 8)
+    arrow = " -> "
+    body = room - len(arrow)
+    if not a or body < SHORT_QUESTION_FLOOR + SHORT_ANSWER_FLOOR:
+        return pre + _cut(q, room) + tail
+    qn = min(len(q), max(SHORT_QUESTION_FLOOR, body * 2 // 5))
+    if len(a) < body - qn:              # a short answer leaves its room to the question
+        qn = min(len(q), body - len(a))
+    return pre + _cut(q, qn) + arrow + _cut(a, body - qn) + tail
 
 
 def render(instance) -> str:
@@ -573,7 +593,7 @@ def render(instance) -> str:
     if pid_ids:
         shown = ", ".join(pid_ids[:4]) + (f" +{len(pid_ids) - 4}" if len(pid_ids) > 4 else "")
         head += "\n(" + _pid_fact(f"{shown} name{'s' if len(pid_ids) == 1 else ''}", pid_nums) + ")"
-    foot = "- (entries shown without an answer: settle with no arguments shows them whole)"
+    foot = "- (entries shortened with …: settle with no arguments shows them whole)"
     newest = list(reversed(entries))
     # room for the newest whole, then an equal share for each of the rest
     rest = RENDER_CHARS - len(head) - len(foot) - 2 - (len(_line(newest[0], RENDER_ENTRY_CHARS, near)) + 3)
