@@ -163,7 +163,7 @@ def answers_line(seqs: list[int]) -> str:
     return "Answers your request seq " + ", ".join(str(s) for s in sorted(seqs)) + "."
 
 
-def pending(inst: Path, cid: str) -> list[dict]:
+def pending(inst: Path, cid: str, seat: str | None = None) -> list[dict]:
     """Requests no seat turn has ANSWERED. Seq-keyed, not time-keyed.
 
     GPT's review of the request_run tools: the first version closed every earlier request
@@ -177,7 +177,7 @@ def pending(inst: Path, cid: str) -> list[dict]:
     same file — a result about a file answers every request for that file made before it,
     except one newer than every seq the result names. Nothing else closes one."""
     turns = conv.recent(inst, cid, limit=400)
-    seat = _seat_id()
+    seat = seat or _seat_id()    # the being's dispatcher passes the seat it identified (#755)
     out = []
     for i, t in enumerate(turns):
         if t.get("from") == seat or MARKER not in (t.get("text") or ""):
