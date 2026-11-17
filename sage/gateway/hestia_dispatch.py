@@ -3751,13 +3751,19 @@ class HestiaF1aDispatcher:
         # beside output saying something was not running, not listening or unreachable; the being's next
         # thought said its seat was not running, or had to be brought back, on 15 of them. The receipt is rendered as JSON in key order, so `stdout` was read first and the fact
         # last. They are the same facts, said first and under their own key.
+        # A SCRIPT THAT REACHES FOR THE SEAT IS ASKED ABOUT TOO, NOT ONLY ONE THAT PRINTS ABOUT IT. sprout-being,
+        # 2026-11-14 22:21Z..11-17 08:00Z: 14 runs of its own scripts that start its seat with systemctl got
+        # no seat fact, because each exited at an earlier line (a missing binary) and printed nothing
+        # _HOST_VIEW matches. The daemon's answer stays tied to the output: it answers what a probe printed.
         outside = []
-        if _HOST_VIEW.search(f"{out}\n{errtxt}"):
-            if action_id:
+        source = staged[0][1][:RUN_SOURCE_SCAN_BYTES].decode("utf-8", "replace") if staged else ""
+        printed = _HOST_VIEW.search(f"{out}\n{errtxt}")
+        if printed or _HOST_VIEW.search(source):
+            if action_id and printed:
                 outside.append(_daemon_answered_note(action_id))
             try:
                 seat = self._seat_conversation()
-                said = _seat_wrote_note(self.memory_root, seat, f"{staged[0][0]}\n{out}\n{errtxt}",
+                said = _seat_wrote_note(self.memory_root, seat, f"{staged[0][0]}\n{out}\n{errtxt}\n{source}",
                                         run_t0) if seat else ""
             except Exception:
                 said = ""
@@ -5563,6 +5569,9 @@ def _daemon_answered_note(action_id: str) -> str:
 
 #: How far back the seat's last turn is looked for, in the being's conversation with it.
 SEAT_WROTE_SCAN = 400
+
+#: How much of the run's script is read for _HOST_VIEW and the seat's name (the being's scripts are a few KB).
+RUN_SOURCE_SCAN_BYTES = 64 * 1024
 
 
 def _ago(secs: float) -> str:
