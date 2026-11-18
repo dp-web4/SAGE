@@ -3237,7 +3237,7 @@ def _todo_parsed(text: str) -> tuple:
     key = hashlib.sha256(text.encode("utf-8", "surrogateescape")).hexdigest()
     hit = _TODO_PARSE.get(key)
     if hit is None:
-        hit = (_parse_todo(_canonical_todo(text)), list(_LAST_TODO_CLOSURES))
+        hit = (_parse_todo(_canonical_todo(text)), list(_LAST_TODO_CLOSURES), list(_LAST_TODO_MISSES))
         _TODO_PARSE.clear()
         _TODO_PARSE[key] = hit
     return hit
@@ -3252,15 +3252,65 @@ def todo_closures(text: str) -> list:
     return _todo_parsed(text or "")[1]
 
 
+_MISS_WORD = re.compile(r"[a-z0-9]{3,}")
+_SLUG = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+)+$", re.I)
+
+
+def _slug_shaped(entry: str) -> bool:
+    """`apt-cache-fix, install-sklearn-apt`: every comma part is one hyphen/underscore-joined token."""
+    parts = [x.strip() for x in entry.split(",") if x.strip()]
+    return bool(parts) and all(_SLUG.match(x) for x in parts)
+
+
+def todo_unmatched_done(before: str, after: str, shown: int = 3) -> list:
+    """[(entry, [closest open item texts])] for each done entry that `after` adds over `before` and that
+    closed no open item. SAGE #779, 2026-11-18 02:44Z: mcnugget-being wrote `done: apt-cache-fix,
+    install-sklearn-apt, ...` (slugs, not the items' text), the fuzzy match closed nothing, nothing said so,
+    and 30 min later the item it meant to close came back as a request_run. The parse already knows which
+    done lines matched nothing; this hands the new ones to the write receipt with the open items that share
+    the most words with them (the same way memory_edit's refusal names the closest line).
+
+    ONLY NAMES AND SLUGS. Measured 2026-11-18 on McNugget's two local instances: 1,073 of 1,126 done
+    lines in mcnugget-being's todo.md and 690 of 718 in cbp-qwen3.8-distill-4b's closed no open item --
+    beings log finished work as done ("Sent response to sprout-being ..."), and that is not a miss. A
+    note on all of them would ride nearly every todo write. Word overlap does not separate them either
+    (188 of 1,073 share >= 60% of their words with an open item, nearly all progress lines). The #779
+    shape -- every comma part one hyphen/underscore-joined token -- occurs 0 times there, so naming
+    only that shape costs the normal write nothing."""
+    from collections import Counter
+    new = (Counter(m for m in _todo_parsed(after or "")[2] if _slug_shaped(m))
+           - Counter(_todo_parsed(before or "")[2]))
+    if not new:
+        return []
+    items = _todo_parsed(after or "")[0]
+    out = []
+    for entry in _todo_parsed(after or "")[2]:
+        if new[entry] <= 0:
+            continue
+        new[entry] -= 1
+        words = set(_MISS_WORD.findall(entry.lower().replace("_", " ").replace("-", " ")))
+        scored = []
+        for k, (t, _s) in items.items():
+            hit = len(words & set(_MISS_WORD.findall(k.replace("_", " ").replace("-", " "))))
+            if hit:
+                scored.append((-hit, t))
+        scored.sort()
+        out.append((entry, [t for _h, t in scored[:shown]]))
+    return out
+
+
 _LAST_TODO_CLOSURES: list = []     # the `all:` closures of the most recent _parse_todo, read by _todo_parsed
+_LAST_TODO_MISSES: list = []       # its done lines that closed no open item (SAGE #779), read the same way
 
 
 def _parse_todo(text: str, closures: Optional[list] = None) -> dict:
     """norm -> (item text, since) for every item still open at the end of the log. `all: <words>` done lines
     close every open item containing the words (todo_membot); they are listed in `closures` when given, and
-    always in _LAST_TODO_CLOSURES."""
+    always in _LAST_TODO_CLOSURES. A done line (not `all:`) that closes no open item is listed in
+    _LAST_TODO_MISSES (SAGE #779)."""
     from sage.gateway import todo_membot as _tm
-    global _LAST_TODO_CLOSURES
+    global _LAST_TODO_CLOSURES, _LAST_TODO_MISSES
+    misses = _LAST_TODO_MISSES = []
     closures = [] if closures is None else closures
     _LAST_TODO_CLOSURES = closures
     items = {}          # norm -> (text, since_dt)
@@ -3325,6 +3375,8 @@ def _parse_todo(text: str, closures: Optional[list] = None) -> dict:
                             and sm_.ratio() >= 0.85):
                         del items[k]
                         break
+                else:
+                    misses.append(body.strip())
     return items
 
 

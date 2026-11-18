@@ -1082,6 +1082,29 @@ def _todo_close_door(p: Path) -> str:
             "todo.md; the items still open are carried forward.")
 
 
+def _todo_miss_note(before: str, p: Path) -> str:
+    """On a memory_write of todo.md: name every done entry it added that closed nothing (SAGE #779).
+    Never fails the write: the append has already landed."""
+    try:
+        from sage.gateway.heartbeat import todo_unmatched_done  # lazy: heartbeat is the larger module
+        misses = todo_unmatched_done(before, p.read_text(errors="replace"))
+    except Exception:
+        return ""
+    if not misses:
+        return ""
+    parts = []
+    for entry, near in misses[:5]:
+        line = f"'{entry[:120]}' matched no item still open"
+        line += ("; the open items sharing the most words with it: "
+                 + "; ".join(f"'{t[:120]}'" for t in near)) if near else "; no open item shares a word with it"
+        parts.append(line)
+    more = f" (and {len(misses) - 5} more)" if len(misses) > 5 else ""
+    return (f" {len(misses)} done entr{'y' if len(misses) == 1 else 'ies'} closed nothing{more}: "
+            + ". ".join(parts) + ". A done entry closes the open item whose text it repeats; a name or "
+            "slug for it does not. To close one, write its line text under done: (copied from the "
+            "list), or `all: <words>` to close every open item containing those words.")
+
+
 # The being's running records, which retire_note starts fresh (see _do_retire_note).
 RETIRABLE_RECORDS = ("todo.md", "journal.md")
 
@@ -2605,6 +2628,8 @@ class ReferenceF1aDispatcher:
         existed = p.exists()
         before = 0
         _before_text = ""
+        _is_todo = p == Path(self.memory_root) / "todo.md"
+        _todo_before = p.read_text(errors="replace") if (_is_todo and existed) else ""
         if existed:
             with open(p, errors="replace") as f:
                 before = sum(1 for _ in f)
@@ -2671,6 +2696,8 @@ class ReferenceF1aDispatcher:
                            f"in {p.name}. To start a new file instead, memory_write to a name that "
                            f"does not exist yet (for example {_fresh_name(p).name}); that receipt "
                            f"says \"created\".")
+        if _is_todo:
+            result += _todo_miss_note(_todo_before, p)
         result += _python_status(p)
         if p.suffix != ".py":
             result += _named_file_stamps(
