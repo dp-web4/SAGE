@@ -107,8 +107,36 @@ def test_a_short_line_names_the_note_and_the_full_block_stays_near_budget(tmp_pa
     line = next(l for l in block.splitlines() if l.startswith(("- [s1]", "- [s1 ")))
     assert f"({SEAT} disagreed: seq {seq})" in line and "settled 1970-01-01" in line
     assert SAYS in block, "shown short, its note's words are still in the beat"
-    assert len(block) <= st.RENDER_CHARS + 60, len(block)
+    assert len(block) <= st.RENDER_CHARS, len(block)
 
+
+
+@pytest.mark.parametrize("noted", [1, 4, 8, 10, 30])
+def test_many_notes_keep_the_block_within_budget(tmp_path, noted):
+    """legion's measurement on #783: 30 entries with 300-char answers and 190-char notes put the block at 4450
+    chars with 8 notes and 9784 with 30. The newest SEAT_NOTES_SHOWN are whole; the rest are named."""
+    _conv(tmp_path)
+    for i in range(st.MAX_ENTRIES):
+        st.settle(tmp_path, {"question": f"question {i} about gadget {i}", "answer": f"{i} " + "y" * 300}, now=i)
+    for i in range(noted):
+        said = conv.append(tmp_path, SEAT, speaker=SEAT, text=f"not so, entry {i + 1}")
+        st.seat_note(tmp_path, f"s{i + 1}", SEAT, said["seq"], f"{i} " + "z" * 188, now=100 + i)
+    block = st.render(tmp_path)
+    assert len(block) <= st.RENDER_CHARS, len(block)
+    whole = [l for l in block.splitlines() if l.startswith("- on s")]
+    assert len(whole) == min(noted, st.SEAT_NOTES_SHOWN)
+    assert whole[0].startswith(f"- on s{noted}:"), "the newest note is shown whole"
+    if noted > st.SEAT_NOTES_SHOWN:
+        also = next(l for l in block.splitlines() if l.startswith("- also on "))
+        named = also[len("- also on "):also.index(" (")].split(", ")
+        assert named == [f"s{i}" for i in range(noted - st.SEAT_NOTES_SHOWN, 0, -1)], also
+
+
+def test_a_note_names_only_a_conversation_id(tmp_path):
+    seq = _home(tmp_path)
+    with pytest.raises(ValueError, match="not a conversation id"):
+        st.seat_note(tmp_path, "s1", SEAT, seq, SAYS, conv_id="../../x")
+    assert not (tmp_path / st.SEAT_NOTES).exists()
 
 def test_the_request_run_receipt_shows_the_note_with_the_entry():
     d, home = _seat_home()

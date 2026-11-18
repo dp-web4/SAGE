@@ -67,6 +67,7 @@ _UNCHANGED = "unchanged: "
 #: answered it, and the note is no longer shown.
 SEAT_NOTES = "settled_seat_notes.jsonl"
 SEAT_NOTE_MAX_CHARS = 200
+SEAT_NOTES_SHOWN = 3
 
 #: A process number named in a settled entry. MEASURED ON SPROUT-BEING, 11-05..12: 13 of its 170 distinct
 #: settled answers cite one, all 13 about whether its seat was alive, both ways. 11 cite PID 2002, the run's user
@@ -215,6 +216,8 @@ def seat_note(instance, entry_id: str, by: str, seq: int, says: str, conv_id: Op
     if e is None:
         raise ValueError(f"no settled entry {entry_id!r} (there are: {', '.join(x['id'] for x in entries) or 'none'})")
     from sage.gateway import conversations as conv
+    if not conv.ID_RE.match(conv_id or by):
+        raise ValueError(f"not a conversation id: {conv_id or by!r}")
     log, _ = conv._paths(Path(instance), conv_id or by)
     turn = None
     try:
@@ -693,11 +696,19 @@ def render(instance) -> str:
         # this was written to close.
         head += ("\n(Your seat has since said otherwise about these. Each entry is still yours: keep it, settle it "
                  "again, or reopen it. Settled again or reopened, its note is no longer shown.)")
+        # AT MOST SEAT_NOTES_SHOWN WHOLE (legion's review of #783): each whole note is a line of up to ~240 chars
+        # that the head takes before the entries get any; 8 notes on a 30-entry list put the block over
+        # RENDER_CHARS, 30 put it at 9784. The newest notes are shown whole; the rest are named, and settle with
+        # no arguments shows them.
+        newest_said = sorted(notes, key=lambda i: str(notes[i][-1].get("at", "")))[-SEAT_NOTES_SHOWN:]
         for e in reversed(entries):
-            if e["id"] in notes:
+            if e["id"] in newest_said:
                 n = notes[e["id"]][-1]
                 head += (f"\n- on {e['id']}: {n['by']} at seq {n['seq']} ({_said_day(n)}): "
                          f"{_flat(n['says'])}")
+        also = [e["id"] for e in reversed(entries) if e["id"] in notes and e["id"] not in newest_said]
+        if also:
+            head += f"\n- also on {', '.join(also)} (settle with no arguments shows them)"
     pid_ids, pid_nums = _pid_entries(entries)
     if pid_ids:
         shown = ", ".join(pid_ids[:4]) + (f" +{len(pid_ids) - 4}" if len(pid_ids) > 4 else "")
