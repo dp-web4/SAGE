@@ -3485,9 +3485,9 @@ class HestiaF1aDispatcher:
                     f"absence of {pattern!r} — nothing was searched. `search` runs inside "
                     f"your WORKTREE and sees only files git tracks there. A relative path "
                     f"here is not the same path `memory_read` takes: memory_read resolves "
-                    f"relative paths inside your instance home, and files that live only "
-                    f"there (todo.md, journal.md, notes/, scratch/) cannot be searched at "
-                    f"all. Read those with memory_read; search the source tree."))
+                    f"relative paths inside your instance home (todo.md, journal.md, "
+                    f"heartbeats.jsonl, notes/, scratch/), and `search` does not reach "
+                    f"them." + self._home_find_door(str(intent.args.get("path") or ""), pattern)))
             return ResultEnvelope(ok=True, witness_id=action_id, result={
                 "pattern": pattern, **_literal_key(pattern), "searched": where, "matches": 0,
                 "searched_a_real_file": True,
@@ -3503,6 +3503,33 @@ class HestiaF1aDispatcher:
                           f"path or the pattern" if truncated else None),
             "lines": shown})
 
+
+    def _home_find_door(self, rel: str, pattern: str) -> str:
+        """The way to find text in a home file, for a search that missed the worktree (SAGE #781).
+
+        The refusal used to end "files that live only there ... cannot be searched at all". That
+        stopped being true when memory_read got `find` (#351), and it cost mcnugget-being parts of
+        3 beats on 2026-11-18: it searched heartbeats.jsonl for `transport_faults` twice, was
+        told it could not, then read the file from its start (1,949 lines, the hits far past
+        the window). When the named file IS in the home, give the exact call."""
+        find = pattern if not re.search(r"[\\^$.*+?()\[\]{}|]", pattern) else ""
+        call = (f'memory_read {{"path": "{rel}", "find": "{find or "<literal text>"}"}}')
+        root = getattr(self, "memory_root", None)
+        try:
+            home = Path(root).resolve() if root else None
+            f = (home / rel).resolve() if (home and rel) else None
+            here = bool(f and f.is_file() and (f == home or home in f.parents))
+        except (OSError, ValueError):
+            here = False
+        tail = ("" if find else " find is literal text, not a regex: drop the escapes and "
+                "alternations.")
+        if here:
+            return (f" '{rel}' IS a file in your instance home. To list every line number "
+                    f"that holds a text in it: {call}.{tail} Then memory_read it with "
+                    f"start_line and end_line around a hit to see the lines.")
+        return (f" To find text in a home file, memory_read that file with find (literal "
+                f"text; it lists every line number the text is on). Search the source tree "
+                f"with search.")
 
     def _worktree_revision(self) -> dict:
         """WHICH TREE THE ANSWER IS ABOUT. A check result without this is not evidence: the
