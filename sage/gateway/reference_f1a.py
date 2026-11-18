@@ -50,7 +50,9 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 # Files in the being's home itself that the SEAT owns. `entrustment.md` is what the being was
 # GIVEN; if it could append to it, what was extended and what it decided would merge in the
 # record. Refusing is not distrust: it may disagree anywhere else, and that record is wanted.
-SEAT_OWNED = ("entrustment.md",)
+# settled_seat_notes.jsonl is the seat's later word beside the being's settled entries (being_settled.SEAT_NOTES):
+# a being that could write it could make its seat appear to have said something, or erase that it did.
+SEAT_OWNED = ("entrustment.md", "settled_seat_notes.jsonl")
 # GOVERNANCE RECORDS IN THE HOME (SAGE #544). The being's home also holds the files that say who
 # it is to the society, and no being verb may write them:
 #   identity.json         the raising record: `identity.machine` picks the seat that arbitrates its

@@ -2889,10 +2889,11 @@ class HestiaF1aDispatcher:
         if entries and not err:
             rk = relevance.Ranker([f"{e['question']} {e.get('answer', '')}" for e in entries])
             mine = [entries[i] for _, i in rk.related(relevance.request_subject(query))][:3]
+        notes = being_settled.seat_notes(self.memory_root, entries) if mine else {}
         if mine:
             out["you_settled"] = ("You settled this, or something close to it, in your own words. These are "
                                   "your conclusions, not this run's output:\n"
-                                  + "\n".join("- " + being_settled._line(e, being_settled.RENDER_ENTRY_CHARS)
+                                  + "\n".join("- " + being_settled._line(e, being_settled.RENDER_ENTRY_CHARS, notes=notes)
                                               + ("" if e.get("evidence") else
                                                  " (no evidence given: nothing run or read is behind it)")
                                               for e in mine))
