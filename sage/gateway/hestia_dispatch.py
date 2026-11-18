@@ -3110,14 +3110,15 @@ class HestiaF1aDispatcher:
         if captured:
             # THE SENSOR SHIM'S RECORD (sage/embodiment/sensor_shim.py): the look client prints what was done to
             # this eye's colours. Told here, so the being learns its eye is corrected, not only that it changed.
-            correction = {}
+            correction, corrected = {}, ""
             if cortex:
                 try:
                     correction = json.loads((proc.stdout or b"{}").decode("utf-8", "replace")).get("correction") or {}
                 except (ValueError, AttributeError):
                     correction = {}
-            from sage.embodiment.sensor_shim import describe_text
-            corrected = describe_text(correction) if isinstance(correction, dict) else ""
+                if isinstance(correction, dict) and correction:
+                    from sage.embodiment.sensor_shim import describe_text
+                    corrected = describe_text(correction)
             return ResultEnvelope(ok=True, witness_id=action_id, result={
                 "device": device, "out_path": out_rel,
                 "bytes": os.path.getsize(full_out),

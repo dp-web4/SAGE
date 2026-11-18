@@ -62,6 +62,10 @@ class WhiteBalance:
     def _build(self):
         x = np.arange(256, dtype=np.float64)
         self._lut = np.stack([np.clip(x * g + 0.5, 0, 255) for g in self.gains], axis=1).astype(np.uint8)
+        # rebuilt only when the gains change, so a reader can take it with every frame for nothing; it is
+        # replaced, never mutated, so a dict a frame was stored with stays that frame's record
+        self._said = {"mode": self.mode, "gains_bgr": [round(float(v), 3) for v in self.gains],
+                      "estimated": bool(self.estimated)}
 
     def _estimate(self, frame: np.ndarray) -> None:
         means = frame[::8, ::8].reshape(-1, 3).astype(np.float64).mean(0)
@@ -78,7 +82,7 @@ class WhiteBalance:
         if frame is None or frame.ndim != 3 or frame.shape[2] != 3 or frame.dtype != np.uint8:
             return frame
         if self.mode == "grayworld":
-            if self._n % self.every == 0:
+            if not self.estimated or self._n % self.every == 0:   # until the first reading, every frame
                 self._estimate(frame)
             self._n += 1
         with self._lock:
@@ -96,21 +100,30 @@ class WhiteBalance:
         return out
 
     def describe(self) -> dict:
-        with self._lock:
-            g = [round(float(v), 3) for v in self.gains]
-        return {"mode": self.mode, "gains_bgr": g, "estimated": bool(self.estimated)}
+        return self._said
 
 
 STAGES = {"white_balance": WhiteBalance}
 
 
 class Shim:
-    """The stages one sensor's frames pass through, in profile order."""
+    """The stages one sensor's frames pass through, in profile order. A stage that cannot be built is
+    left out and named in `errors`: a bad profile costs the correction, never the eye."""
 
-    def __init__(self, kind: str, profile: Optional[dict]):
+    def __init__(self, kind: str, profile: Optional[dict], errors=()):
         self.kind = kind
-        self.stages = [(name, STAGES[name](**params)) for name, params in (profile or {}).items()
-                       if name in STAGES]
+        self.errors = list(errors)
+        self.stages = []
+        for name, params in (profile or {}).items():
+            if name not in STAGES:
+                self.errors.append(f"unknown stage {name!r} (known: {', '.join(sorted(STAGES))})")
+                continue
+            try:
+                self.stages.append((name, STAGES[name](**(params or {}))))
+            except Exception as e:
+                self.errors.append(f"stage {name!r}: {type(e).__name__}: {e}")
+        if self.errors:
+            print(f"[sensor_shim] {kind}: " + "; ".join(self.errors)[:400], flush=True)
 
     def apply(self, frame):
         for _, st in self.stages:
@@ -118,23 +131,35 @@ class Shim:
         return frame
 
     def describe(self) -> dict:
-        """What this sensor's frames went through: {} when nothing (the raw sensor)."""
-        if not self.stages:
+        """What this sensor's frames went through: {} when nothing was meant to (the raw sensor)."""
+        if not self.stages and not self.errors:
             return {}
-        return {"sensor": self.kind, **{name: st.describe() for name, st in self.stages}}
+        d = {"sensor": self.kind, **{name: st.describe() for name, st in self.stages}}
+        if self.errors:
+            d["errors"] = list(self.errors)
+        return d
 
 
 def describe_text(d: dict) -> str:
-    """The receipt's words for describe(), in the being's terms."""
-    wb = (d or {}).get("white_balance")
-    if not wb:
-        return ""
-    b, g, r = wb["gains_bgr"]
-    how = ("estimated from what your eye has been seeing (the scene's average is taken as grey)"
-           if wb["mode"] == "grayworld" else "fixed for this sensor")
-    return (f"Your eye's colours are corrected before you see them: this sensor ({d.get('sensor')}) renders "
-            f"colours wrongly on its own. Red was scaled x{r:.2f}, green x{g:.2f} and blue x{b:.2f}, {how}. "
-            "Older frames saved before this correction show its cast, not the room's.")
+    """The receipt's words for describe(), in the being's terms. Only what was done is claimed."""
+    d = d or {}
+    wb, errs, sensor = d.get("white_balance"), d.get("errors"), d.get("sensor")
+    out = []
+    if wb and wb.get("estimated"):
+        b, g, r = wb["gains_bgr"]
+        how = ("estimated from what your eye has been seeing (the scene's average is taken as grey)"
+               if wb["mode"] == "grayworld" else "fixed for this sensor")
+        out.append(f"Your eye's colours are corrected before you see them: this sensor ({sensor}) renders "
+                   f"colours wrongly on its own. Red was scaled x{r:.2f}, green x{g:.2f} and blue x{b:.2f}, "
+                   f"{how}. Older frames saved before this correction show its cast, not the room's.")
+    elif wb:
+        out.append(f"Your eye's colour correction has not taken its first reading yet (every frame so far was "
+                   f"too dark to read colour from), so this frame's colours are the sensor's own ({sensor}), "
+                   "and this sensor renders colours wrongly on its own.")
+    if errs:
+        out.append(f"Part of your eye's correction is off because its settings could not be used "
+                   f"({'; '.join(errs)[:200]}); what it would have corrected is shown as the sensor gives it.")
+    return " ".join(out)
 
 
 def _profiles() -> Optional[Dict[str, dict]]:
@@ -144,11 +169,18 @@ def _profiles() -> Optional[Dict[str, dict]]:
     profiles = {k: dict(p) for k, p in DEFAULT_PROFILES.items()}
     if v:
         with open(v) as f:
-            profiles.update(json.load(f))
+            loaded = json.load(f)
+        if not isinstance(loaded, dict):
+            raise ValueError(f"{v} holds {type(loaded).__name__}, not {{sensor kind: profile}}")
+        profiles.update(loaded)
     return profiles
 
 
 def for_sensor(kind: str) -> Shim:
-    """The shim for one sensor of this kind (each sensor gets its own: its own estimate)."""
-    profiles = _profiles()
+    """The shim for one sensor of this kind (each sensor gets its own: its own estimate). Never raises:
+    a profile that cannot be read leaves the raw sensor, with the reason in describe()."""
+    try:
+        profiles = _profiles()
+    except Exception as e:
+        return Shim(kind, None, errors=[f"{SHIM_ENV}: {type(e).__name__}: {e}"])
     return Shim(kind, None if profiles is None else profiles.get(kind))

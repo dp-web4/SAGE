@@ -8,6 +8,7 @@ import types
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
@@ -122,3 +123,56 @@ def test_the_cortex_capture_thread_stores_the_corrected_frame(monkeypatch):
     cam.cap = OneFrame()
     vc.Camera.run(cam)
     assert 0.97 < _ratio(cam.frame) < 1.03
+
+
+def test_before_its_first_reading_the_shim_claims_no_correction(monkeypatch):
+    """legion's review of #778: an eye opened in the dark said "Red was scaled x1.00" for a frame it never touched."""
+    monkeypatch.delenv(sensor_shim.SHIM_ENV, raising=False)
+    shim = sensor_shim.for_sensor("imx219-argus")
+    dark = np.full((360, 640, 3), (6, 3, 7), np.uint8)
+    assert (shim.apply(dark) == dark).all()
+    d = shim.describe()
+    assert d["white_balance"]["estimated"] is False
+    text = sensor_shim.describe_text(d)
+    assert "scaled" not in text and "has not taken its first reading" in text and "sensor's own" in text
+    shim.apply(MAGENTA_ROOM)                                         # light comes: now it is a correction
+    assert "Red was scaled" in sensor_shim.describe_text(shim.describe())
+
+
+@pytest.mark.parametrize("content, why", [
+    (None, "FileNotFoundError"),                                     # the path names no file
+    ("{not json", "JSONDecodeError"),
+    ('{"imx219-argus": {"white_balance": {"maxgain": 2}}}', "TypeError"),   # a misspelled parameter
+    ('{"imx219-argus": {"whitebalance": {}}}', "unknown stage 'whitebalance'"),
+])
+def test_a_bad_profile_costs_the_correction_never_the_eye_and_is_said(monkeypatch, tmp_path, content, why):
+    p = tmp_path / "shim.json"
+    if content is not None:
+        p.write_text(content)
+    monkeypatch.setenv(sensor_shim.SHIM_ENV, str(p))
+    shim = sensor_shim.for_sensor("imx219-argus")                    # never raises: Camera.__init__ calls it
+    assert shim.apply(MAGENTA_ROOM) is MAGENTA_ROOM                  # the raw sensor
+    d = shim.describe()
+    assert why in " ".join(d["errors"]) and "white_balance" not in d
+    text = sensor_shim.describe_text(d)
+    assert "could not be used" in text and "scaled" not in text
+
+
+def test_the_cortex_stores_the_record_taken_with_the_frame(monkeypatch):
+    """The look answer reports what was done to the frame it sends, not the gains at answer time."""
+    monkeypatch.delenv(sensor_shim.SHIM_ENV, raising=False)
+    from sage.embodiment import visual_cortex as vc
+    cam = vc.Camera.__new__(vc.Camera)
+    cam.shim, cam.frame, cam.correction, cam.ok, cam.running = (sensor_shim.for_sensor("imx219-argus"), None,
+                                                                {}, True, True)
+
+    class OneFrame:
+        def read(self):
+            cam.running = False
+            return True, MAGENTA_ROOM.copy()
+    cam.cap = OneFrame()
+    vc.Camera.run(cam)
+    stored = cam.correction
+    cam.shim.stages[0][1]._estimate(np.full((360, 640, 3), (40, 40, 200), np.uint8))   # gains move later
+    assert stored["white_balance"]["gains_bgr"] != cam.shim.describe()["white_balance"]["gains_bgr"]
+    assert cam.correction is stored

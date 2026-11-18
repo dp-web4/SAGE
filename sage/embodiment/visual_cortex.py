@@ -151,6 +151,7 @@ class Camera(threading.Thread):
         # described a normally lit room by that cast. Each eye keeps its own estimate.
         self.shim = sensor_shim.for_sensor("imx219-argus")
         self.frame = None
+        self.correction = {}      # what the shim had done to THIS frame, stored with it (not answer-time gains)
         self.ok = self.cap.isOpened()
         self.running = True
 
@@ -158,7 +159,9 @@ class Camera(threading.Thread):
         while self.running and self.ok:
             r, f = self.cap.read()
             if r and f is not None:
-                self.frame = self.shim.apply(f)
+                corrected = self.shim.apply(f)
+                self.correction = self.shim.describe()
+                self.frame = corrected
             else:
                 time.sleep(0.005)
 
@@ -784,7 +787,7 @@ class VisualCortex:
                 # but never silent either: a failure is logged at most once a minute (GPT on #425).
                 try:
                     _look.respond([c.frame for c in self.cams], self.sids, gaze,
-                                  corrections=[c.shim.describe() if getattr(c, "shim", None) else {} for c in self.cams])
+                                  corrections=[getattr(c, "correction", {}) for c in self.cams])
                 except Exception as e:
                     if t0 - getattr(self, "_look_err_ts", 0.0) > 60:
                         self._look_err_ts = t0
