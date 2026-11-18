@@ -53,6 +53,8 @@ class WhiteBalance:
         self.mode, self.max_gain, self.smooth = mode, float(max_gain), float(smooth)
         self.every, self.dark_floor = max(1, int(every)), float(dark_floor)
         self.gains = np.array(gains if gains is not None else (1.0, 1.0, 1.0), dtype=np.float64)
+        if self.gains.shape != (3,) or not np.all(np.isfinite(self.gains) & (self.gains > 0)):
+            raise ValueError(f"white_balance gains must be three positive numbers (B, G, R), got {gains!r}")
         self.estimated = mode == "fixed"
         self._n = 0
         self._lut = None

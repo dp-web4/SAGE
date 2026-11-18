@@ -144,6 +144,8 @@ def test_before_its_first_reading_the_shim_claims_no_correction(monkeypatch):
     ("{not json", "JSONDecodeError"),
     ('{"imx219-argus": {"white_balance": {"maxgain": 2}}}', "TypeError"),   # a misspelled parameter
     ('{"imx219-argus": {"whitebalance": {}}}', "unknown stage 'whitebalance'"),
+    ('{"imx219-argus": {"white_balance": {"mode": "fixed", "gains": [1.2, 0.9]}}}', "three positive numbers"),
+    ('{"imx219-argus": {"white_balance": {"mode": "fixed", "gains": [1.2, 0, 0.9]}}}', "three positive numbers"),
 ])
 def test_a_bad_profile_costs_the_correction_never_the_eye_and_is_said(monkeypatch, tmp_path, content, why):
     p = tmp_path / "shim.json"
