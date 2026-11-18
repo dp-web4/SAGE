@@ -32,7 +32,7 @@ def _left(h):
 
 def test_the_747_call_retires_the_topic_and_keeps_what_only_run_named(tmp_path):
     h = _home(tmp_path)
-    ok, msg, changed = bt.retire_thread(h, {"words": WORDS, "reason": "the xor work is done"}, now=0)
+    ok, msg, changed = bt.retire_thread(h, {"settled": "all", "words": WORDS, "reason": "the xor work is done"}, now=0)
     assert ok and changed, msg
     left = _left(h)
     assert "Does xor_pure_numpy_mlp.py converge?" not in left
@@ -46,7 +46,7 @@ def test_the_747_call_retires_the_topic_and_keeps_what_only_run_named(tmp_path):
 
 def test_the_preview_says_the_same(tmp_path):
     h = _home(tmp_path)
-    ok, msg, changed = bt.retire_thread(h, {"words": WORDS, "preview": "true"}, now=0)
+    ok, msg, changed = bt.retire_thread(h, {"settled": "all", "words": WORDS, "preview": "true"}, now=0)
     assert ok and not changed
     assert "1 of 3 open todo item(s) and 1 of 4 settled entries would be retired" in msg, msg
     assert "Kept, because only run, seat, request_run named them" in msg
@@ -61,7 +61,7 @@ def test_harness_words_alone_still_select(tmp_path):
 
 def test_a_call_without_harness_words_is_unchanged(tmp_path):
     h = _home(tmp_path)
-    ok, msg, _ = bt.retire_thread(h, {"words": "camera", "reason": "done"}, now=0)
+    ok, msg, _ = bt.retire_thread(h, {"settled": "all", "words": "camera", "reason": "done"}, now=0)
     assert ok and "Kept" not in msg and "did not select" not in msg
     assert "What does the camera see?" not in _left(h)
 
