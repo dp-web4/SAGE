@@ -3159,17 +3159,20 @@ _TOOL_SCHEMAS = {
     # A WHOLE LINE OF WORK CAN BE CLOSED AT ONCE (dp, 2026-11-01: "retire the whole hestia thread and work
     # on something different"; cbp-being had 550 open todo items and 29 settled entries on it, and could
     # only retire one note or one entry per act).
-    "retire_thread": ("Close a whole line of work at once: every OPEN todo item and every settled entry "
-                      "that names one of your words is moved out of what you are shown each beat, into one "
-                      "retired file (todo.retired-thread-<id>.md) that recall still searches. Use it when a "
-                      "topic is finished or someone asks you to drop it, so it stops coming back uninvited. "
-                      "Other items and entries stay as they are. preview='true' shows what would move and "
+    "retire_thread": ("Close a whole line of work at once: every OPEN todo item that names one of your words "
+                      "is moved out of what you are shown each beat, into one retired file "
+                      "(todo.retired-thread-<id>.md) that recall still searches. Use it when a topic is finished "
+                      "or someone asks you to drop it, so it stops coming back uninvited. Your settled "
+                      "conclusions stay unless you name them in settled; the receipt lists the ones your words "
+                      "name. Other items and entries stay as they are. preview='true' shows what would move and "
                       "changes nothing. A retire that takes most of a list needs the confirmation its preview "
                       "(with the same words and reason) returns, used in the same beat.",
                       {"words": "the topic, as words separated by commas, e.g. 'webserver, port 8080'. A word "
                                 "matches at the start of a word: 'install' also matches 'installer'",
                        "reason": "why this line of work is finished (needed unless preview='true')",
                        "preview": "optional: 'true' lists what would move and changes nothing",
+                       "settled": "optional: settled entries to retire with the thread, by id ('s3, s7') or 'all' "
+                                  "for every one your words name. Without it, none leaves",
                        "confirmation": "for a retire that takes most of a list: the one-use value its preview returned"},
                       ["words"]),
     # SKILLS (dp, 2026-10-27: "a 'skills' structure, and membot-type index for them ... model it on your
