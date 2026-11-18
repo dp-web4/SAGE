@@ -1039,6 +1039,27 @@ def test_a_run_reporting_on_the_seat_carries_its_last_turn_and_a_plain_run_does_
     assert "last wrote to you" not in r.result["outside_the_sandbox"]       # only the daemon's answer
 
 
+@needs_sandbox
+def test_a_script_that_would_start_the_seat_is_told_even_when_it_fails_first(tmp_path):
+    """A script that starts the seat with systemctl but stops at an earlier line prints nothing about the
+    host. Its receipt still carries when the seat last wrote; the daemon's answer stays with what was printed."""
+    d, home = _run_dispatcher(tmp_path)
+    _seat_home(home)
+    d._seat_conversation = lambda: "test-seat"
+    (home / "scratch" / "start.py").write_text(
+        "import subprocess\nopen('/no-such-file-here')\n"
+        "subprocess.run(['systemctl', '--user', 'start', 'test-seat'])\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/start.py"}))
+    assert r.ok and r.result["exit"] != 0, r.result
+    assert "test-seat last wrote to you at 2026-11-08T21:32Z" in r.result["outside_the_sandbox"], r.result
+    assert "Hestia daemon on this machine was asked" not in r.result["outside_the_sandbox"]
+    # systemctl in a script that does not name the seat: nothing
+    (home / "scratch" / "lamp.py").write_text("import subprocess\nopen('/no-such-file-here')\n"
+                                             "subprocess.run(['systemctl', '--user', 'start', 'lamp'])\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/lamp.py"}))
+    assert r.ok and "outside_the_sandbox" not in r.result, r.result
+
+
 def test_a_long_gap_says_the_seat_may_be_away_not_that_the_probe_is_right(tmp_path):
     """legion's review of #663: "46 h before this run began" beside a probe's own line telling the being to
     restart the seat reads as agreement. Past SEAT_QUIET_S the note says a quiet seat may be away, with nothing

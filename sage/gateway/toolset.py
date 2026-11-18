@@ -249,6 +249,7 @@ LEAN_KEEP = frozenset({("run", "data"), ("request_run", "rerun"), ("memory_read"
     ("camera", "out_path"),        # a write destination: ffmpeg overwrites whatever path it names
     ("tune", "name"),              # picks which parameter `value` sets or resets
     ("skill", "name"),             # the anchor for a rewrite ("writing it again replaces it") and retire
+    ("retire_thread", "settled"),  # picks which settled entries leave with the thread; 'all' takes every one named
 })
 # Every other optional parameter was REVIEWED and its prose may go: free text the being writes in
 # its own words, or a read-only selector whose misfill costs a re-read, not a change. A parameter
@@ -258,7 +259,7 @@ LEAN_KEEP = frozenset({("run", "data"), ("request_run", "rerun"), ("memory_read"
 LEAN_DROP_REVIEWED = frozenset({
     ("camera", "device"), ("game", "expect"), ("gaze", "target"),
     ("gaze", "words"), ("git_read", "n"), ("git_read", "path"), ("git_read", "rev"),
-    ("git_read", "rev2"), ("identity_edit", "text"), ("identity_edit", "why"),
+    ("git_read", "rev2"), ("git_read", "start_line"), ("identity_edit", "text"), ("identity_edit", "why"),
     ("memory_read", "end_line"), ("memory_read", "start_line"), ("pr_read", "repo"),
     ("pr_read", "last"), ("pr_sync", "message"), ("recall", "query"), ("recall", "top_k"),
     ("recall", "idx"), ("remember", "tags"), ("request_run", "why"), ("retire_thread", "reason"),

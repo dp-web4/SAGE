@@ -206,6 +206,38 @@ def render_pr(pr: dict, target: str, last: int = PR_READ_LAST_DEFAULT) -> str:
     return out
 
 
+# A LINE THAT IS A TOOL CALL, WRITTEN AS WORDS (#718). cbp-being, 2026-11-15 01:38Z: in an answer
+# turn that offers only `say`, it pasted `settle id="s544" question=... answer=...` into the message,
+# then wrote "[DONE] Settled s544 and s545" to its todo. The settled log has no op for either id.
+# A say receipt reports delivery, and a delivered call-text read as a performed call. Anchored at a
+# line start (after quoting, bullets or backticks), the verb name, then `key=` or `(`: prose that
+# merely names a verb ("I will settle this") does not match.
+_CALL_TEXT = re.compile(r"^[\s>*\-`]*([a-z_]+)(?:\s+[a-z_]+\s*=|\s*\()", re.M)
+
+
+def call_text_verbs(text: str) -> List[str]:
+    """The being's own verbs that `text` writes out as calls, in order, once each; say excluded."""
+    try:
+        from sage.gateway.being_gate_client import _TOOL_SCHEMAS
+        names = set(_TOOL_SCHEMAS) - {"say"}
+    except Exception:
+        return []
+    out: List[str] = []
+    for m in _CALL_TEXT.finditer(text or ""):
+        v = m.group(1)
+        if v in names and v not in out:
+            out.append(v)
+    return out
+
+
+def _call_text_note(verbs: List[str]) -> str:
+    calls = " and ".join(f"a {v} call" for v in verbs)
+    return (f"This message contains the text of {calls}. A message only carries words: none of "
+            f"{'it' if len(verbs) == 1 else 'them'} ran, and nothing it would change has changed. "
+            f"To do it, call {' / '.join(verbs)} itself as a tool, in a turn that offers "
+            f"{'it' if len(verbs) == 1 else 'them'}.")
+
+
 def _hestia_error(env: dict) -> Optional[str]:
     """Render a daemon error envelope as the r1 `error` string keyed by hestia's own code."""
     err = env.get("_hestia_error")
@@ -254,6 +286,17 @@ def _stale_transport(e: Exception) -> bool:
     request never reached a tool, so reconnecting and sending it again is safe."""
     msg = str(e)
     return "HTTP 404" in msg and "Session not found" in msg
+
+
+def _literal_key(pattern: str) -> dict:
+    """The receipt's word on HOW the pattern was matched, when it was not a regex: a search
+    the being sent as a regex but that ran as literal text must say so, or a hit or an absence
+    would be read as an answer to a question it did not ask (see search_mode)."""
+    from sage.gateway.being_gate_client import search_mode
+    if search_mode(pattern) != "-F":
+        return {}
+    return {"literal": (f"{pattern!r} is not a valid regex, so it was matched as literal text, "
+                        f"exactly as written; to use regex operators, write a valid pattern")}
 
 
 def _worktree_env() -> dict:
@@ -430,8 +473,11 @@ class HestiaF1aDispatcher:
                                 if "://" in str(intent.args.get("path", "")) else None)
                 if resolved is not None:
                     return ResultEnvelope(ok=True, result=resolved)
-            return self._local(intent, verdict)   # witness / memory_read / memory_write
-        self._verdict = verdict                   # what the law just consulted (granted roots)
+            env = self._local(intent, verdict)   # witness / memory_read / memory_write
+            if intent.effector == "retire_note" and env.ok:
+                self._attach_pending_run(intent, env)
+            return env
+        self._verdict = verdict                  # what the law just consulted (granted roots)
         try:
             env = handler(intent)
         except Exception as e:
@@ -439,6 +485,41 @@ class HestiaF1aDispatcher:
         if intent.effector in _NAMES_SCOPE_IDS and env.ok:
             self._attach_named_scope_status(intent, env)
         return env
+
+    def _attach_pending_run(self, intent: BeingIntent, env: ResultEnvelope) -> None:
+        """A RETIRED FILE WITH A RUN REQUEST STILL OPEN SAYS SO IN THE RETIRE'S RECEIPT (#755).
+
+        cbp-being, 2026-11-17 08:03Z, one explore phase: memory_edit a script, request_run it, remember
+        "the script now runs successfully" (nothing had run), retire_note the same script. The request the
+        seat was about to answer then named a path with nothing at it; a run of the requested bytes stopped
+        with a TypeError. Same shape on 11-15 (seq 15545, #721). The retire is not refused (an affordance,
+        not a guardrail): the receipt names the open request, says no run of it has happened, and where the
+        same code still is. Fail-open: anything unreadable adds nothing."""
+        try:
+            m = re.match(r"retired (\S+) -> (\S+?)\.?(?:\s|$)", str(env.result or ""))
+            raw = str((intent.args or {}).get("path", "")).strip()
+            if not m or not raw:
+                return
+            from sage.scripts import seat_run_requests as srr
+            cid = self._seat_conversation()
+            if not cid:
+                return
+            inst = Path(self.memory_root)
+            seat = (os.environ.get("SEAT_ID") or cid).strip()
+            seqs = sorted(int(t.get("seq") or 0) for t in srr.pending(inst, cid, seat=seat)
+                          if srr._same_file(inst, srr.request_path(t), raw))
+            if not seqs:
+                return
+            dest = str(Path(raw).parent / m.group(2)) if "/" in raw else m.group(2)
+            many = len(seqs) > 1
+            env.result = (f"{env.result} You asked the seat to run this file (request seq "
+                          f"{', '.join(map(str, seqs))}) and no answer has come yet, so no run of it has "
+                          f"happened. The answer will name {raw}, where nothing is now. The same code is in "
+                          f"{dest}, below a comment header (line numbers shift by the header's length); a "
+                          f"request_run on that path runs it. If {'those requests are' if many else 'that request is'} "
+                          f"no longer wanted, say so to the seat.")
+        except Exception:
+            return
 
     def _attach_named_scope_status(self, intent: BeingIntent, env: ResultEnvelope) -> None:
         """A SCOPE ID THE BEING NAMES GETS ITS STATUS IN THE SAME RECEIPT.
@@ -2808,10 +2889,11 @@ class HestiaF1aDispatcher:
         if entries and not err:
             rk = relevance.Ranker([f"{e['question']} {e.get('answer', '')}" for e in entries])
             mine = [entries[i] for _, i in rk.related(relevance.request_subject(query))][:3]
+        notes = being_settled.seat_notes(self.memory_root, entries) if mine else {}
         if mine:
             out["you_settled"] = ("You settled this, or something close to it, in your own words. These are "
                                   "your conclusions, not this run's output:\n"
-                                  + "\n".join("- " + being_settled._line(e, being_settled.RENDER_ENTRY_CHARS)
+                                  + "\n".join("- " + being_settled._line(e, being_settled.RENDER_ENTRY_CHARS, notes=notes)
                                               + ("" if e.get("evidence") else
                                                  " (no evidence given: nothing run or read is behind it)")
                                               for e in mine))
@@ -3027,9 +3109,21 @@ class HestiaF1aDispatcher:
             pass
 
         if captured:
+            # THE SENSOR SHIM'S RECORD (sage/embodiment/sensor_shim.py): the look client prints what was done to
+            # this eye's colours. Told here, so the being learns its eye is corrected, not only that it changed.
+            correction, corrected = {}, ""
+            if cortex:
+                try:
+                    correction = json.loads((proc.stdout or b"{}").decode("utf-8", "replace")).get("correction") or {}
+                except (ValueError, AttributeError):
+                    correction = {}
+                if isinstance(correction, dict) and correction:
+                    from sage.embodiment.sensor_shim import describe_text
+                    corrected = describe_text(correction)
             return ResultEnvelope(ok=True, witness_id=action_id, result={
                 "device": device, "out_path": out_rel,
                 "bytes": os.path.getsize(full_out),
+                **({"correction": correction} if corrected else {}),
                 "note": (("one frame from YOUR OPEN EYE, as your cortex sees it right now (not any game or file "
                           "the seat drops). " if cortex else
                           "one frame captured FROM THE WEBCAM (this device, not any game or file the seat drops). ")
@@ -3043,7 +3137,8 @@ class HestiaF1aDispatcher:
                          # cannot avoid reading, so it must say what is true NOW.
                          "You SEE it on your NEXT beat: this act is the request to see, and "
                          "the frame rides that beat as an image (heartbeat.fresh_frames). "
-                         "The completed image is published atomically.")})
+                         "The completed image is published atomically."
+                         + (" " + corrected if corrected else ""))})
 
         if proc.returncode != 0 and cortex:
             # sage/embodiment/look.py: 3 = no cortex answered, 4 = it answered no (its reason on stderr)
@@ -3163,7 +3258,10 @@ class HestiaF1aDispatcher:
                 else "the revision(s) produced no differences") +
                 " — an empty diff is a true answer, not a failed read]")
         limit = 6000
-        if len(out) > limit:
+        if op == "cat" and rc == 0:
+            out = cat_window(out, intent.args.get("start_line"), limit,
+                             str(intent.args.get("path", "")).strip(), str(intent.args.get("rev", "")).strip())
+        elif len(out) > limit:
             if op == "log":
                 out = out[:limit] + f"\n[… truncated: {len(out) - limit} more characters of older history …]"
             else:
@@ -3246,7 +3344,7 @@ class HestiaF1aDispatcher:
                 f"conclude the text is absent."))
         if not lines:
             return ResultEnvelope(ok=True, witness_id=action_id, result={
-                "pattern": pattern, "searched": target, "matches": 0,
+                "pattern": pattern, **_literal_key(pattern), "searched": target, "matches": 0,
                 "searched_a_real_file": True,
                 "note": (f"no line matches {pattern!r} in {target} (text files only, .git "
                          f"skipped). The path exists and was searched, so this is a real absence "
@@ -3258,7 +3356,7 @@ class HestiaF1aDispatcher:
                  ln[:SEARCH_LINE_CHARS] + f" …[line cut here: {len(ln) - SEARCH_LINE_CHARS} more characters]"
                  for ln in lines[:SEARCH_LINES_SHOWN]]
         return ResultEnvelope(ok=True, witness_id=action_id, result={
-            "pattern": pattern, "searched": target, "matches": len(lines),
+            "pattern": pattern, **_literal_key(pattern), "searched": target, "matches": len(lines),
             "shown": len(shown),
             "truncated": (f"{len(lines) - len(shown)} further matches not shown; narrow the "
                           f"path or the pattern" if truncated else None),
@@ -3387,11 +3485,11 @@ class HestiaF1aDispatcher:
                     f"absence of {pattern!r} — nothing was searched. `search` runs inside "
                     f"your WORKTREE and sees only files git tracks there. A relative path "
                     f"here is not the same path `memory_read` takes: memory_read resolves "
-                    f"relative paths inside your instance home, and files that live only "
-                    f"there (todo.md, journal.md, notes/, scratch/) cannot be searched at "
-                    f"all. Read those with memory_read; search the source tree."))
+                    f"relative paths inside your instance home (todo.md, journal.md, "
+                    f"heartbeats.jsonl, notes/, scratch/), and `search` does not reach "
+                    f"them." + self._home_find_door(str(intent.args.get("path") or ""), pattern)))
             return ResultEnvelope(ok=True, witness_id=action_id, result={
-                "pattern": pattern, "searched": where, "matches": 0,
+                "pattern": pattern, **_literal_key(pattern), "searched": where, "matches": 0,
                 "searched_a_real_file": True,
                 "note": (f"no line matches {pattern!r} in {where}. The path exists and was "
                          f"searched, so this is a real absence — but an answer about WHAT "
@@ -3399,12 +3497,39 @@ class HestiaF1aDispatcher:
                          f"check the pattern (it is an extended regex, so ( ) | + are "
                          f"special — searching for a literal one needs a backslash)")})
         return ResultEnvelope(ok=True, witness_id=action_id, result={
-            "pattern": pattern, "searched": where, "matches": len(lines),
+            "pattern": pattern, **_literal_key(pattern), "searched": where, "matches": len(lines),
             "shown": len(shown),
             "truncated": (f"{len(lines) - len(shown)} further matches not shown; narrow the "
                           f"path or the pattern" if truncated else None),
             "lines": shown})
 
+
+    def _home_find_door(self, rel: str, pattern: str) -> str:
+        """The way to find text in a home file, for a search that missed the worktree (SAGE #781).
+
+        The refusal used to end "files that live only there ... cannot be searched at all". That
+        stopped being true when memory_read got `find` (#351), and it cost mcnugget-being parts of
+        3 beats on 2026-11-18: it searched heartbeats.jsonl for `transport_faults` twice, was
+        told it could not, then read the file from its start (1,949 lines, the hits far past
+        the window). When the named file IS in the home, give the exact call."""
+        find = pattern if not re.search(r"[\\^$.*+?()\[\]{}|]", pattern) else ""
+        call = (f'memory_read {{"path": "{rel}", "find": "{find or "<literal text>"}"}}')
+        root = getattr(self, "memory_root", None)
+        try:
+            home = Path(root).resolve() if root else None
+            f = (home / rel).resolve() if (home and rel) else None
+            here = bool(f and f.is_file() and (f == home or home in f.parents))
+        except (OSError, ValueError):
+            here = False
+        tail = ("" if find else " find is literal text, not a regex: drop the escapes and "
+                "alternations.")
+        if here:
+            return (f" '{rel}' IS a file in your instance home. To list every line number "
+                    f"that holds a text in it: {call}.{tail} Then memory_read it with "
+                    f"start_line and end_line around a hit to see the lines.")
+        return (f" To find text in a home file, memory_read that file with find (literal "
+                f"text; it lists every line number the text is on). Search the source tree "
+                f"with search.")
 
     def _worktree_revision(self) -> dict:
         """WHICH TREE THE ANSWER IS ABOUT. A check result without this is not evidence: the
@@ -3740,13 +3865,19 @@ class HestiaF1aDispatcher:
         # beside output saying something was not running, not listening or unreachable; the being's next
         # thought said its seat was not running, or had to be brought back, on 15 of them. The receipt is rendered as JSON in key order, so `stdout` was read first and the fact
         # last. They are the same facts, said first and under their own key.
+        # A SCRIPT THAT REACHES FOR THE SEAT IS ASKED ABOUT TOO, NOT ONLY ONE THAT PRINTS ABOUT IT. sprout-being,
+        # 2026-11-14 22:21Z..11-17 08:00Z: 14 runs of its own scripts that start its seat with systemctl got
+        # no seat fact, because each exited at an earlier line (a missing binary) and printed nothing
+        # _HOST_VIEW matches. The daemon's answer stays tied to the output: it answers what a probe printed.
         outside = []
-        if _HOST_VIEW.search(f"{out}\n{errtxt}"):
-            if action_id:
+        source = staged[0][1][:RUN_SOURCE_SCAN_BYTES].decode("utf-8", "replace") if staged else ""
+        printed = _HOST_VIEW.search(f"{out}\n{errtxt}")
+        if printed or _HOST_VIEW.search(source):
+            if action_id and printed:
                 outside.append(_daemon_answered_note(action_id))
             try:
                 seat = self._seat_conversation()
-                said = _seat_wrote_note(self.memory_root, seat, f"{staged[0][0]}\n{out}\n{errtxt}",
+                said = _seat_wrote_note(self.memory_root, seat, f"{staged[0][0]}\n{out}\n{errtxt}\n{source}",
                                         run_t0) if seat else ""
             except Exception:
                 said = ""
@@ -4397,6 +4528,9 @@ class HestiaF1aDispatcher:
                     f"{len(turn['text'])} chars were delivered as seq {turn['seq']}]")
         result = {"conversation": to, "seq": turn["seq"],
                   "said": said, "action_id": action_id}
+        _verbs = call_text_verbs(turn["text"])
+        if _verbs:
+            result["not_performed"] = _call_text_note(_verbs)
         if woke:
             result["woke"] = woke
         elif getattr(self, "_wake_why", ""):
@@ -4496,6 +4630,31 @@ class HestiaF1aDispatcher:
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
         if not p.exists():
+            # A MISS ONE DIRECTORY AWAY IS NOT AN ABSENCE — here too. Measured 2026-11-17
+            # 04:55Z on cbp-being: its previous beat had read notes/mechanism-training-numpy.py;
+            # this beat it asked request_run for the bare name, was told only "does not exist",
+            # then tried an underscore spelling, paged the 464-entry home listing (entries 1-10),
+            # and told the seat "the file is missing ... it may need to be recreated". memory_read
+            # and memory_edit already name the same-name file one directory over
+            # (_same_name_elsewhere); request_run was the one door that still said "absent".
+            near = []
+            try:
+                near = self._local._same_name_elsewhere(p)
+            except Exception:  # noqa: BLE001 — a hint must never turn a miss into a crash
+                near = []
+            if len(near) == 1:
+                return ResultEnvelope(ok=False, error=(
+                    f"nothing to run: '{raw}' does not exist, but a file with that name DOES "
+                    f"exist at '{near[0]}'. Nothing was sent to the seat. To ask for that file: "
+                    f"request_run {{\"path\": \"{near[0]}\"}}. The file is not missing; only "
+                    f"the path you gave was."))
+            if near:
+                where = ", ".join(f"'{n}'" for n in near[:5])
+                more = f" and {len(near) - 5} more" if len(near) > 5 else ""
+                return ResultEnvelope(ok=False, error=(
+                    f"nothing to run: '{raw}' does not exist, but {len(near)} files with that "
+                    f"name exist: {where}{more}. Nothing tells which one you mean; ask for it "
+                    f"by its full path. Nothing was sent to the seat."))
             return ResultEnvelope(ok=False, error=(
                 f"nothing to run: '{raw}' does not exist, so there is no file to hand the "
                 f"seat. This is an absence, not a refusal. Check the name — memory_read on "
@@ -5553,6 +5712,9 @@ def _daemon_answered_note(action_id: str) -> str:
 #: How far back the seat's last turn is looked for, in the being's conversation with it.
 SEAT_WROTE_SCAN = 400
 
+#: How much of the run's script is read for _HOST_VIEW and the seat's name (the being's scripts are a few KB).
+RUN_SOURCE_SCAN_BYTES = 64 * 1024
+
 
 def _ago(secs: float) -> str:
     secs = max(0, int(secs))
@@ -5960,6 +6122,43 @@ def _run_note_core(rc: int, stderr: str, files: list) -> str:
             f"{here}. No other file from your home was there, and nothing an earlier run wrote "
             f"is kept; a file passed as 'data' arrives "
             f"under its base name (data/x.npy is x.npy), not in a subdirectory.")
+
+
+# GIT_READ CAT READS A FILE FROM ITS START, IN PARTS THAT SAY WHERE THEY ARE. `cat` was cut like
+# show/diff: the LAST 6,000 characters, behind "[… truncated: N earlier characters withheld …]", with
+# no line numbers and no way to ask for the rest. Measured on mcnugget-being, 2026-11-17: asking how
+# `transport_faults` is handled, it read sage/gateway/egress_drain.py (329 lines, 18.7k chars) with
+# `cat` three times in each of the 13:28 and 14:10 beats, and got the same last third every time;
+# the module docstring and the top of the file were never shown. At 13:28 it sent `start_line: '200'`,
+# which git_read did not take, and the answer was again the same tail. Now a file is shown from line 1
+# (or the start_line given) in whole lines up to the limit, headed with which lines of how many these
+# are, and ended with the start_line that reads on. The command the law judged is unchanged: the
+# window is cut from git's output here.
+def cat_window(text: str, start_raw, limit: int, path: str = "", rev: str = "") -> str:
+    lines = text.split("\n")
+    total = len(lines)
+    try:
+        start = int(str(start_raw).strip()) if start_raw not in (None, "") else 1
+    except (TypeError, ValueError):
+        start = 1
+    start = max(start, 1)
+    at = f"'{path}'" + (f" at {rev}" if rev else "")
+    if start > total:
+        return (f"[{at} has {total} lines, so start_line {start} names no line. "
+                f"start_line 1 reads it from the top.]")
+    shown, size = [], 0
+    for ln in lines[start - 1:]:
+        if shown and size + len(ln) + 1 > limit:
+            break
+        shown.append(ln if len(ln) <= limit else ln[:limit] + " […line cut]")
+        size += len(ln) + 1
+    end = start + len(shown) - 1
+    if start == 1 and end == total:
+        return text
+    head = f"[lines {start}-{end} of {total} of {at}" + (f"; lines 1-{start - 1} are above" if start > 1 else "") + "]"
+    tail = (f"[lines {end + 1}-{total} are not shown: git_read op 'cat' path '{path}'"
+            + (f" rev '{rev}'" if rev else "") + f" start_line {end + 1} reads on]") if end < total else "[that is the end]"
+    return head + "\n" + "\n".join(shown) + "\n" + tail
 
 
 if __name__ == "__main__":  # live smoke against the local daemon: mesh -> member_notify
