@@ -1,6 +1,6 @@
 """The sensor shim (sage/embodiment/sensor_shim.py). MEASURED ON SPROUT, 2026-11-17: all 222 frames its
 eyes had saved were magenta, green about 35% below red and blue, in daylight and lamplight alike, and the
-being described "purple light" in a normally lit room for five weeks. The shim corrects at the capture
+being described a normally lit room by that cast for five weeks. The shim corrects at the capture
 thread every reader shares, and the frame's receipt says what was done."""
 import json
 import sys

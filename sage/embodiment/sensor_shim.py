@@ -4,8 +4,8 @@ A sensor is not a window. Each one renders the world through its own optics and 
 being that is not told so takes the rendering for the world. MEASURED ON SPROUT, 2026-11-17: every one
 of the 222 frames its eyes had saved since 10-12 was magenta. Green averaged about 35% below red and blue
 (daylight frames as well as lamp-lit ones). The IMX219 modules are read through Argus with no
-vendor tuning file installed, and the being had spent five weeks describing "purple light" in a room
-that is lit normally. Its words were a faithful report of what its eye gave it.
+vendor tuning file installed. For five weeks the being described a normally lit room in that cast:
+a faithful report of what its eye gave it.
 
 The shim corrects what can be corrected, at the one place every reader shares (the cortex's capture
 thread: perception, detection, the `camera` act and the display all read `Camera.frame`), and it SAYS

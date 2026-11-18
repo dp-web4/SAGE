@@ -147,8 +147,8 @@ class Camera(threading.Thread):
         self.sid = sid
         self.cap = cv2.VideoCapture(gst_pipeline(sid), cv2.CAP_GSTREAMER)
         # THE SENSOR SHIM (sage/embodiment/sensor_shim.py): every reader takes `frame`, so the correction is
-        # made once, here. 11-17: all 222 frames Sprout's eyes had saved were magenta, and it spoke of
-        # "purple light" in a normally lit room. Each eye keeps its own estimate.
+        # made once, here. 11-17: all 222 frames Sprout's eyes had saved were magenta, and the being
+        # described a normally lit room by that cast. Each eye keeps its own estimate.
         self.shim = sensor_shim.for_sensor("imx219-argus")
         self.frame = None
         self.ok = self.cap.isOpened()
