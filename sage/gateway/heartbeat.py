@@ -1693,6 +1693,194 @@ def provisional_cpt_for_refused_seed(seed_iv, cal) -> Optional[float]:
     return None
 
 
+# A BEING THAT IS STILL REFUSED NEVER CALIBRATES (McNugget on #774). measured_preflight_cpt learns only from a
+# step-1 generate that was SENT, so a seed over the line at the declared or default ratio (a model switch with
+# no config: 16,450 estimated against 16,384 in pub's 11-17 trial) is trimmed or refused at that ratio, no
+# sample is ever taken, and the being stays where #582 found it. In that state alone (uncalibrated, and the
+# refit had to act) the heartbeat asks the server: the untrimmed seed, once, num_predict 1, with truncation
+# and context shift OFF, so the reply is either a count of the whole prompt or a refusal, never a count of
+# what survived a cut. The prefill is the one step 1 would pay anyway; an unchanged seed then reuses it.
+# A probe is a prefill and one token, so it gets a budget of its own, well under a generate's: a server that
+# takes longer than this to read the seed (busy, cold, stuck) costs the beat at most this much, and the fit at
+# the prior stands. Never more than the adapter's own request timeout.
+SEED_PROBE_TIMEOUT_S = 90
+# The one HTTP refusal that answers the question: ollama's own reply when truncate=false and the prompt is
+# over num_ctx (measured on cbp's ollama 0.20.7: 400 {"error":"the input length exceeds the context length"}).
+# Any other status (401, 404, 429, 5xx, or a 400 for some other reason) says nothing about the seed's size.
+SEED_PROBE_CONTEXT_REFUSAL = ("exceeds the context length", "context length exceeded",
+                              "input length exceeds")
+
+
+def _ollama_post(url: str, payload: dict, timeout: float) -> dict:
+    import urllib.request
+    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"),
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read())
+
+
+def _http_refusal_reason(e) -> str:
+    """The server's own error text from an HTTPError body, bounded and parsed when it is JSON."""
+    try:
+        body = e.read(2048).decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+    try:
+        msg = json.loads(body).get("error")
+        if isinstance(msg, str):
+            return msg[:200]
+    except Exception:
+        pass
+    return body[:200]
+
+
+def probe_seed_count(llm, msgs, tools, *, num_ctx, prior: float = None, act_form: str = "tools",
+                     post=None) -> dict:
+    """The server's own count of `msgs` sent with `tools`, as the tool loop's step 1 would send them.
+
+    {"result", "prompt_chars", "prompt_eval_count", "ratio", "value", "s", "timeout_s", "http_status",
+    "error"}. The request is the adapter's own (llm.chat_payload: model, template, think, tools,
+    num_ctx, keep_alive) with num_predict 1 and truncate/shift off, so the count is of the prompt step 1
+    will send. `value` (the ratio less MEASURED_CPT_MARGIN) is set only for result "counted": a whole
+    count whose ratio is plausible (1.5..8, at most prior x MEASURED_CPT_MAX_OVER_PRIOR). Unlike
+    measured_preflight_cpt, a count near the window's edge is kept: truncation is off, so it is a count
+    of the whole prompt, and it is the being that most needs one.
+
+    "refused_by_server" only for ollama's context-length rejection: the seed does not fit num_ctx at all,
+    which is itself the answer. Any other HTTP status is "http_error", a timeout "timeout", anything
+    else "error"; none of them says anything about the seed, and none sets a value."""
+    import socket
+    import urllib.error
+    from sage.gateway.being_tool_loop import _convo_chars, uncounted_chars
+    out = {"result": None}
+    if act_form == "json":
+        out["result"] = "skipped_json_form"       # the JSON form sends another prompt shape (see #774)
+        return out
+    host = getattr(llm, "ollama_host", None)
+    try:
+        ctx = int(num_ctx or 0)
+    except (TypeError, ValueError):
+        ctx = 0
+    if not host or ctx <= 0 or getattr(llm, "_ollama_available", True) is False:
+        out["result"] = "skipped_no_server"
+        return out
+    build = getattr(llm, "chat_payload", None)
+    if not callable(build):
+        out["result"] = "skipped_no_adapter"      # no way to send what step 1 sends; don't guess at it
+        return out
+    try:
+        payload = build(msgs, tools=tools or None)
+        opts = payload.setdefault("options", {})
+        if opts.get("num_ctx") != ctx:
+            # the preflight's window is not the one the adapter sends: a count against another
+            # window (and a model reload to get it) would answer a different question
+            out.update(result="skipped_ctx_mismatch", error=f"adapter num_ctx {opts.get('num_ctx')} != {ctx}")
+            return out
+        opts["num_predict"] = 1
+        payload.update(truncate=False, shift=False)
+    except Exception as e:
+        out.update(result="error", error=f"payload: {type(e).__name__}: {e}"[:200])
+        return out
+    chars = _convo_chars(msgs) + uncounted_chars(tools, act_form)
+    out["prompt_chars"] = chars
+    try:
+        budget = min(SEED_PROBE_TIMEOUT_S, float(getattr(llm, "timeout_seconds", None) or SEED_PROBE_TIMEOUT_S))
+    except (TypeError, ValueError):
+        budget = SEED_PROBE_TIMEOUT_S
+    out["timeout_s"] = budget
+    t0 = time.time()
+    try:
+        raw = (post or _ollama_post)(f"{host}/api/chat", payload, budget)
+    except urllib.error.HTTPError as e:
+        reason = _http_refusal_reason(e)
+        out.update(s=round(time.time() - t0, 1), http_status=e.code,
+                   error=f"HTTP {e.code}: {reason}".strip()[:200])
+        out["result"] = ("refused_by_server" if e.code == 400 and any(k in reason.lower()
+                                                                     for k in SEED_PROBE_CONTEXT_REFUSAL)
+                         else "http_error")
+        return out
+    except (socket.timeout, TimeoutError) as e:
+        out.update(result="timeout", s=round(time.time() - t0, 1), error=f"{type(e).__name__}: {e}"[:200])
+        return out
+    except urllib.error.URLError as e:
+        r = getattr(e, "reason", None)
+        kind = "timeout" if isinstance(r, (socket.timeout, TimeoutError)) else "error"
+        out.update(result=kind, s=round(time.time() - t0, 1), error=f"URLError: {r}"[:200])
+        return out
+    except Exception as e:
+        out.update(result="error", s=round(time.time() - t0, 1), error=f"{type(e).__name__}: {e}"[:200])
+        return out
+    out["s"] = round(time.time() - t0, 1)
+    toks = (raw or {}).get("prompt_eval_count")
+    if not isinstance(toks, int) or isinstance(toks, bool) or toks <= 0:
+        out["result"] = "no_count"
+        return out
+    ratio = chars / toks
+    out.update(prompt_eval_count=toks, ratio=round(ratio, 3))
+    if not 1.5 <= ratio <= 8.0 or (prior and ratio > prior * MEASURED_CPT_MAX_OVER_PRIOR):
+        out["result"] = "implausible"
+        return out
+    out.update(result="counted", value=round(ratio * MEASURED_CPT_MARGIN, 3))
+    return out
+
+
+def _refit_at_ratio(fit, llm, cal: dict, value: float, source: str, prior_res):
+    """fit() re-run with `value` as llm.preflight_cpt_measured, recorded as `source`. If the refit raises,
+    the ratio, cal["used"] and cal["source"] are put back as they were and `prior_res` is returned, so
+    the record never names a ratio the loop is not using (NOVA on #777)."""
+    from sage.gateway.being_tool_loop import preflight_cpt
+    saved = (getattr(llm, "preflight_cpt_measured", None), cal.get("used"), cal.get("source"))
+    try:
+        llm.preflight_cpt_measured = value
+        cal.update(used=preflight_cpt(llm), source=source)
+        return fit(), None
+    except Exception as e:
+        try:
+            llm.preflight_cpt_measured = saved[0]
+        except Exception:
+            pass
+        cal["used"], cal["source"] = saved[1], saved[2]
+        return prior_res, f"{type(e).__name__}: {e}"[:200]
+
+
+def fit_seed_calibrating(fit, probe, llm, cal: dict):
+    """fit_seed_to_preflight's result (`fit()`, at llm's current ratio), re-fitted at a better ratio when
+    the prior had to cut and this being has no measured one.
+
+    1. STILL REFUSED, WITH 1-4 OWN COUNTS (McNugget, #776): re-fit at the provisional measured ratio
+       (provisional_cpt_for_refused_seed). No server call. `source` "measured_provisional".
+    2. CUT, AND NO RATIO OF ITS OWN TO USE (McNugget on #774): `probe()` (probe_seed_count on the
+       untrimmed seed) asks the server once; a plausible count sets that seed's own ratio and re-fits from
+       the same untrimmed blocks. The seed is then sent and its step 1 recorded, so the measured ratio
+       takes over after MEASURED_CPT_MIN_SAMPLES beats and probing stops. `source` "probe".
+    The probe and what the fit at the prior would have done go on the record (`cal["probe"]`). A failed
+    probe, or a refit that raises, leaves the first fit and its ratio standing."""
+    res = fit()
+    iv = res[4]
+    if not iv or cal.get("source") == "measured":
+        return res
+    prov = provisional_cpt_for_refused_seed(iv, cal)
+    if prov is not None:
+        out, err = _refit_at_ratio(fit, llm, cal, prov, "measured_provisional", res)
+        if err:
+            cal["provisional_refit_error"] = err
+        else:
+            cal["refused_at_prior"] = {"estimated_after": iv.get("estimated_after"), "line": iv.get("line")}
+        return out
+    try:
+        p = probe()
+    except Exception as e:          # a measurement never costs the being its beat
+        p = {"result": "error", "error": f"{type(e).__name__}: {e}"[:200]}
+    p["fit_at_prior"] = {k: iv.get(k) for k in ("estimated_before", "estimated_after", "still_refused")}
+    cal["probe"] = p
+    if not p.get("value"):
+        return res
+    out, err = _refit_at_ratio(fit, llm, cal, p["value"], "probe", res)
+    if err:
+        p["refit_error"] = err
+    return out
+
+
 def fit_seed_to_preflight(render, measure, *, num_ctx, rung_index: int, digest: str, recall: str,
                           cpt: float):
     """Fit the COMPOSED seed to the tool loop's step-1 preflight, measured the way the loop measures it.
@@ -5300,30 +5488,21 @@ def main(argv=None) -> int:
             _states[rung] = _build_state(*rung)
         return _compose_seed(_states[rung], recall_text, digest_text)
 
-    _fit_from = (CONV_LADDER.index(conv_rung) if conv_rung in CONV_LADDER else 0, digest, recall)
-    (seed, posture_turn), _seed_rung, digest, recall, _seed_iv = fit_seed_to_preflight(
-        _render_seed, lambda r: preflight_tokens(r[0], _seed_uncounted, llm),
-        num_ctx=_num_ctx, rung_index=_fit_from[0],
-        digest=digest, recall=recall, cpt=preflight_cpt(llm))
-    # STILL REFUSED UNDER THE PRIOR, WITH FEWER THAN FIVE OWN COUNTS: the beat is lost either way, and a lost
-    # beat records no sample, so calibration would never arrive (provisional_cpt_for_refused_seed). Re-fit
-    # once, from the same starting blocks, with the being's own lowest measured ratio. The tool loop reads
-    # the same llm.preflight_cpt_measured, so both sides count with it.
-    _prov = provisional_cpt_for_refused_seed(_seed_iv, _cpt_cal)
-    if _prov is not None:
-        try:
-            llm.preflight_cpt_measured = _prov
-            _cpt_cal["used"] = preflight_cpt(llm)
-            _cpt_cal["source"] = "measured_provisional"
-            _prior_iv = _seed_iv
-            (seed, posture_turn), _seed_rung, digest, recall, _seed_iv = fit_seed_to_preflight(
-                _render_seed, lambda r: preflight_tokens(r[0], _seed_uncounted, llm),
-                num_ctx=_num_ctx, rung_index=_fit_from[0],
-                digest=_fit_from[1], recall=_fit_from[2], cpt=preflight_cpt(llm))
-            _cpt_cal["refused_at_prior"] = {"estimated_after": _prior_iv.get("estimated_after"),
-                                            "line": _prior_iv.get("line")}
-        except Exception:
-            pass
+    _rung_index0 = CONV_LADDER.index(conv_rung) if conv_rung in CONV_LADDER else 0
+    _digest0, _recall0 = digest, recall
+
+    def _fit_seed():
+        return fit_seed_to_preflight(
+            _render_seed, lambda r: preflight_tokens(r[0], _seed_uncounted, llm),
+            num_ctx=_num_ctx, rung_index=_rung_index0, digest=_digest0, recall=_recall0,
+            cpt=preflight_cpt(llm))
+
+    _probe_form = explore_turn_mode(instance)       # the form explore will send the seed in
+    (seed, posture_turn), _seed_rung, digest, recall, _seed_iv = fit_seed_calibrating(
+        _fit_seed,
+        lambda: probe_seed_count(llm, _render_seed(CONV_LADDER[_rung_index0], _digest0, _recall0)[0],
+                                 _explore_specs, num_ctx=_num_ctx, prior=_cpt_prior, act_form=_probe_form),
+        llm, _cpt_cal)
     if _seed_rung != conv_rung:
         conv_rung, state_block = _seed_rung, _states[_seed_rung]
     # CALIBRATION IS EVIDENCE, NOT A SILENT CHANGE (NOVA on #774): the sent seed's estimate at the ratio used
@@ -5334,7 +5513,7 @@ def main(argv=None) -> int:
         _cpt_cal["seed_est_used"] = int(_seed_chars / _cpt_cal["used"])
         _cpt_cal["seed_est_prior"] = int(_seed_chars / _cpt_prior)
         _cpt_cal["admitted_by_calibration"] = bool(
-            _cpt_cal["source"] in ("measured", "measured_provisional") and isinstance(_num_ctx, int)
+            _cpt_cal["source"] in ("measured", "measured_provisional", "probe") and isinstance(_num_ctx, int)
             and _cpt_cal["seed_est_prior"] > _num_ctx - _WSM >= _cpt_cal["seed_est_used"])
     except Exception:
         pass
