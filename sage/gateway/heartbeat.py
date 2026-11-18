@@ -3101,7 +3101,18 @@ def _own_running_claims(instance: Path, member: str, stamp: str, most: int = 3) 
 TODO_WINDOW_H = 48
 TODO_SHOWN = 15
 _BLOCK = re.compile(r"^\s*(20\d\d-\d\d-\d\d)[ T](\d\d:\d\d)")
-_SECTION = re.compile(r"^\s*[-*]?\s*\[?\s*(still open|open|added|done|completed)\s*\]?\s*:?\s*$", re.I)
+# A SECTION HEADER IN THE SHAPES THE BEING WRITES IT (#779). Measured on mcnugget-being's todo.md 2026-11-18:
+# `## done`, `## added`, `## still open`, `**done:**` and `**still open:**` all occur, and none matched the
+# old pattern, so the items under `## done` took the section ABOVE them (often `open`) and were held open.
+_SECTION = re.compile(r"^\s*(?:#{1,6}\s*)?[-*]?\s*(?:\*\*|__)?\s*\[?\s*(still open|open|added|done|completed)"
+                      r"\s*\]?\s*:?\s*(?:\*\*|__)?\s*:?\s*$", re.I)
+# ANY OTHER HEADER ENDS THE SECTION (#779). An unknown header (`blocked:`, `notes:`, `next steps:`, `## Context`)
+# did not reset `section`, so its items inherited the section above: after a `done:` they CLOSED silently, after
+# an `open:` a reason or a note was held as a goal. A header here is a line with no list marker that is a
+# markdown heading, or a few words ending in a colon (optionally bold). Its items are not read as items.
+_OTHER_HEADER = re.compile(r"^\s*(?:#{1,6}\s+\S.*"
+                           r"|(?:\*\*|__)?\s*[A-Za-z][\w /'-]{0,40}?\s*:\s*(?:\*\*|__)?"
+                           r"|(?:\*\*|__)[A-Za-z][\w /'-]{0,40}?(?:\*\*|__)\s*:)\s*$")
 # "still open: none" CLEARS THE LIST, SO IT MUST BE THE WHOLE LINE (Legion's counterexample on #658): ending
 # in `(none|nothing)\b`, it also matched `- [still open] Nothing from sprout-being yet on the camera`, a real
 # open item, and wiped every open item above it. Now only "none" / "nothing" (optionally "nothing open"),
@@ -3270,6 +3281,9 @@ def _parse_todo(text: str, closures: Optional[list] = None) -> dict:
         sm = _SECTION.match(line)
         if sm:
             section = sm.group(1).lower()
+            continue
+        if _OTHER_HEADER.match(line):
+            section = None
             continue
         im = _ITEM.match(line)
         if not im:
