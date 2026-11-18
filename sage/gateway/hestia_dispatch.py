@@ -3108,9 +3108,21 @@ class HestiaF1aDispatcher:
             pass
 
         if captured:
+            # THE SENSOR SHIM'S RECORD (sage/embodiment/sensor_shim.py): the look client prints what was done to
+            # this eye's colours. Told here, so the being learns its eye is corrected, not only that it changed.
+            correction, corrected = {}, ""
+            if cortex:
+                try:
+                    correction = json.loads((proc.stdout or b"{}").decode("utf-8", "replace")).get("correction") or {}
+                except (ValueError, AttributeError):
+                    correction = {}
+                if isinstance(correction, dict) and correction:
+                    from sage.embodiment.sensor_shim import describe_text
+                    corrected = describe_text(correction)
             return ResultEnvelope(ok=True, witness_id=action_id, result={
                 "device": device, "out_path": out_rel,
                 "bytes": os.path.getsize(full_out),
+                **({"correction": correction} if corrected else {}),
                 "note": (("one frame from YOUR OPEN EYE, as your cortex sees it right now (not any game or file "
                           "the seat drops). " if cortex else
                           "one frame captured FROM THE WEBCAM (this device, not any game or file the seat drops). ")
@@ -3124,7 +3136,8 @@ class HestiaF1aDispatcher:
                          # cannot avoid reading, so it must say what is true NOW.
                          "You SEE it on your NEXT beat: this act is the request to see, and "
                          "the frame rides that beat as an image (heartbeat.fresh_frames). "
-                         "The completed image is published atomically.")})
+                         "The completed image is published atomically."
+                         + (" " + corrected if corrected else ""))})
 
         if proc.returncode != 0 and cortex:
             # sage/embodiment/look.py: 3 = no cortex answered, 4 = it answered no (its reason on stderr)
