@@ -2081,9 +2081,16 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
         # Otherwise a single node id INSIDE a declared suite: "gateway::test_name".
         suite, sep, node = target.partition("::")
         if not sep or suite not in CHECK_TARGETS:
+            # NAME THE FIX WHEN THE SHAPE SAYS WHAT WAS MEANT. nomad-being, 11-12 and 11-16..18,
+            # three times: a folder or path in front of '::tests' ('<name>::tests', a worktree
+            # path '::tests') and once a script path, each meaning "run my tests/ folder". The
+            # refusal listed the valid forms and the being did not get from there to 'tests'.
+            meant_tests = ("tests" in target.lower() or "/" in target or target.endswith(".py"))
+            hint = (" Nothing ran; this is not a test failure. To run the tests/ folder of your "
+                    "worktree, the target is just 'tests'." if meant_tests else "")
             raise ValueError(
                 f"check 'target' must be one of {sorted(CHECK_TARGETS)} or "
-                f"'<suite>::<test_name>'; got {target!r}")
+                f"'<suite>::<test_name>'; got {target!r}.{hint}")
         if not re.fullmatch(r"[A-Za-z0-9_]+", node):
             raise ValueError(f"check test name must be a bare identifier; got {node!r}")
         path = f"{shlex.quote(os.path.join(worktree, CHECK_TARGETS[suite]))} -k {node}"
