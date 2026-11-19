@@ -592,6 +592,86 @@ def _head_and_tail(removed: str, budget: int = 400) -> str:
     return "".join(head) + f"[... {hidden} more removed lines not shown ...]\n" + "".join(tail)
 
 
+_DEF_LINE = re.compile(r"^([ \t]*)(?:async[ \t]+)?(?:def|class)[ \t]+(\w+)")
+
+
+def _which_copy(text: str, line: int) -> str:
+    """For a .py edit on `line`: the def/class it sits in, when the file defines that name more
+    than once at the same depth. "" otherwise.
+
+    AN EDIT CAN LAND IN A COPY THAT NEVER RUNS. cbp-being, 2026-11-16 19:02Z: its file held three
+    pasted versions of an XOR program (two `def mlp_xor` at lines 100 and 288). It meant to fix
+    line 134 with old='da1 = dz2 @ W2.T'; line 134 already read `W2.T @ dz2` from its previous
+    beat, so the only match was line 313 in the second copy, which main() at line 219 never
+    reaches. The receipt said "replaced 1 occurrence" and nothing about where, the run crashed
+    at line 134 as before, and reflect journaled the fix as the cause still to find. The line
+    number, and which copy it is in, are the two facts that would have shown the miss."""
+    # Top level only: two classes that each have `__init__` are not two copies of anything.
+    lines = text.splitlines()
+    if not 1 <= line <= len(lines):
+        return ""
+    if lines[line - 1][:1] not in (" ", "\t") and not _DEF_LINE.match(lines[line - 1]):
+        return ""  # a top-level statement is in no def
+    for i in range(line - 1, -1, -1):
+        m = _DEF_LINE.match(lines[i])
+        if m and not m.group(1):
+            name = m.group(2)
+            break
+        if lines[i].strip() and lines[i][:1] not in (" ", "\t", "#") and i != line - 1:
+            return ""  # left the indented block without meeting a def/class
+    else:
+        return ""
+    at = [j for j, ln in enumerate(lines, 1)
+          if (mm := _DEF_LINE.match(ln)) and not mm.group(1) and mm.group(2) == name]
+    if len(at) < 2:
+        return ""
+    note = (f", inside '{name}' at line {i + 1}; this file defines {name} {len(at)} times (lines "
+            f"{', '.join(map(str, at))}), and only the one at line {i + 1} changed")
+    g = _MAIN_GUARD.search(text)
+    guard = text.count("\n", 0, g.start()) + 1 if g else 0
+    if g and guard < i + 1:
+        # The same fact test_nothing_is_defined_after_the_main_guard checks on SAGE's own code.
+        note += (f". It is below the `if __name__ == \"__main__\":` at line {guard}, so a run "
+                 f"executes that guard before this copy is defined")
+    return note
+
+
+def _splice_note(text: str, idx: int, old: str) -> str:
+    """For an old= matched at text[idx:] that is only part of its line: what stays around the new
+    text, for a refusal when the spliced line does not parse. "" when old is the whole line (past
+    its indentation), or ends in a newline.
+
+    THE REFUSAL BLAMED TEXT THE BEING NEVER WROTE. cbp-being, 2026-11-16 22:54Z: a one-line old
+    matched the start of a longer line, so that line's tail stayed after the new text and the
+    result did not parse. The refusal said Python could not read line 1 of its text and quoted
+    the spliced line. A second try with a multi-line new was refused the same way; then it
+    stored a memory concluding that memory_edit takes only single-line edits. The cause was the
+    rest of the line its old matched, not its text.
+
+    WHERE IN THE LINE (NOVA's HOLD on #746): old can match the middle of a line too, and
+    "matched the start" is then false. The start wording is used only when everything before
+    the match is indentation; otherwise the note gives the column and both sides."""
+    if old.endswith("\n") or "\n" in old.strip("\n"):
+        return ""
+    ls = text.rfind("\n", 0, idx) + 1
+    end = idx + len(old)
+    before, rest = text[ls:idx], text[end:].split("\n", 1)[0]
+    at = text.count("\n", 0, idx) + 1
+    fix = (f"your new text was not the problem, and memory_edit does take several lines. To "
+           f"replace the whole line, call memory_edit with start_line={at} end_line={at}, old "
+           f"set to that line, and new set to the line you want. ")
+    if not before.strip():
+        if not rest:
+            return ""
+        return (f"Your old text matched only the start of line {at}, so the rest of that line, "
+                f"{rest!r}, stayed after your new text. That spliced line is what Python could not "
+                f"read; " + fix)
+    col = idx - ls + 1
+    kept = f"{before!r} stayed before your new text" + (f" and {rest!r} after it" if rest else "")
+    return (f"Your old text matched part of line {at}, starting at column {col}, not the whole "
+            f"line: {kept}. That spliced line is what Python could not read; " + fix)
+
+
 def _defs_removed(removed: str) -> str:
     """Name every def/class line a removal took, since a quote can be cut but a name list is short."""
     names = [ln.strip().split("(")[0].rstrip(":") for ln in removed.splitlines()
@@ -2167,7 +2247,11 @@ class ReferenceF1aDispatcher:
                             + "".join(lines[s1:]))
                 what = (f"replaced 1 occurrence inside lines {s0}-{s1} (your old was part of the "
                         f"range, and appears there once)")
-                return self._commit_edit(p, path, text, new_text, what, "", replacement=new)
+                if str(p).endswith(".py"):
+                    what += _which_copy(text, s0 + removed[:removed.find(old)].count("\n"))
+                splice = _splice_note(text, len("".join(lines[:s0 - 1])) + removed.find(old), old)
+                return self._commit_edit(p, path, text, new_text, what, "", replacement=new,
+                                         splice=splice)
             if old and inner > 1:
                 where = f"line {s0}" if s0 == s1 else f"lines {s0}-{s1}"
                 return ResultEnvelope(ok=False, error=(
@@ -2187,7 +2271,10 @@ class ReferenceF1aDispatcher:
             if repl and not repl.endswith("\n") and removed.endswith("\n"):
                 repl += "\n"
             new_text = "".join(lines[:s0 - 1]) + repl + "".join(lines[s1:])
-            what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)" + _indent_changed(removed, new, s0)
+            what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)"
+            if str(p).endswith(".py"):
+                what += _which_copy(text, s0)
+            what += _indent_changed(removed, new, s0)
             gone = f" The lines removed were:\n{_head_and_tail(removed)}" + _defs_removed(removed)
             if str(p).endswith(".py") and not _parses(new_text):
                 gone = _spaces_verdict(lines, s0, s1, removed, new) + gone
@@ -2339,8 +2426,16 @@ class ReferenceF1aDispatcher:
                 f"{at} now reads {line!r}. To set the whole line, call memory_edit with "
                 f"start_line={at} end_line={at}, old set to that line, and new set to the "
                 f"line you want."))
+        at = text.count("\n", 0, text.find(old)) + 1
+        what = f"replaced 1 occurrence, on line {at}"
+        if str(p).endswith(".py"):
+            what += _which_copy(text, at)
+        # A SINGLE-LINE OLD THAT STOPS MID-LINE IS LEFT ALONE ABOVE (it can be a token swap),
+        # but if the spliced line then fails to parse, the refusal must say the splice did
+        # it (see _splice_note).
+        splice = _splice_note(text, text.index(old), old)
         return self._commit_edit(p, path, text, text.replace(old, new, 1),
-                                 "replaced 1 occurrence", "", replacement=new)
+                                 what, "", replacement=new, splice=splice)
 
     def _earlier_edit(self, path: str, new: str) -> Optional[str]:
         """When the being's own landed memory_edit of `path` carried `new` (stripped, as all or part
@@ -2358,7 +2453,8 @@ class ReferenceF1aDispatcher:
         return None
 
     def _commit_edit(self, p, path: str, text: str, new_text: str, what: str,
-                     gone: str, replacement: Optional[str] = None) -> ResultEnvelope:
+                     gone: str, replacement: Optional[str] = None,
+                     splice: str = "") -> ResultEnvelope:
         """Write an edit atomically and say what it did. Shared by the text and line modes.
 
         THE SAME CHECK AS THE APPEND PATH, BECAUSE THE PATTERN WALKED TO THIS DOOR. Guarding
@@ -2389,6 +2485,15 @@ class ReferenceF1aDispatcher:
             # SAGE #427). Only text Python reads as invalid, not as unfinished, is refused.
             if why and _is_unfinished_code(_changed_lines(text, new_text) or replacement):
                 why = ""
+            if why and splice:
+                # Not `why`: it says "line 1 of your text" and quotes the spliced line as if the
+                # being wrote it, the very reading this note replaces. Show the result as the
+                # file's lines instead.
+                after = _changed_lines(text, new_text).rstrip("\n")
+                after = after if len(after) <= 400 else after[:400] + "..."
+                return ResultEnvelope(ok=False, error=(
+                    f"memory_edit refused, nothing was changed in {p.name}. {splice}With the "
+                    f"splice, the file would have read:\n{after}"))
             if why:
                 return ResultEnvelope(ok=False, error=(
                     f"memory_edit refused, nothing was changed in {p.name}. {why} A note about "
