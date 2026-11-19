@@ -47,10 +47,24 @@ def test_what_lean_leaves_out_is_one_describe_away():
 def test_lean_is_materially_smaller_than_brief():
     b = len(json.dumps(toolset.specs({}, {}, brief=True)))
     l = len(json.dumps(toolset.specs({}, {}, lean=True)))
-    assert l < 0.75 * b, f"lean {l} vs brief {b}"
+    # 0.80, not 0.75: the #708 rule keeps prose for parameters that act on existing state (about 800
+    # chars). That trade is deliberate: lean is a saving, not a target, and safety lines outrank it.
+    assert l < 0.80 * b, f"lean {l} vs brief {b}"
 
 
 def test_every_load_bearing_pair_names_a_real_parameter():
     """A typo in LEAN_KEEP would silently drop the line it meant to keep."""
     for verb, param in toolset.LEAN_KEEP:
         assert verb in _TOOL_SCHEMAS and param in _TOOL_SCHEMAS[verb][1], (verb, param)
+
+
+def test_every_optional_parameter_is_classified():
+    """SAGE #708's rule: every optional parameter is either kept under lean (it acts on existing state,
+    or its valid values are prose) or reviewed as safe to drop. A new optional parameter in neither set
+    fails here, so it gets a decision instead of silently losing its prose."""
+    optional = {(v, p) for v, (_d, props, req) in _TOOL_SCHEMAS.items() for p in props if p not in req}
+    unclassified = optional - toolset.LEAN_KEEP - toolset.LEAN_DROP_REVIEWED
+    assert not unclassified, f"classify these for lean (LEAN_KEEP or LEAN_DROP_REVIEWED): {sorted(unclassified)}"
+    assert not (toolset.LEAN_KEEP & toolset.LEAN_DROP_REVIEWED), "a parameter cannot be both kept and dropped"
+    for v, p in toolset.LEAN_DROP_REVIEWED:
+        assert v in _TOOL_SCHEMAS and p in _TOOL_SCHEMAS[v][1], ("stale LEAN_DROP_REVIEWED entry", v, p)

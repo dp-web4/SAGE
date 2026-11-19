@@ -670,6 +670,24 @@ def answer_temperature(instance) -> Optional[float]:
     return being_params.value(instance, "answer_temperature")
 
 
+def answer_think(instance) -> Optional[bool]:
+    """Opt-in per instance: instance.json "answer_think": false answers a waiting person without thinking first.
+
+    SAGE #788 (dp, 2026-11-18): how fast a being answers a person is part of how capable it seems. Measured on
+    McNugget 2026-11-19 07:52Z, gemma4:12b with preempt and answer_turn "json" on: the beat yielded to a seat's
+    question 117 s after it arrived, then the answer turn's first generate (a 420-token prompt) spent all 3000
+    tokens of num_predict THINKING, was cut at the length limit with no reply, and the retry answered in 30
+    tokens: 410 s in the answer phase for one sentence. With think off the same model answers a short prompt in
+    under a second once it is free. Unset leaves the model's own setting (no change). Like answer_temperature,
+    it applies to the answer generate alone and is restored after, so explore and reflect still think."""
+    try:
+        from sage.gateway.governed_turn import instance_config
+        v = instance_config(instance).get("answer_think")
+    except Exception:
+        return None
+    return v if isinstance(v, bool) else None
+
+
 AFTER_ANSWER = ("{pending}\n\nYou answered aloud: \"{reply}\"\n\nThat answer is spoken. Your tools are here "
                 "if there is something you want to do now; if not, rest.")
 
@@ -993,7 +1011,8 @@ def _answer_generate(llm, msgs, schema=None):
 
 def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: str,
                      on_generate=None, acts: str = "", changes: str = "", context: str = "",
-                     temperature: Optional[float] = None, abilities: Optional[str] = None, frame=None):
+                     temperature: Optional[float] = None, abilities: Optional[str] = None, frame=None,
+                     think: Optional[bool] = None):
     """The being's answer, if it chose one, dispatched as its `say`.
 
     The prompt is the selected turn and the ask. `acts` (the beat's record of acts) is included
@@ -1019,11 +1038,18 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
     _prior_t = getattr(llm, "temperature", None)
     if temperature is not None and _prior_t is not None:
         llm.temperature = float(temperature)
+    # THINK, THIS TURN ONLY (answer_think, #788): set for the answer generate and its retry, restored after.
+    _has_think = hasattr(llm, "think")
+    _prior_think = getattr(llm, "think", None)
+    if think is not None and _has_think:
+        llm.think = bool(think)
     try:
         r, retried, attempts = _answer_generate(llm, msgs, answer_schema_for(selected.cid))
     finally:
         if temperature is not None and _prior_t is not None:
             llm.temperature = _prior_t
+        if think is not None and _has_think:
+            llm.think = _prior_think
     raw = (r or {}).get("raw") or {}
     content = ((r or {}).get("content") or "").strip()
     thinking = ((raw.get("message") or {}).get("thinking") or "").strip()
@@ -1073,6 +1099,8 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
             form["why"] = "chose silence"
     if temperature is not None:
         form["temperature"] = float(temperature)
+    if think is not None and _has_think:
+        form["think"] = bool(think)
     res.answer_form = form
     return res
 
@@ -6034,6 +6062,7 @@ def main(argv=None) -> int:
                                           context=(answer_context_block(instance, args.member, selected)
                                                    if answer_context_on(instance) else ""),
                                           temperature=answer_temperature(instance),
+                                          think=answer_think(instance),
                                           abilities=abilities_line(_unavail),
                                           frame=(answer_frame(instance, _wt, args.model,
                                                               extra=camera_frame_paths(last, instance)
