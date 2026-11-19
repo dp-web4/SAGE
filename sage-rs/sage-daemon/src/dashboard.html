@@ -426,6 +426,8 @@ async function refreshStatus() {
     document.getElementById('beats-value').textContent = (beats.completed || 0).toLocaleString();
     document.getElementById('beats-display').textContent = 'Beats: ' + (beats.completed || 0).toLocaleString();
     document.getElementById('beat-now').textContent = describeBeat(beats);
+    lastBeats = beats;
+    if (convId && convs.length) renderConvState();
     document.getElementById('sys-fleet-size').textContent = 'Fleet: ' + (d.fleet_size || 0) + ' machines';
     // The SNARC the being last felt. updateSnarc() was defined and never called from the day
     // the conversations rewrite landed, so these bars read 0.00 on every machine (SAGE #111).
@@ -548,6 +550,66 @@ const convNote = document.getElementById('conv-note');
 
 function convWritable(c) { return c && (c.writable_by || []).indexOf('dp') >= 0; }
 
+// --- Waiting for the being (SAGE #788) -------------------------------------
+// dp, 2026-11-18, after a demo: a model that answers fast and shows it is working FEELS more
+// capable. The being cannot answer in a second, but the page can stop being silent about why.
+// Two things were wrong here: the page looked for the being's reply every 20 s, so a reply written
+// in 10 s could take 30 s to appear, and while a turn waited it said only "1 awaiting the being".
+// Now, while a turn is waiting, the page polls every 2 s and says what the beat is actually doing,
+// from the heartbeat's own phase reports (/status beats.current). "Writing its answer" is shown
+// only when the beat has reported its answer phase; nothing here is a decorative spinner.
+const POLL_IDLE_MS = 20000;
+const POLL_WAITING_MS = 2000;
+let lastBeats = null;     // /status beats, kept by refreshStatus
+let shownCount = null;    // turn count of the log on screen; a poll reloads it only when this changes
+let beingName = null;
+
+function pollDelay(awaiting) { return awaiting > 0 ? POLL_WAITING_MS : POLL_IDLE_MS; }
+
+function waitingLine(being, beats, awaiting) {
+  if (!awaiting) return null;
+  const who = being || 'the being';
+  const turns = awaiting === 1 ? '1 turn waiting' : awaiting + ' turns waiting';
+  const cur = beats && beats.current;
+  if (cur && cur.phase === 'answer') {
+    return turns + ': ' + who + ' is writing its answer now.';
+  }
+  if (cur) {
+    return turns + ': ' + who + ' is mid-beat (' + cur.phase + ', running ' + fmtAge(cur.age_secs) +
+           ') and has not reached its answer yet.';
+  }
+  if (beats && beats.since_last_beat_end_secs != null) {
+    return turns + ': no beat is running (the last ended ' + fmtAge(beats.since_last_beat_end_secs) +
+           ' ago); waiting for one to start.';
+  }
+  return turns + ': waiting for a beat to start.';
+}
+
+function renderConvState() {
+  const c = convs.find(x => x.id === convId);
+  const writable = convWritable(c);
+  convState.textContent = writable
+    ? (waitingLine(beingName, lastBeats, (c && c.awaiting_being) || 0) || 'up to date')
+    : 'read-only';
+  convState.className = 'conv-state' + (writable ? '' : ' readonly');
+}
+
+function convAwaiting() {
+  const c = convs.find(x => x.id === convId);
+  return (c && c.awaiting_being) || 0;
+}
+
+let pollTimer = null;
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(pollConversations, pollDelay(convAwaiting()));
+}
+
+async function pollConversations() {
+  try { if (convId) await loadConversations(true); }
+  finally { schedulePoll(); }
+}
+
 function kindOf(from) {
   if (from === 'dp') return 'dp';
   if (/-being$/.test(from)) return 'sage';
@@ -560,7 +622,7 @@ function kindOf(from) {
 // said "No conversations on this machine yet." on a machine that had them, and fell back to the
 // raw-model chat. The daemon's own words -- why it refused, and where to read instead -- are
 // shown now, and the panel does not pretend the machine is empty.
-async function loadConversations() {
+async function loadConversations(poll = false) {
   try {
     const r = await fetch(BASE + '/conversations');
     const d = await r.json().catch(() => ({}));
@@ -596,7 +658,14 @@ async function loadConversations() {
     });
     convId = (keep && convs.some(c => c.id === keep)) ? keep
            : (convs.find(convWritable) || convs[0] || {}).id || null;
-    if (convId) { convSelect.value = convId; await loadConversation(convId); }
+    if (convId) {
+      convSelect.value = convId;
+      // A poll reloads the log only when the conversation grew: rebuilding it every 2 s while a turn
+      // waits would reset the scroll and flicker. Otherwise only the waiting line is refreshed.
+      const cur = convs.find(c => c.id === convId);
+      if (!poll || !cur || cur.count !== shownCount) await loadConversation(convId);
+      else renderConvState();
+    }
     else {
       // Empty really is empty here (the daemon answered). Say whose move that is: nothing in the
       // fleet creates a being's conversations automatically -- the seat does, once.
@@ -625,11 +694,9 @@ async function loadConversation(id) {
       chatLog.appendChild(n);
     }
     (d.turns || []).forEach(t => appendChat(t.from, t.text, kindOf(t.from), t.ts, t.trial));
-    const waiting = (c && c.awaiting_being) || 0;
-    convState.textContent = writable
-      ? (waiting ? waiting + ' awaiting the being' : 'up to date')
-      : 'read-only';
-    convState.className = 'conv-state' + (writable ? '' : ' readonly');
+    shownCount = c ? c.count : null;
+    if (d.being) beingName = d.being;
+    renderConvState();
     chatInput.disabled = !writable;
     chatSend.disabled = !writable;
     chatInput.placeholder = writable
@@ -671,7 +738,10 @@ async function sendChat() {
       chatLog.scrollTop = chatLog.scrollHeight;
     }
     refreshStatus();
-    loadConversations();
+    // Awaited, then the poll is re-armed at once: a turn just sent must not sit behind a 20 s timer
+    // armed while nothing was waiting.
+    await loadConversations();
+    schedulePoll();
   } catch(err) {
     appendChat('System', 'Connection error: ' + err.message, 'error');
   } finally {
@@ -712,8 +782,8 @@ async function init() {
   setInterval(refreshStatus, 3000);
   setInterval(refreshPeers, 15000);
   // The being answers on its own rhythm; poll for its turn rather than making a person
-  // reload to find out whether they were answered.
-  setInterval(() => { if (convId) loadConversations(); }, 20000);
+  // reload to find out whether they were answered. Every 2 s while a turn waits, else 20 s (#788).
+  schedulePoll();
 }
 init();
 </script>
