@@ -73,6 +73,46 @@ def test_ranged_edit_names_the_copy_too():
     assert "replaced lines 9-9 (1 lines), inside 'mlp' at line 8" in env.result, env.result
 
 
+# NOVA's negative (#744 review): code right after the second copy, at top level or in a top-level
+# block, is in neither copy. The backward walk must stop at that block's own header and name no def.
+AFTER = V1 + "\n" + V2 + ("\n"
+                          "if True:\n"              # line 12
+                          "    da2 = dz2 @ W1.T\n"  # line 13: nested block after the copy
+                          "da3 = dz2 @ W0.T\n"      # line 14: top-level statement
+                          "y = f(\n"                # line 15
+                          "    dz2 @ W9.T,\n"       # line 16: continuation of a top-level call
+                          ")\n")
+
+
+def test_a_nested_block_after_a_copy_is_in_no_copy():
+    d, f = _file("a.py", AFTER)
+    env = _edit(d, "a.py", old="da2 = dz2 @ W1.T", new="da2 = W1.T @ dz2")
+    assert env.ok, env.error
+    assert "on line 13" in env.result and "inside 'mlp'" not in env.result, env.result
+
+
+def test_a_top_level_statement_after_a_copy_is_in_no_copy():
+    d, f = _file("b.py", AFTER)
+    env = _edit(d, "b.py", old="da3 = dz2 @ W0.T", new="da3 = W0.T @ dz2")
+    assert env.ok, env.error
+    assert "on line 14" in env.result and "inside 'mlp'" not in env.result, env.result
+
+
+def test_a_continuation_line_of_a_top_level_call_is_in_no_copy():
+    d, f = _file("c.py", AFTER)
+    env = _edit(d, "c.py", old="    dz2 @ W9.T,", new="    W9.T @ dz2,", start_line=16, end_line=16)
+    assert env.ok, env.error
+    assert "replaced lines 16-16" in env.result and "inside 'mlp'" not in env.result, env.result
+
+
+def test_old_inside_a_range_names_the_copy_too():
+    # main's "old is part of the range" path (one occurrence inside start_line..end_line)
+    d, f = _file("i.py", V1 + "\n" + V2)
+    env = _edit(d, "i.py", old="dz2 @ W2.T", new="W2.T @ dz2", start_line=8, end_line=10)
+    assert env.ok, env.error
+    assert "inside lines 8-10" in env.result and "inside 'mlp' at line 8" in env.result, env.result
+
+
 def test_a_markdown_file_gets_no_copy_note():
     d, f = _file("n.md", "def a():\n  x\ndef a():\n  y\n")
     env = _edit(d, "n.md", old="  y", new="  z")

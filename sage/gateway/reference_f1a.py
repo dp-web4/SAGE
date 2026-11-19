@@ -2211,6 +2211,8 @@ class ReferenceF1aDispatcher:
                             + "".join(lines[s1:]))
                 what = (f"replaced 1 occurrence inside lines {s0}-{s1} (your old was part of the "
                         f"range, and appears there once)")
+                if str(p).endswith(".py"):
+                    what += _which_copy(text, s0 + removed[:removed.find(old)].count("\n"))
                 return self._commit_edit(p, path, text, new_text, what, "", replacement=new)
             if old and inner > 1:
                 where = f"line {s0}" if s0 == s1 else f"lines {s0}-{s1}"
