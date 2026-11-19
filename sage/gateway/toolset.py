@@ -250,6 +250,8 @@ LEAN_KEEP = frozenset({("run", "data"), ("request_run", "rerun"), ("memory_read"
     ("tune", "name"),              # picks which parameter `value` sets or resets
     ("skill", "name"),             # the anchor for a rewrite ("writing it again replaces it") and retire
     ("retire_thread", "settled"),  # picks which settled entries leave with the thread; 'all' takes every one named
+    # CARRIER (legion/mission-artifact) parameters main does not have, classified by the same rule:
+    ("memory_write", "mode"),      # 'replace' overwrites the file; a closed set written as prose
 })
 # Every other optional parameter was REVIEWED and its prose may go: free text the being writes in
 # its own words, or a read-only selector whose misfill costs a re-read, not a change. A parameter
@@ -267,6 +269,7 @@ LEAN_DROP_REVIEWED = frozenset({
     ("settle", "evidence"), ("settle", "why"), ("skill", "query"),
     ("skill", "description"), ("skill", "when"), ("skill", "body"), ("skill", "why"),
     ("tune", "why"),
+    ("memory_read", "from_line"), ("memory_read", "lines"),  # CARRIER: read-only selectors
 })
 
 
