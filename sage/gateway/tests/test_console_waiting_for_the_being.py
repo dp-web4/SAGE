@@ -8,6 +8,9 @@ node, so what is pinned is behaviour, not a string:
   * pollDelay: 2 s while a turn waits, 20 s otherwise;
   * waitingLine: says "writing its answer" ONLY when the heartbeat reported its answer phase, otherwise
     names the phase it is in, or that no beat is running; nothing when nothing waits;
+  * waitingState (dp, 2026-11-19: no cancelling an in-flight call; let it complete, then switch
+    attention, and show 'busy' rather than 'thinking' meanwhile): 'thinking' only in the answer phase,
+    'busy' while any other phase runs, 'waiting' when no beat runs;
   * loadConversations(poll=true) rebuilds the log only when the conversation grew, so a 2 s poll
     neither flickers nor resets the scroll; a non-poll load still always rebuilds.
 
@@ -54,13 +57,14 @@ def _node(prog: str, arg) -> dict:
 
 
 PURE = "\n".join([_const("POLL_IDLE_MS"), _const("POLL_WAITING_MS"), _function("fmtAge"),
-                  _function("pollDelay"), _function("waitingLine")])
+                  _function("pollDelay"), _function("waitingState"), _function("waitingLine")])
 
 
 def _line(beats, awaiting, being="mcnugget-being"):
     prog = PURE + """
 const A = JSON.parse(process.argv[1]);
 process.stdout.write(JSON.stringify({line: waitingLine(A.being, A.beats, A.awaiting),
+                                     state: waitingState(A.beats, A.awaiting),
                                      delay: pollDelay(A.awaiting)}));
 """
     return _node(prog, {"beats": beats, "awaiting": awaiting, "being": being})
@@ -78,19 +82,31 @@ def test_nothing_waiting_says_nothing():
 
 def test_writing_its_answer_only_in_the_answer_phase():
     got = _line({"current": {"phase": "answer", "age_secs": 30}}, 1)["line"]
-    assert "writing its answer now" in got and got.startswith("1 turn waiting")
+    assert "writing its answer now" in got and got.startswith("thinking \u00b7 1 turn waiting")
     for phase in ("explore", "posture", "reflect", "account", "start"):
         got = _line({"current": {"phase": phase, "age_secs": 294}}, 1)["line"]
         assert "writing" not in got, phase
-        assert phase in got and "has not reached its answer yet" in got, got
+        assert phase in got and "runs to completion before it answers" in got, got
 
 
 def test_no_beat_running_is_said_plainly():
     got = _line({"current": None, "since_last_beat_end_secs": 125}, 2)["line"]
-    assert got.startswith("2 turns waiting") and "no beat is running" in got
+    assert got.startswith("waiting \u00b7 2 turns waiting") and "no beat is running" in got
     assert "waiting for a beat to start" in _line({}, 1)["line"]
     assert "mcnugget-being" in _line({"current": {"phase": "explore", "age_secs": 1}}, 1)["line"]
     assert "the being" in _line({"current": {"phase": "explore", "age_secs": 1}}, 1, being=None)["line"]
+
+
+def test_busy_while_a_step_runs_thinking_only_when_answering():
+    """dp, 2026-11-19: the in-flight call completes; meanwhile the console says busy, not thinking."""
+    for phase in ("explore", "posture", "reflect", "account", "start"):
+        got = _line({"current": {"phase": phase, "age_secs": 121}}, 1)
+        assert got["state"] == "busy", phase
+        assert got["line"].startswith("busy \u00b7 ") and "thinking" not in got["line"], got
+    got = _line({"current": {"phase": "answer", "age_secs": 4}}, 1)
+    assert got["state"] == "thinking" and got["line"].startswith("thinking \u00b7 ")
+    assert _line({"current": None, "since_last_beat_end_secs": 9}, 1)["state"] == "waiting"
+    assert _line({"current": {"phase": "explore", "age_secs": 9}}, 0)["state"] is None
 
 
 def _poll(listing: list, shown: int, poll: bool) -> dict:
