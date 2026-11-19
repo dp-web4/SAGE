@@ -195,6 +195,8 @@
     border-radius: 4px; font-size: 11px; padding: 2px 6px; margin-left: 8px; }
   .conv-state { font-size: 10px; color: var(--text-dim); margin-left: 8px; }
   .conv-state.readonly { color: var(--warn, #d29922); }
+  .conv-state.busy { color: var(--warn, #d29922); }
+  .conv-state.thinking { color: var(--accent, #58a6ff); }
   .conv-note { padding: 6px 10px; font-size: 10px; color: var(--text-dim);
     border-top: 1px solid var(--border); }
   /* a REFUSAL is not an empty list: shown at reading size, in the warning colour (dp 2026-10-08:
@@ -566,23 +568,35 @@ let beingName = null;
 
 function pollDelay(awaiting) { return awaiting > 0 ? POLL_WAITING_MS : POLL_IDLE_MS; }
 
-function waitingLine(being, beats, awaiting) {
+// What the being is doing while a turn waits (SAGE #788). dp, 2026-11-19: no cancelling an in-flight
+// model call; let it complete, then switch attention, and say 'busy' (not 'thinking') meanwhile.
+// 'thinking' is said ONLY when the heartbeat has reported its answer phase.
+function waitingState(beats, awaiting) {
   if (!awaiting) return null;
+  const cur = beats && beats.current;
+  if (cur && cur.phase === 'answer') return 'thinking';
+  if (cur) return 'busy';
+  return 'waiting';
+}
+
+function waitingLine(being, beats, awaiting) {
+  const state = waitingState(beats, awaiting);
+  if (!state) return null;
   const who = being || 'the being';
   const turns = awaiting === 1 ? '1 turn waiting' : awaiting + ' turns waiting';
   const cur = beats && beats.current;
-  if (cur && cur.phase === 'answer') {
-    return turns + ': ' + who + ' is writing its answer now.';
+  if (state === 'thinking') {
+    return 'thinking \u00b7 ' + turns + ': ' + who + ' is writing its answer now.';
   }
-  if (cur) {
-    return turns + ': ' + who + ' is mid-beat (' + cur.phase + ', running ' + fmtAge(cur.age_secs) +
-           ') and has not reached its answer yet.';
+  if (state === 'busy') {
+    return 'busy \u00b7 ' + turns + ': ' + who + ' is mid-beat (' + cur.phase + ', running ' +
+           fmtAge(cur.age_secs) + '); the step it is on runs to completion before it answers.';
   }
   if (beats && beats.since_last_beat_end_secs != null) {
-    return turns + ': no beat is running (the last ended ' + fmtAge(beats.since_last_beat_end_secs) +
-           ' ago); waiting for one to start.';
+    return 'waiting \u00b7 ' + turns + ': no beat is running (the last ended ' +
+           fmtAge(beats.since_last_beat_end_secs) + ' ago); waiting for one to start.';
   }
-  return turns + ': waiting for a beat to start.';
+  return 'waiting \u00b7 ' + turns + ': waiting for a beat to start.';
 }
 
 function renderConvState() {
@@ -591,7 +605,8 @@ function renderConvState() {
   convState.textContent = writable
     ? (waitingLine(beingName, lastBeats, (c && c.awaiting_being) || 0) || 'up to date')
     : 'read-only';
-  convState.className = 'conv-state' + (writable ? '' : ' readonly');
+  const state = writable ? waitingState(lastBeats, (c && c.awaiting_being) || 0) : null;
+  convState.className = 'conv-state' + (writable ? '' : ' readonly') + (state ? ' ' + state : '');
 }
 
 function convAwaiting() {
