@@ -187,6 +187,35 @@ def test_run_data_accepts_the_shapes_a_model_actually_emits():
         run_command({"path": "e.py", "data": 7}, ctx)
 
 
+@needs_bwrap
+def test_run_data_mapping_of_base_names_to_sources_is_the_list_it_names():
+    """cbp-being 2026-11-16 02:44: data='{"m.py": "scratch/m.py"}' six times, refused each
+    time as 'a base name with no directory'. A {base name: source} map is the stager's own
+    naming, so its values are the list."""
+    from sage.gateway.being_gate_client import run_command
+    ctx = {"memory_root": "/home/x/inst", "member": "b"}
+    want = run_command({"path": "scratch/e.py", "data": ["scratch/m.py"]}, ctx)
+    assert run_command({"path": "scratch/e.py", "data": '{"m.py": "scratch/m.py"}'}, ctx) == want
+    assert run_command({"path": "scratch/e.py", "data": {"m.py": "scratch/m.py"}}, ctx) == want
+    two = run_command({"path": "e.py", "data": ["scratch/a.npy", "b.md"]}, ctx)
+    assert run_command({"path": "e.py", "data": '{"a.npy": "scratch/a.npy", "b.md": "b.md"}'}, ctx) == two
+
+
+def test_run_data_mapping_that_renames_or_passes_settings_is_refused_with_the_list_to_send():
+    from sage.gateway.being_gate_client import run_command
+    ctx = {"memory_root": "/home/x/inst", "member": "b"}
+    # a rename: the key is not the source's base name
+    with pytest.raises(ValueError, match=r'a mapping .*send data=\["scratch/test_image.npy"\]') as e:
+        run_command({"path": "e.py", "data": '{"test_image": "scratch/test_image.npy"}'}, ctx)
+    assert "{\"test_image\":" not in str(e.value).split("keys")[0]  # not the old prose misread
+    # settings, not files: no list to offer, but the reason is named
+    with pytest.raises(ValueError, match="passes no arguments or settings") as e:
+        run_command({"path": "e.py", "data": '{"verbose": true}'}, ctx)
+    assert "send data=" not in str(e.value)
+    # an empty mapping is no data, as an empty list is (3 of its calls sent {})
+    assert run_command({"path": "e.py", "data": "{}"}, ctx) == run_command({"path": "e.py"}, ctx)
+
+
 def test_run_mounts_the_worktree_read_only_on_the_import_path(tmp_path, monkeypatch):
     from sage.gateway import being_gate_client as B
     monkeypatch.setattr(B, "sandbox_available", lambda: True)
@@ -1010,6 +1039,27 @@ def test_a_run_reporting_on_the_seat_carries_its_last_turn_and_a_plain_run_does_
     assert "last wrote to you" not in r.result["outside_the_sandbox"]       # only the daemon's answer
 
 
+@needs_sandbox
+def test_a_script_that_would_start_the_seat_is_told_even_when_it_fails_first(tmp_path):
+    """A script that starts the seat with systemctl but stops at an earlier line prints nothing about the
+    host. Its receipt still carries when the seat last wrote; the daemon's answer stays with what was printed."""
+    d, home = _run_dispatcher(tmp_path)
+    _seat_home(home)
+    d._seat_conversation = lambda: "test-seat"
+    (home / "scratch" / "start.py").write_text(
+        "import subprocess\nopen('/no-such-file-here')\n"
+        "subprocess.run(['systemctl', '--user', 'start', 'test-seat'])\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/start.py"}))
+    assert r.ok and r.result["exit"] != 0, r.result
+    assert "test-seat last wrote to you at 2026-11-08T21:32Z" in r.result["outside_the_sandbox"], r.result
+    assert "Hestia daemon on this machine was asked" not in r.result["outside_the_sandbox"]
+    # systemctl in a script that does not name the seat: nothing
+    (home / "scratch" / "lamp.py").write_text("import subprocess\nopen('/no-such-file-here')\n"
+                                             "subprocess.run(['systemctl', '--user', 'start', 'lamp'])\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/lamp.py"}))
+    assert r.ok and "outside_the_sandbox" not in r.result, r.result
+
+
 def test_a_long_gap_says_the_seat_may_be_away_not_that_the_probe_is_right(tmp_path):
     """legion's review of #663: "46 h before this run began" beside a probe's own line telling the being to
     restart the seat reads as agreement. Past SEAT_QUIET_S the note says a quiet seat may be away, with nothing
@@ -1079,6 +1129,36 @@ def test_a_rerun_of_the_same_bytes_says_when_they_ran_before(tmp_path):
     assert _run_key({"path": "scratch/b.py"}, [("b.py", b"print(1)\n")]) != k
 
 
+def test_the_same_bytes_named_another_way_are_the_same_run():
+    # sprout-being 11-17: a script run as scratch/<name> on 11-16 was named by its absolute path a day
+    # later, unchanged, and the receipt read as a first run
+    from sage.gateway.hestia_dispatch import _run_key
+    st = [("a.py", b"print(1)\n"), ("in.txt", b"x\n")]
+    k = _run_key({"path": "scratch/a.py", "data": ["scratch/in.txt"]}, st)
+    assert _run_key({"path": "/home/m/scratch/a.py", "data": ["/home/m/scratch/in.txt"]}, st) == k
+    assert _run_key({"path": "./scratch/a.py", "data": "scratch/in.txt"}, st) == k
+    # what the run sees still counts: another data file, another order, another argument
+    assert _run_key({"path": "scratch/a.py"}, st[:1]) != k
+    assert _run_key({"path": "scratch/a.py"}, st[::-1]) != k
+    assert _run_key({"path": "scratch/a.py", "data": ["scratch/in.txt"], "args": ["1"]}, st) != k
+
+
+def test_a_run_logged_under_the_old_key_is_still_found(tmp_path):
+    import json
+    from sage.gateway.hestia_dispatch import RUN_LOG, _run_keys, _run_seen_note
+    st = [("a.py", b"print(1)\n")]
+    new, old = _run_keys({"path": "scratch/a.py"}, st)
+    assert new != old
+    (tmp_path / RUN_LOG).write_text(json.dumps({"t": 1000.0, "key": old, "exit": 1, "said": "x"}) + "\n")
+    again = _run_seen_note(tmp_path, (new, old), 1, "", now=1000.0 + 600)
+    assert again.startswith("The same run as at 1970-01-01 00:16Z (10 min ago)")
+    # the new key is the one logged, so the next spelling finds that run
+    assert json.loads((tmp_path / RUN_LOG).read_text().splitlines()[-1])["key"] == new
+    abs_keys = _run_keys({"path": "/home/m/scratch/a.py"}, st)
+    assert _run_seen_note(tmp_path, abs_keys, 1, "", now=1000.0 + 900).startswith(
+        "The same run as at 1970-01-01 00:26Z (5 min ago)")
+
+
 @needs_sandbox
 def test_run_receipt_carries_same_as_before_on_an_unchanged_rerun(tmp_path):
     d, home = _run_dispatcher(tmp_path)
@@ -1139,3 +1219,37 @@ def test_a_plural_pid_a_probe_prints_is_said_to_be_part_of_the_run():
     from sage.gateway.hestia_dispatch import _run_note
     note = _run_note(0, "", ["a.py"], "daemon: PIDs 1 and 2 confirmed")
     assert "if PID 1 here came from such a listing" in note and "own process space" in note, note
+
+
+def test_a_run_that_asks_for_its_arguments_is_told_run_passes_none():
+    """sprout-being, 2026-11-13 02:10Z: its port check printed its usage line and exited 1, and it
+    passed the port as `data` twice. The receipt now says the script gets no arguments, for a
+    usage line on either stream, argparse's complaint, or an IndexError through sys.argv."""
+    from sage.gateway.hestia_dispatch import _run_note
+    said = "sys.argv holds only the script's name"
+    assert said in _run_note(1, "", ["p.py"], "Usage: p.py <port>")
+    assert said in _run_note(2, "usage: p.py [-h] port\np.py: error: the following arguments are "
+                                "required: port", ["p.py"])
+    assert said in _run_note(1, 'Traceback (most recent call last):\n  File "/work/p.py", line 4, in '
+                                '<module>\n    port = int(sys.argv[1])\nIndexError: list index out of '
+                                'range', ["p.py"])
+    assert said not in _run_note(0, "", ["p.py"], "usage: p.py <port>")      # it ran fine: no note
+    assert said not in _run_note(1, "", ["p.py"], "connect: refused")       # failed, not for argv
+    assert said not in _run_note(1, "", ["p.py"], "see the usage: section")  # not a usage line
+    # argv[0] is the script's own name, always present: a failure through it is not a missing argument
+    assert said not in _run_note(1, 'Traceback (most recent call last):\n  File "/work/p.py", line 3, in '
+                                    '<module>\n    open(os.path.join(os.path.dirname(sys.argv[0]), '
+                                    '"cfg.json"))\nFileNotFoundError: cfg.json', ["p.py"])
+
+
+@needs_sandbox
+def test_a_value_passed_as_data_is_told_data_only_stages_files(tmp_path):
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "p.py").write_text("print('hi')\n")
+    v = d._do_run(BeingIntent("run", {"path": "scratch/p.py", "data": ["30001"]}))
+    assert v.ok is False and "no such file in your home: 30001" in v.error
+    assert "does not hand values to your script" in v.error and "base name with no directory" not in v.error
+    g = d._do_run(BeingIntent("run", {"path": "scratch/p.py", "data": ["ghost.md"]}))
+    assert "base name with no directory" in g.error and "hand values" not in g.error
+    s = d._do_run(BeingIntent("run", {"path": "nope"}))                  # the script itself: no value hint
+    assert s.ok is False and "hand values" not in s.error

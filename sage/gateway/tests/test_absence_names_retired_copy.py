@@ -3,8 +3,8 @@
 Measured 2026-11-15 on cbp-being (scratch/verify-xor-numpy-only.py): retired at 19:06Z with a
 correct reason; at 19:12Z `run` said "no such file", so it wrote the script again under the same
 name and retired it a second time at 19:35Z; at 19:57Z retire_note said "nothing to retire"; at
-20:03Z memory_edit said "does not exist", and it stored remember #7915 "... has not been
-created" and told the seat the file was missing. Both retired copies sat beside the name.
+20:03Z memory_edit said "does not exist", and it stored a memory saying the script had never
+been created and told the seat the file was missing. Both retired copies sat beside the name.
 """
 import sys
 import tempfile
@@ -133,3 +133,20 @@ def test_a_symlinked_retired_copy_is_not_evidence():
     d = ReferenceF1aDispatcher(memory_root=root)
     r = d(BeingIntent("memory_read", {"path": "scratch/verify.py"}), ALLOW).result
     assert "was retired" not in r and "planted" not in r and "memory_write creates a file" in r, r
+
+
+def test_a_retired_copy_and_a_same_name_file_elsewhere_are_both_named():
+    # #739 (on main) names a same-name file one directory away; that is a separate fact from a
+    # retired copy beside the name, and an absence or a fresh create can have both.
+    d, root = _home_with_a_retired_script()
+    (root / "verify.py").write_text("print('top level')\n")
+    env = d(BeingIntent("memory_edit", {"path": "scratch/verify.py", "old": "a", "new": "b"}), ALLOW)
+    assert env.ok is False and "nothing to edit" in env.error
+    _names_the_copy(env.error)
+    assert "DOES exist at 'verify.py'" in env.error, env.error
+    assert "memory_write creates a file" not in env.error, env.error
+    env = d(BeingIntent("memory_write", {"path": "scratch/verify.py", "content": "print(1)\n"}), ALLOW)
+    assert env.ok, env.error
+    assert "This is a NEW file under a name that was retired" in env.result, env.result
+    assert "A file with this name already exists elsewhere: 'verify.py'" in env.result, env.result
+    assert ".." not in env.result.replace("...", ""), env.result
