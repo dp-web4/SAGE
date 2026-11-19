@@ -50,7 +50,9 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 # Files in the being's home itself that the SEAT owns. `entrustment.md` is what the being was
 # GIVEN; if it could append to it, what was extended and what it decided would merge in the
 # record. Refusing is not distrust: it may disagree anywhere else, and that record is wanted.
-SEAT_OWNED = ("entrustment.md",)
+# settled_seat_notes.jsonl is the seat's later word beside the being's settled entries (being_settled.SEAT_NOTES):
+# a being that could write it could make its seat appear to have said something, or erase that it did.
+SEAT_OWNED = ("entrustment.md", "settled_seat_notes.jsonl")
 # GOVERNANCE RECORDS IN THE HOME (SAGE #544). The being's home also holds the files that say who
 # it is to the society, and no being verb may write them:
 #   identity.json         the raising record: `identity.machine` picks the seat that arbitrates its
@@ -1146,6 +1148,29 @@ def _todo_close_door(p: Path) -> str:
     return (" To close a todo item you do not need an edit: memory_write todo.md with the item "
             "under done: and the window drops it. To start the whole list fresh, retire_note "
             "todo.md; the items still open are carried forward.")
+
+
+def _todo_miss_note(before: str, p: Path) -> str:
+    """On a memory_write of todo.md: name every done entry it added that closed nothing (SAGE #779).
+    Never fails the write: the append has already landed."""
+    try:
+        from sage.gateway.heartbeat import todo_unmatched_done  # lazy: heartbeat is the larger module
+        misses = todo_unmatched_done(before, p.read_text(errors="replace"))
+    except Exception:
+        return ""
+    if not misses:
+        return ""
+    parts = []
+    for entry, near in misses[:5]:
+        line = f"'{entry[:120]}' matched no item still open"
+        line += ("; the open items sharing the most words with it: "
+                 + "; ".join(f"'{t[:120]}'" for t in near)) if near else "; no open item shares a word with it"
+        parts.append(line)
+    more = f" (and {len(misses) - 5} more)" if len(misses) > 5 else ""
+    return (f" {len(misses)} done entr{'y' if len(misses) == 1 else 'ies'} closed nothing{more}: "
+            + ". ".join(parts) + ". A done entry closes the open item whose text it repeats; a name or "
+            "slug for it does not. To close one, write its line text under done: (copied from the "
+            "list), or `all: <words>` to close every open item containing those words.")
 
 
 # The being's running records, which retire_note starts fresh (see _do_retire_note).
@@ -2907,6 +2932,8 @@ class ReferenceF1aDispatcher:
         existed = p.exists()
         before_bytes = p.stat().st_size if existed else 0
         before_lines = 0
+        _is_todo = p == Path(self.memory_root) / "todo.md"
+        _todo_before = p.read_text(errors="replace") if (_is_todo and existed) else ""
         if existed:
             with open(p, errors="replace") as fh:
                 before_lines = sum(1 for _ in fh)
@@ -3008,6 +3035,8 @@ class ReferenceF1aDispatcher:
                            f"does not exist yet (for example {_fresh_name(p).name}); that receipt "
                            f"says \"created\".")
             result += where_line + "."
+        if _is_todo:
+            result += _todo_miss_note(_todo_before, p)
         result += repeat + _python_status(p)
         if p.suffix != ".py":
             result += _named_file_stamps(
@@ -3114,15 +3143,6 @@ class ReferenceF1aDispatcher:
                 cached = False
             self._wt_writable = cached
         return cached
-
-
-# Files inside the being's own home that the SEAT owns and the being may not write.
-# One entry, and it earns its place: `entrustment.md` is what the being was GIVEN. Its own
-# reading of it goes in notes/plan.md. If a being could append to the entrustment, the two
-# provenances would merge in the record and no later reader could tell what was extended to
-# it from what it decided for itself — which is the whole reason the file exists (PRD r3
-# §4). Refusing is not distrust: the being may disagree with it loudly anywhere else.
-SEAT_OWNED = ("entrustment.md",)
 
 
 # Matched as a path SEGMENT, wherever the checkout lives (main #258: shared-context is found beside

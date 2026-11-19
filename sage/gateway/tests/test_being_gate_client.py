@@ -2188,3 +2188,23 @@ def test_a_run_name_that_could_add_a_bind_never_reaches_the_law(tmp_path, monkey
     v = c.gate(BeingIntent("run", {"path": "scratch/s.py", "data": data}))
     assert v.blocks, v
     assert not calls, "refused at composition, before any decide()"
+
+
+def test_a_target_that_means_the_tests_folder_is_told_to_use_tests(tmp_path):
+    """nomad-being, three times (11-12, 11-16, 11-18): a folder or path in front of '::tests', or a
+    script path, each meaning "run my tests/ folder". The refusal now says the target is just 'tests',
+    and that nothing ran. A target with no such shape keeps the plain refusal."""
+    from sage.gateway.being_gate_client import check_command, CHECK_TARGETS, sandbox_available
+    if not sandbox_available():
+        pytest.skip("check composes only where its bubblewrap sandbox exists (Linux); it refuses elsewhere")
+    wt = tmp_path / "wt"
+    for rel in CHECK_TARGETS.values():
+        (wt / rel).mkdir(parents=True, exist_ok=True)
+    ctx = {"worktree": str(wt)}
+    for bad in ("textstats::tests", "being-worktrees/nomad-being::tests", "scratch/fix_textstats.py"):
+        with pytest.raises(ValueError) as e:
+            check_command({"target": bad}, ctx)
+        assert "the target is just 'tests'" in str(e.value) and "Nothing ran" in str(e.value), bad
+    with pytest.raises(ValueError) as e:
+        check_command({"target": "nosuite"}, ctx)
+    assert "just 'tests'" not in str(e.value)

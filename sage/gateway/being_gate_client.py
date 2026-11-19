@@ -2192,9 +2192,16 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
                     f"check: {os.path.basename(suite)!r} exists in more than one suite "
                     f"({sorted(owners)}); name the suite instead: '<suite>::{node}'.")
         if not sep or suite not in CHECK_TARGETS:
+            # NAME THE FIX WHEN THE SHAPE SAYS WHAT WAS MEANT. nomad-being, 11-12 and 11-16..18,
+            # three times: a folder or path in front of '::tests' ('<name>::tests', a worktree
+            # path '::tests') and once a script path, each meaning "run my tests/ folder". The
+            # refusal listed the valid forms and the being did not get from there to 'tests'.
+            meant_tests = ("tests" in target.lower() or "/" in target or target.endswith(".py"))
+            hint = (" Nothing ran; this is not a test failure. To run the tests/ folder of your "
+                    "worktree, the target is just 'tests'." if meant_tests else "")
             raise ValueError(
                 f"check 'target' must be one of {sorted(CHECK_TARGETS)} or "
-                f"'<suite>::<test_name>'; got {target!r}")
+                f"'<suite>::<test_name>'; got {target!r}.{hint}")
         if not re.fullmatch(r"[A-Za-z0-9_]+", node):
             # NAME THE STRING THAT WOULD WORK. A refusal that only restates the rule makes
             # the reader do the translation the refusal could have done.
@@ -3279,17 +3286,20 @@ _TOOL_SCHEMAS = {
     # A WHOLE LINE OF WORK CAN BE CLOSED AT ONCE (dp, 2026-11-01: "retire the whole hestia thread and work
     # on something different"; cbp-being had 550 open todo items and 29 settled entries on it, and could
     # only retire one note or one entry per act).
-    "retire_thread": ("Close a whole line of work at once: every OPEN todo item and every settled entry "
-                      "that names one of your words is moved out of what you are shown each beat, into one "
-                      "retired file (todo.retired-thread-<id>.md) that recall still searches. Use it when a "
-                      "topic is finished or someone asks you to drop it, so it stops coming back uninvited. "
-                      "Other items and entries stay as they are. preview='true' shows what would move and "
+    "retire_thread": ("Close a whole line of work at once: every OPEN todo item that names one of your words "
+                      "is moved out of what you are shown each beat, into one retired file "
+                      "(todo.retired-thread-<id>.md) that recall still searches. Use it when a topic is finished "
+                      "or someone asks you to drop it, so it stops coming back uninvited. Your settled "
+                      "conclusions stay unless you name them in settled; the receipt lists the ones your words "
+                      "name. Other items and entries stay as they are. preview='true' shows what would move and "
                       "changes nothing. A retire that takes most of a list needs the confirmation its preview "
                       "(with the same words and reason) returns, used in the same beat.",
                       {"words": "the topic, as words separated by commas, e.g. 'webserver, port 8080'. A word "
                                 "matches at the start of a word: 'install' also matches 'installer'",
                        "reason": "why this line of work is finished (needed unless preview='true')",
                        "preview": "optional: 'true' lists what would move and changes nothing",
+                       "settled": "optional: settled entries to retire with the thread, by id ('s3, s7') or 'all' "
+                                  "for every one your words name. Without it, none leaves",
                        "confirmation": "for a retire that takes most of a list: the one-use value its preview returned"},
                       ["words"]),
     # SKILLS (dp, 2026-10-27: "a 'skills' structure, and membot-type index for them ... model it on your

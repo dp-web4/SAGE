@@ -55,6 +55,20 @@ RENDER_CHARS = 4400
 
 _UNCHANGED = "unchanged: "
 
+#: A SEAT'S LATER WORD AGAINST AN ENTRY, shown beside it (seat_note). MEASURED ON SPROUT-BEING, 11-17..18: two of
+#: its entries held a world fact that was false (the account its seat runs under). Its seat said so in their
+#: conversation at least eight times in 21 h (seq 2906..2970), each time answering a request built on the entries.
+#: The entries were shown at the start of every beat; the seat's answers scrolled out of the conversation block
+#: within hours, and the next beat planned from the entries again (at least 15 requests 11-18 02:52..09:12Z).
+#: A correction that never sits beside the conclusion it answers does not reach the beat that plans from it.
+#: Written by a seat (sage/scripts/settled_seat_note.py), never by a being verb (reference_f1a.SEAT_OWNED). It
+#: points at a turn the seat really sent, and it never changes, closes or outranks the entry: which holds stays the
+#: being's. A note binds to the entry as settled (its id and its `at`): settled again or reopened, the being has
+#: answered it, and the note is no longer shown.
+SEAT_NOTES = "settled_seat_notes.jsonl"
+SEAT_NOTE_MAX_CHARS = 200
+SEAT_NOTES_SHOWN = 3
+
 #: A process number named in a settled entry. MEASURED ON SPROUT-BEING, 11-05..12: 13 of its 170 distinct
 #: settled answers cite one, all 13 about whether its seat was alive, both ways. 11 cite PID 2002, the run's user
 #: id (the first column of ps inside the sandbox), and 2 cite PID 3, a `pgrep -f` through a shell finding that
@@ -138,14 +152,97 @@ def _near(e: dict, near: Optional[Dict[str, List[str]]], show: int = 3) -> str:
     return f" ≈{','.join(pick)}{more}"
 
 
-def _line(e: dict, cap: int = 0, near: Optional[Dict[str, List[str]]] = None) -> str:
+def _line(e: dict, cap: int = 0, near: Optional[Dict[str, List[str]]] = None,
+          notes: Optional[Dict[str, List[dict]]] = None, short_note: bool = False) -> str:
     s = f"[{e['id']}{_near(e, near)}] {_flat(e['question'])} -> {_flat(e.get('answer', ''))}"
     if e.get("evidence"):
         s += f" (evidence: {_flat(e['evidence'])})"
     s += f" (settled {str(e.get('at', ''))[:10]})"
     if cap and len(s) > cap:
         s = s[:cap - 1].rstrip() + "…"
-    return s
+    # after the cap: the note is the one part of the line that is not the being's, and it is never cut off
+    return s + _note((notes or {}).get(e["id"]), short=short_note)
+
+
+def _note(notes: Optional[List[dict]], short: bool = False) -> str:
+    """The newest seat note on an entry, whole (one sentence, at most SEAT_NOTE_MAX_CHARS); a short line names it."""
+    if not notes:
+        return ""
+    n = notes[-1]
+    more = f"; {len(notes) - 1} earlier" if len(notes) > 1 else ""
+    if short:
+        return f" ({n['by']} disagreed: seq {n['seq']}{more})"
+    return f" ({n['by']} disagreed at seq {n['seq']}, {_said_day(n)}: {_flat(n['says'])}{more})"
+
+
+def _said_day(n: dict) -> str:
+    """The day the seat SAID it (the turn's own time), not the day the note was attached."""
+    return str(n.get("said_at") or n.get("at") or "")[:10]
+
+
+def seat_notes(instance, entries: List[dict]) -> Dict[str, List[dict]]:
+    """{entry id: notes, oldest first} for the notes that still bind: to an entry as it stands now (id and `at`)."""
+    try:
+        lines = (Path(instance) / SEAT_NOTES).read_text(errors="replace").splitlines()
+    except OSError:
+        return {}
+    live = {(e["id"], e.get("at")) for e in entries}
+    out: Dict[str, List[dict]] = {}
+    for line in lines:
+        try:
+            n = json.loads(line)
+        except ValueError:
+            continue
+        if (isinstance(n, dict) and (n.get("id"), n.get("entry_at")) in live
+                and all(n.get(k) for k in ("by", "seq", "says"))):
+            out.setdefault(n["id"], []).append(n)
+    return out
+
+
+def seat_note(instance, entry_id: str, by: str, seq: int, says: str, conv_id: Optional[str] = None,
+              now: Optional[float] = None) -> dict:
+    """Attach to a settled entry a pointer to the seat's own later turn that disagrees with it. The entry is not
+    touched. Refused (ValueError, nothing written) unless the entry exists, `says` is one line within
+    SEAT_NOTE_MAX_CHARS, and seq `seq` in the conversation `conv_id` (default: `by`) was sent by `by` after the entry
+    was settled. The note says where the disagreement is; it cannot say anything the seat did not tell the being."""
+    says = _flat(says)
+    if not says or len(says) > SEAT_NOTE_MAX_CHARS:
+        raise ValueError(f"says: one sentence, 1..{SEAT_NOTE_MAX_CHARS} characters (got {len(says)})")
+    entries, _, err = read(instance)
+    if err:
+        raise ValueError(err)
+    want = entry_id if str(entry_id).startswith("s") else f"s{entry_id}"
+    e = next((x for x in entries if x["id"] == want), None)
+    if e is None:
+        raise ValueError(f"no settled entry {entry_id!r} (there are: {', '.join(x['id'] for x in entries) or 'none'})")
+    from sage.gateway import conversations as conv
+    if not conv.ID_RE.match(conv_id or by):
+        raise ValueError(f"not a conversation id: {conv_id or by!r}")
+    log, _ = conv._paths(Path(instance), conv_id or by)
+    turn = None
+    try:
+        lines = log.read_text(errors="replace").splitlines()
+    except OSError:
+        lines = []
+    for line in lines:
+        try:
+            t = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(t, dict) and t.get("seq") == int(seq):
+            turn = t
+    if turn is None:
+        raise ValueError(f"no turn seq {seq} in {log.name}")
+    if turn.get("from") != by:
+        raise ValueError(f"seq {seq} was sent by {turn.get('from')!r}, not {by!r}: a note points at the seat's own word")
+    if str(turn.get("ts", "")) <= str(e.get("at", "")):
+        raise ValueError(f"seq {seq} ({turn.get('ts')}) is not later than {want} ({e.get('at')})")
+    note = {"at": _iso(now), "id": want, "entry_at": e.get("at"), "by": by, "conv": conv_id or by,
+            "seq": int(seq), "said_at": str(turn.get("ts", "")), "says": says}
+    with _home_lock(Path(instance)):
+        with open(Path(instance) / SEAT_NOTES, "a") as f:
+            f.write(json.dumps(note, ensure_ascii=False) + "\n")
+    return note
 
 
 def listing(instance) -> str:
@@ -156,9 +253,10 @@ def listing(instance) -> str:
         return ("You have not settled anything yet. To settle something, give question and answer "
                 "(and optionally evidence: a seq, a file, a frame). It is then shown to you every beat.")
     near = _neighbours(entries)   # once, not per entry (pub's review of #661)
+    notes = seat_notes(instance, entries)
     return (f"What you have settled ({len(entries)}, newest first). To change one, settle the same "
             "question again (or its id with that question); to take one back, give its id and reopen='true'.\n"
-            + "\n".join("- " + _line(e, near=near) for e in reversed(entries)))
+            + "\n".join("- " + _line(e, near=near, notes=notes) for e in reversed(entries)))
 
 
 def settle(instance, args: Dict, now: Optional[float] = None) -> Tuple[bool, str, bool]:
@@ -541,7 +639,8 @@ def _cut(s: str, n: int) -> str:
     return s if len(s) <= n else s[:max(n - 1, 1)].rstrip() + "…"
 
 
-def _short(e: dict, cap: int, near: Optional[Dict[str, List[str]]] = None) -> str:
+def _short(e: dict, cap: int, near: Optional[Dict[str, List[str]]] = None,
+           notes: Optional[Dict[str, List[dict]]] = None) -> str:
     """An entry as its id, question, the head of its answer and day, cut to fit `cap`.
 
     ONE ID IN A SHORT LINE'S MARK, AND NEVER AT THE QUESTION'S EXPENSE (legion's review of #661): on legion-being's
@@ -554,7 +653,7 @@ def _short(e: dict, cap: int, near: Optional[Dict[str, List[str]]] = None) -> st
     entry left only the newest whole and the rest as questions. Its next three acts to start the seat came at
     11-16 04:10Z, 11-17 03:37Z and 04:12Z, with both questions in view and neither answer. The answer gets the
     larger share; the question keeps its floor."""
-    tail = f" (settled {str(e.get('at', ''))[:10]})"
+    tail = f" (settled {str(e.get('at', ''))[:10]})" + _note((notes or {}).get(e["id"]), short=True)
     pre = f"[{e['id']}{_near(e, near, 1)}] "
     if cap - len(pre) - len(tail) < SHORT_QUESTION_FLOOR:
         pre = f"[{e['id']}] "
@@ -589,6 +688,27 @@ def render(instance) -> str:
         head += ("\n(\u2248 after an id names other entries whose question reads like this one's, the oldest "
                  "first: [s9 \u2248s4,s7] reads close to s4 and s7, and +N counts the rest. Their answers may "
                  "agree or not.)")
+    notes = seat_notes(instance, entries)
+    if notes:
+        # THE NOTE'S WORDS IN THE HEAD, ONCE. On sprout-being's full list (30 entries, 11-18) the entry a note was
+        # for was shown short, and a short line has room for a pointer, not a sentence; the turn it points at had
+        # scrolled out of the conversation block hours before. A pointer to words the beat cannot see is the gap
+        # this was written to close.
+        head += ("\n(Your seat has since said otherwise about these. Each entry is still yours: keep it, settle it "
+                 "again, or reopen it. Settled again or reopened, its note is no longer shown.)")
+        # AT MOST SEAT_NOTES_SHOWN WHOLE (legion's review of #783): each whole note is a line of up to ~240 chars
+        # that the head takes before the entries get any; 8 notes on a 30-entry list put the block over
+        # RENDER_CHARS, 30 put it at 9784. The newest notes are shown whole; the rest are named, and settle with
+        # no arguments shows them.
+        newest_said = sorted(notes, key=lambda i: str(notes[i][-1].get("at", "")))[-SEAT_NOTES_SHOWN:]
+        for e in reversed(entries):
+            if e["id"] in newest_said:
+                n = notes[e["id"]][-1]
+                head += (f"\n- on {e['id']}: {n['by']} at seq {n['seq']} ({_said_day(n)}): "
+                         f"{_flat(n['says'])}")
+        also = [e["id"] for e in reversed(entries) if e["id"] in notes and e["id"] not in newest_said]
+        if also:
+            head += f"\n- also on {', '.join(also)} (settle with no arguments shows them)"
     pid_ids, pid_nums = _pid_entries(entries)
     if pid_ids:
         shown = ", ".join(pid_ids[:4]) + (f" +{len(pid_ids) - 4}" if len(pid_ids) > 4 else "")
@@ -596,14 +716,14 @@ def render(instance) -> str:
     foot = "- (entries shortened with …: settle with no arguments shows them whole)"
     newest = list(reversed(entries))
     # room for the newest whole, then an equal share for each of the rest
-    rest = RENDER_CHARS - len(head) - len(foot) - 2 - (len(_line(newest[0], RENDER_ENTRY_CHARS, near)) + 3)
+    rest = RENDER_CHARS - len(head) - len(foot) - 2 - (len(_line(newest[0], RENDER_ENTRY_CHARS, near, notes, True)) + 3)
     short_cap = rest // max(len(newest) - 1, 1) - 3
-    shorts = ["- " + _short(e, min(short_cap, RENDER_ENTRY_CHARS), near) for e in newest]
+    shorts = ["- " + _short(e, min(short_cap, RENDER_ENTRY_CHARS), near, notes) for e in newest]
     reserve = sum(len(x) + 1 for x in shorts)
     lines, used, cut = [], len(head), 0
     for e, short in zip(newest, shorts):
         reserve -= len(short) + 1
-        full = "- " + _line(e, RENDER_ENTRY_CHARS, near)
+        full = "- " + _line(e, RENDER_ENTRY_CHARS, near, notes, True)
         room = RENDER_CHARS - (len(foot) + 1 if cut or reserve else 0)
         if not lines or (not cut and used + len(full) + 1 + reserve <= room):
             ln = full

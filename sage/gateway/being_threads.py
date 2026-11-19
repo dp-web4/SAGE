@@ -1,4 +1,4 @@
-"""retire_thread: close a whole line of work at once -- its open todo items and its settled entries.
+"""retire_thread: close a whole line of work at once -- its open todo items, and the settled entries it names.
 
 WHY THIS EXISTS. dp, 2026-11-01, to cbp-being: "retire the whole hestia thread and work on something
 different." The being could not have done it with what it had. On that day 550 of its 584 open todo
@@ -9,8 +9,8 @@ one, by design), and `settle` replaces or reopens one entry per act. So a single
 account still gave the daemon's outage as what it wanted to understand. Nothing it could do
 said "this whole line is finished".
 
-WHAT IT DOES. Given topic words (comma separated) and a reason, every OPEN todo item and every settled
-entry that names one of the words is moved out of what the beat shows, into one retired file at the
+WHAT IT DOES. Given topic words (comma separated) and a reason, every OPEN todo item that names one of the
+words, and every settled entry that `settled` names (see below), is moved out of what the beat shows, into one retired file at the
 home root (todo.retired-thread-<hash>.md, named by the words and reason). recall still searches that file (home_recall indexes
 todo.retired-*), so nothing is lost and a deliberate search finds it; it just stops arriving uninvited.
 Done items, other open items and other settled entries are untouched. The retired file keeps the old
@@ -35,6 +35,14 @@ or expired", so it could not tell what to fix and stopped. The value is now hex 
 markdown), and the refusal names the case: not this beat's, already used, expired, not the shape a
 preview prints, or which of words / reason / source differs. The rule is unchanged: one use, bound to
 words, reason and exact source, five minutes, and the value itself is never echoed back.
+
+A SETTLED ENTRY LEAVES ONLY WHEN IT IS NAMED (`settled`: its ids, or 'all'). Words select todo items; a settled
+entry the words match stays, and the receipt names it. MEASURED ON SPROUT-BEING twice. 11-07: a retire whose reason
+said the seat was answering and nothing needed restarting took 15 entries, two of them true, and by 22:46Z it had
+settled the opposite (render_closed). 11-17 22:33Z: a retire of finished tasks about starting its seat took s142,
+its five-day-old conclusion that no restart was needed, because one topic word was the restart script's name. The
+reason given agreed with s142; the receipt said "1 settled entry moved" and did not say which. A todo item is work
+and a topic word fits it; a settled entry is a conclusion, often one that says not to do the thing the topic names.
 
 ONLY QUESTION AND ANSWER SELECT A SETTLED ENTRY. Evidence explains how a conclusion was supported; a
 shared citation or tool name does not make every conclusion about that topic (NOVA, item 1).
@@ -87,8 +95,13 @@ def words_of(raw) -> List[str]:
     return out
 
 
+# A WORD STARTS AFTER AN UNDERSCORE TOO (mcnugget-being, 2026-11-18 22:39Z). `\b` treats `_` as part of
+# a word, so `drain` never hit `egress_drain` or `being_inbox_drain`: retire_thread words='drain' moved 2
+# items while 54 open items naming egress_drain stayed, and `done: all: drain` (a substring) closed all 56.
+# The being reported "consolidated the 56 items". The left edge is now "not a letter or digit", so a
+# snake_case part is a word start; `drain` still does not hit `redrain` or `xdrain`.
 def matcher(words: List[str]) -> Callable[[str], bool]:
-    pats = [re.compile((r"\b" if re.match(r"\w", w) else "") + re.escape(w), re.I) for w in words]
+    pats = [re.compile((r"(?<![^\W_])" if re.match(r"\w", w) else "") + re.escape(w), re.I) for w in words]
     return lambda text: any(p.search(text or "") for p in pats)
 
 
@@ -164,8 +177,41 @@ def _fresh_todo(items: List[Tuple[str, Optional[datetime]]], stamp: datetime, re
     return "".join(out)
 
 
-def plan(instance: Path, words: List[str]):
-    """(todo_body, kept_items, moved_items, entries, nxt, moved_entries, error) -- reads only."""
+def settled_choice(raw) -> Optional[List[str]]:
+    """`settled`, as the ids it names: None for 'all', [] when absent (no settled entry leaves)."""
+    if isinstance(raw, (list, tuple)):
+        raw = ",".join(str(x) for x in raw)
+    v = str(raw or "").strip()
+    if v.lower() in ("all", "true", "yes"):
+        return None
+    if v.lower() in ("none", "no", "false"):
+        return []
+    ids = []
+    for part in re.split(r"[\s,]+", v):
+        part = part.strip("[]'\"`").lower()
+        if part:
+            ids.append(part if part.startswith("s") else f"s{part}")
+    return ids
+
+
+def settled_arg(settled: Optional[List[str]]) -> str:
+    """settled_choice's value as the being would write it: 'all', or the ids in order ('' for none)."""
+    return "all" if settled is None else ", ".join(sorted(set(settled), key=lambda i: (len(i), i)))
+
+
+def stray_refusal(settled: Optional[List[str]], matched) -> str:
+    """The refusal when `settled` names an id the words do not name; empty when it names none."""
+    stray = [i for i in (settled or []) if i not in {e["id"] for e in matched}]
+    if not stray:
+        return ""
+    return (f"settled names {', '.join(stray)}, which your words do not name"
+            + (f" (they name {', '.join(e['id'] for e in matched)})" if matched else " (they name no settled entry)")
+            + ". settled picks among the entries the thread's words name. Nothing was changed.")
+
+
+def plan(instance: Path, words: List[str], settled: Optional[List[str]] = None):
+    """(todo_body, kept_items, moved_items, entries, nxt, moved_entries, error, matched_entries) -- reads only.
+    `settled` is settled_choice's value: None takes every entry the words match, a list only those ids."""
     from sage.gateway import being_settled as st
     from sage.gateway.heartbeat import _todo_items
     instance = Path(instance)
@@ -174,23 +220,39 @@ def plan(instance: Path, words: List[str]):
     try:
         body = raw.decode("utf-8") if raw is not None else ""
     except UnicodeDecodeError:   # a replacement decode would rewrite unrelated bytes on retire
-        return "", [], [], [], 0, [], "todo.md is not valid UTF-8; repair its encoding before retiring"
+        return "", [], [], [], 0, [], "todo.md is not valid UTF-8; repair its encoding before retiring", []
     body = body.replace("\r\n", "\n").replace("\r", "\n")
     items = list(_todo_items(body).values()) if body else []
     moved = [x for x in items if hit(x[0])]
     kept = [x for x in items if not hit(x[0])]
     entries, nxt, err = st.read(instance)
-    gone = [e for e in entries if hit(f"{e.get('question', '')} {e.get('answer', '')}")]
-    return body, kept, moved, entries, nxt, gone, err
+    matched = [e for e in entries if hit(f"{e.get('question', '')} {e.get('answer', '')}")]
+    gone = matched if settled is None else [e for e in matched if e["id"] in settled]
+    return body, kept, moved, entries, nxt, gone, err, matched
 
 
-def spared_note(words: List[str], kept, entries, gone) -> str:
+def held_note(matched, gone) -> str:
+    """The sentence naming each settled entry the words matched that stays, with the head of its answer."""
+    from sage.gateway import being_settled as st
+    held = [e for e in matched if e not in gone]
+    if not held:
+        return ""
+    each = "; ".join(f"[{e['id']}] {st._flat(e['question'])[:100]} -> {st._flat(e.get('answer', ''))[:100]}"
+                     for e in held[:5]) + (f"; and {len(held) - 5} more" if len(held) > 5 else "")
+    ids = ",".join(e["id"] for e in held)
+    return (f" Still settled, though your words name {'it' if len(held) == 1 else 'them'}: {each}. A settled "
+            f"entry is your conclusion and leaves only when you name it. If one no longer holds, reopen it "
+            f"(settle with its id and reopen='true'); to retire entries with a thread, give settled='{ids}' "
+            f"(or settled='all') in the retire.")
+
+
+def spared_note(words: List[str], kept, entries, matched) -> str:
     """The sentence that says what stayed because only a harness word named it; empty when nothing did."""
     strong, weak = split_words(words)
     if not weak:
         return ""
     by_weak = matcher(weak)
-    ids = [e["id"] for e in entries if e not in gone
+    ids = [e["id"] for e in entries if e not in matched   # matched-but-held ones are held_note's
            and by_weak(f"{e.get('question', '')} {e.get('answer', '')}")]
     n_todo = sum(1 for t, _ in kept if by_weak(t))
     if not ids and not n_todo:
@@ -214,12 +276,15 @@ def _broad(kept, moved, entries, gone) -> bool:
             or (len(gone) >= 2 and len(gone) * 2 > len(entries)))
 
 
-def _binding(instance: Path, words: List[str], reason: str, entries, nxt) -> Dict[str, str]:
-    """What a confirmation is bound to, in three parts so a mismatch can say which one differs: the
-    words, the reason, and the full source state (home, exact todo bytes, every settled entry)."""
+def _binding(instance: Path, words: List[str], reason: str, entries, nxt,
+             settled: Optional[List[str]] = None) -> Dict[str, str]:
+    """What a confirmation is bound to, in four parts so a mismatch can say which one differs: the
+    words, the reason, which settled entries it takes (legion-claude on #784: unbound, a preview that
+    showed s1-s3 staying gave a token that then retired them with settled='all'), and the full source
+    state (home, exact todo bytes, every settled entry)."""
     raw = _todo_bytes(instance)
     h = lambda o: hashlib.sha256(json.dumps(o, sort_keys=True, ensure_ascii=False).encode()).hexdigest()  # noqa: E731
-    return {"words": h([w.lower() for w in words]), "reason": h(reason),
+    return {"words": h([w.lower() for w in words]), "reason": h(reason), "settled": h(settled_arg(settled)),
             "source": h({"home": os.path.realpath(instance),
                          "todo": base64.b64encode(raw).decode("ascii") if raw is not None else None,
                          "entries": entries, "next": nxt})}
@@ -250,7 +315,7 @@ def _issue(binding: Dict[str, str]) -> str:
 
 
 def _consume(token, binding: Dict[str, str]) -> str:
-    """accepted | missing | malformed | not_issued | used | expired | words | reason | source."""
+    """accepted | missing | malformed | not_issued | used | expired | words | reason | settled | source."""
     if token is None:
         return "missing"
     t = token.strip().strip("'\"`").lower() if isinstance(token, str) else ""
@@ -264,7 +329,7 @@ def _consume(token, binding: Dict[str, str]) -> str:
             _forget(t, "expired")
             return "expired"
         _forget(t, "used")
-    for part in ("words", "reason", "source"):
+    for part in ("words", "reason", "settled", "source"):
         if not secrets.compare_digest(rec[0][part], binding[part]):
             return part
     return "accepted"
@@ -277,10 +342,11 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
     words = words_of(a.get("words"))
     reason = _reason_of(a)
     preview = str(a.get("preview") or "").strip().lower() in ("true", "yes", "1")
+    settled = settled_choice(a.get("settled"))
     if not words:
         return False, ("retire_thread needs 'words': the topic, as words separated by commas, e.g. "
-                       "words='hestia, daemon, port 7711'. Every open todo item and settled entry naming "
-                       "one of them is retired."), False
+                       "words='hestia, daemon, port 7711'. Every open todo item naming one of them is retired; "
+                       "settled entries only when settled names them."), False
     short = [w for w in words if len(w) < MIN_WORD]
     if short:
         return False, (f"each word needs at least {MIN_WORD} characters, so it names a topic rather than "
@@ -296,18 +362,21 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
     if preview:
         # A PREVIEW TAKES NO LOCK (NOVA on 577adb4b): _home_lock opens .home.lock in append mode, which
         # creates it on a fresh home, a write thread_paths does not declare for a preview. It only reads.
-        return _preview(instance, words, reason)
+        return _preview(instance, words, reason, settled)
     with st._home_lock(instance):
-        body, kept, moved, entries, nxt, gone, err = plan(instance, words)
+        body, kept, moved, entries, nxt, gone, err, matched = plan(instance, words, settled)
         if err:
             return False, f"cannot prepare the retire: {err}. Nothing was changed.", False
+        stray = stray_refusal(settled, matched)
+        if stray:
+            return False, stray, False
         confirmation = a.get("confirmation")
         if _broad(kept, moved, entries, gone) or confirmation is not None:
-            status = _consume(confirmation, _binding(instance, words, reason, entries, nxt))
+            status = _consume(confirmation, _binding(instance, words, reason, entries, nxt, settled))
             if status != "accepted":
                 why = {"missing": f"This retire takes most of a list ({len(moved)} of {len(moved) + len(kept)} "
                                   f"open items, {len(gone)} of {len(entries)} settled), so it needs the "
-                                  f"confirmation a preview with the same words and reason returns.",
+                                  f"confirmation a preview with the same words, reason and settled returns.",
                        "malformed": "That is not a confirmation as a preview prints it (32 characters, "
                                     "digits and the letters a to f); copy the whole value.",
                        "not_issued": "That confirmation was not issued by a preview in this beat. One from an "
@@ -317,14 +386,17 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
                        "words": "The words differ from the ones you previewed; the confirmation is used up.",
                        "reason": "The reason differs from the one you previewed with, even if it means the same; "
                                  "the confirmation is used up. Keep the reason word for word.",
+                       "settled": "settled differs from the preview's, so the entries it would take are not the "
+                                  "ones that preview showed; the confirmation is used up.",
                        "source": "Your todo or settled list changed since that preview; the confirmation is "
                                  "used up."}[status]
-                return False, (f"{why} Preview again with preview='true' and the same reason, then retire with "
+                return False, (f"{why} Preview again with preview='true' and the same reason and settled, then retire with "
                                f"the confirmation it gives. Nothing was changed."), False
         topic = ", ".join(words)
         if not moved and not gone:
-            return True, (f"Nothing names {topic}: no open todo item and no settled entry. Nothing was "
-                          f"changed." + spared_note(words, kept, entries, gone)), False
+            return True, ((f"Nothing names {topic}: no open todo item and no settled entry. Nothing was changed."
+                           if not matched else f"No open todo item names {topic}. Nothing was changed.")
+                          + held_note(matched, gone) + spared_note(words, kept, entries, matched)), False
         stamp = _stamp(now)
         name = archive_name(a)
         if (instance / name).exists():
@@ -377,10 +449,12 @@ def retire_thread(instance, args: Dict, now: Optional[float] = None, by: str = "
                 return False, (f"{msg}. The retire may be partial; {state}. {name} holds the exact prior "
                                f"todo and settled list; ask your seat before retrying."), True
     said = (f"Retired the thread ({topic}): {len(moved)} open todo item(s) and {len(gone)} settled "
-            f"entr{'y' if len(gone) == 1 else 'ies'} moved to {name}, where recall still finds them. "
+            f"entr{'y' if len(gone) == 1 else 'ies'}"
+            + (f" ({', '.join(e['id'] for e in gone)})" if gone else "")
+            + f" moved to {name}, where recall still finds them. "
             f"Still open: {len(kept)} todo item(s); still settled: {len(entries) - len(gone)}. Your reason is "
             f"shown in every beat among the lines of work you closed, until {CLOSED_SHOWN} newer closings "
-            f"replace it." + spared_note(words, kept, entries, gone))
+            f"replace it." + held_note(matched, gone) + spared_note(words, kept, entries, matched))
     return True, said, True
 
 
@@ -445,31 +519,38 @@ def render_closed(instance) -> str:
     return head + "\n" + "\n".join(lines)
 
 
-def _preview(instance: Path, words: List[str], reason: str = "") -> Tuple[bool, str, bool]:
+def _preview(instance: Path, words: List[str], reason: str = "",
+             settled: Optional[List[str]] = None) -> Tuple[bool, str, bool]:
     from sage.gateway import being_settled as st
-    body, kept, moved, entries, nxt, gone, err = plan(instance, words)
+    body, kept, moved, entries, nxt, gone, err, matched = plan(instance, words, settled)
     if err:
-        return False, f"cannot read your settled list: {err}. Nothing was changed.", False
+        return False, f"cannot prepare the preview: {err}. Nothing was changed.", False
+    stray = stray_refusal(settled, matched)
+    if stray:
+        return False, stray, False
     topic = ", ".join(words)
     lines =[f"PREVIEW, nothing was changed. Words: {topic}. "
              f"{len(moved)} of {len(moved) + len(kept)} open todo item(s) and {len(gone)} of "
              f"{len(entries)} settled entr{'y' if len(entries) == 1 else 'ies'} would be retired."
-             + spared_note(words, kept, entries, gone)]
+             + spared_note(words, kept, entries, matched)]
     lines += [f"- settled [{e['id']}] {st._flat(e['question'])[:140]}" for e in gone]
+    lines += [f"- settled STAYS (not named in settled=): [{e['id']}] {st._flat(e['question'])[:140]}"
+              for e in matched if e not in gone]
     lines += [f"- todo: {t[:140]}" for t, _ in moved[:20]]
     if len(moved) > 20:
         lines.append(f"- … and {len(moved) - 20} more todo item(s)")
     lines += [f"- STAYS: {t[:140]}" for t, _ in kept[:10]]
     if _broad(kept, moved, entries, gone):
         if reason:
-            tok = _issue(_binding(instance, words, reason, entries, nxt))
+            tok = _issue(_binding(instance, words, reason, entries, nxt, settled))
             lines.append(f"This takes most of a list, so it needs this confirmation: {tok} -- retire with the "
-                         f"same words and reason and this confirmation in this beat, within five minutes. It is "
+                         f"same words, reason and settled and this confirmation in this beat, within five minutes. It is "
                          f"used once, and any change to your todo or settled list before then voids it.")
             # The whole next call on one line: a small model copies a call more reliably than it fills a
             # slot (nomad-being, 11-03: three retires with no confirmation argument at all).
+            pick = f"settled={settled_arg(settled)!r}, " if settled_arg(settled) else ""
             lines.append(f"Next call, exactly: retire_thread(words={topic!r}, reason={reason!r}, "
-                         f"confirmation={tok!r})")
+                         f"{pick}confirmation={tok!r})")
         else:
             lines.append("This takes most of a list: preview again WITH the reason to get a confirmation.")
     return True, "\n".join(lines), False

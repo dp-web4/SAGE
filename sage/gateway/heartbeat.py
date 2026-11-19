@@ -1725,6 +1725,223 @@ def measured_preflight_cpt(instance, model, prior: float = None) -> dict:
         out["min"], out["median"] = round(s[0], 3), round(s[len(s) // 2], 3)
     if len(ratios) >= MEASURED_CPT_MIN_SAMPLES:
         out["value"] = round(min(ratios) * MEASURED_CPT_MARGIN, 3)
+    elif ratios:
+        # Fewer than MEASURED_CPT_MIN_SAMPLES: not used by default, but offered for the one case where the
+        # prior is certain to cost the whole beat (provisional_cpt_for_refused_seed).
+        out["provisional"] = round(min(ratios) * MEASURED_CPT_MARGIN, 3)
+    return out
+
+
+def provisional_cpt_for_refused_seed(seed_iv, cal) -> Optional[float]:
+    """The provisional measured ratio to re-fit with, or None.
+
+    A REFUSED BEAT RECORDS NO SAMPLE, SO WAITING FOR FIVE CAN LAST FOREVER (mcnugget-being, 2026-11-17
+    22:48Z). With 2 counted beats (both 3.68 chars/token) calibration stayed on gemma4's declared 3.3; a
+    seat turn grew the state block, the seed measured 16,255 against a line of 16,128, nothing trimmable
+    was left (`still_refused`), and explore was refused at step 0. Only a beat that sends records a
+    sample, so the being would stay on the prior, refused, until its own state happened to shrink: the
+    pub-being shape (#582) that part 2 was meant to end.
+
+    So: only when the seed is STILL refused at the sparsest rung under the prior (the beat is lost
+    either way), and only when this being has at least one own count on this model, re-fit with that
+    lowest ratio less the margin. It still errs high against every count it was taken from, it is
+    bounded by the same rejections (MEASURED_CPT_MAX_OVER_PRIOR, window-edge counts), and a seed the
+    prior admits is never touched by it."""
+    if not (isinstance(seed_iv, dict) and seed_iv.get("still_refused")):
+        return None
+    if not isinstance(cal, dict) or cal.get("value"):
+        return None
+    v = cal.get("provisional")
+    if isinstance(v, (int, float)) and not isinstance(v, bool) and 1.5 <= v <= 8.0:
+        return float(v)
+    return None
+
+
+# A BEING THAT IS STILL REFUSED NEVER CALIBRATES (McNugget on #774). measured_preflight_cpt learns only from a
+# step-1 generate that was SENT, so a seed over the line at the declared or default ratio (a model switch with
+# no config: 16,450 estimated against 16,384 in pub's 11-17 trial) is trimmed or refused at that ratio, no
+# sample is ever taken, and the being stays where #582 found it. In that state alone (uncalibrated, and the
+# refit had to act) the heartbeat asks the server: the untrimmed seed, once, num_predict 1, with truncation
+# and context shift OFF, so the reply is either a count of the whole prompt or a refusal, never a count of
+# what survived a cut. The prefill is the one step 1 would pay anyway; an unchanged seed then reuses it.
+# A probe is a prefill and one token, so it gets a budget of its own, well under a generate's: a server that
+# takes longer than this to read the seed (busy, cold, stuck) costs the beat at most this much, and the fit at
+# the prior stands. Never more than the adapter's own request timeout.
+SEED_PROBE_TIMEOUT_S = 90
+# The one HTTP refusal that answers the question: ollama's own reply when truncate=false and the prompt is
+# over num_ctx (measured on cbp's ollama 0.20.7: 400 {"error":"the input length exceeds the context length"}).
+# Any other status (401, 404, 429, 5xx, or a 400 for some other reason) says nothing about the seed's size.
+SEED_PROBE_CONTEXT_REFUSAL = ("exceeds the context length", "context length exceeded",
+                              "input length exceeds")
+
+
+def _ollama_post(url: str, payload: dict, timeout: float) -> dict:
+    import urllib.request
+    req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"),
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read())
+
+
+def _http_refusal_reason(e) -> str:
+    """The server's own error text from an HTTPError body, bounded and parsed when it is JSON."""
+    try:
+        body = e.read(2048).decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+    try:
+        msg = json.loads(body).get("error")
+        if isinstance(msg, str):
+            return msg[:200]
+    except Exception:
+        pass
+    return body[:200]
+
+
+def probe_seed_count(llm, msgs, tools, *, num_ctx, prior: float = None, act_form: str = "tools",
+                     post=None) -> dict:
+    """The server's own count of `msgs` sent with `tools`, as the tool loop's step 1 would send them.
+
+    {"result", "prompt_chars", "prompt_eval_count", "ratio", "value", "s", "timeout_s", "http_status",
+    "error"}. The request is the adapter's own (llm.chat_payload: model, template, think, tools,
+    num_ctx, keep_alive) with num_predict 1 and truncate/shift off, so the count is of the prompt step 1
+    will send. `value` (the ratio less MEASURED_CPT_MARGIN) is set only for result "counted": a whole
+    count whose ratio is plausible (1.5..8, at most prior x MEASURED_CPT_MAX_OVER_PRIOR). Unlike
+    measured_preflight_cpt, a count near the window's edge is kept: truncation is off, so it is a count
+    of the whole prompt, and it is the being that most needs one.
+
+    "refused_by_server" only for ollama's context-length rejection: the seed does not fit num_ctx at all,
+    which is itself the answer. Any other HTTP status is "http_error", a timeout "timeout", anything
+    else "error"; none of them says anything about the seed, and none sets a value."""
+    import socket
+    import urllib.error
+    from sage.gateway.being_tool_loop import _convo_chars, uncounted_chars
+    out = {"result": None}
+    if act_form == "json":
+        out["result"] = "skipped_json_form"       # the JSON form sends another prompt shape (see #774)
+        return out
+    host = getattr(llm, "ollama_host", None)
+    try:
+        ctx = int(num_ctx or 0)
+    except (TypeError, ValueError):
+        ctx = 0
+    if not host or ctx <= 0 or getattr(llm, "_ollama_available", True) is False:
+        out["result"] = "skipped_no_server"
+        return out
+    build = getattr(llm, "chat_payload", None)
+    if not callable(build):
+        out["result"] = "skipped_no_adapter"      # no way to send what step 1 sends; don't guess at it
+        return out
+    try:
+        payload = build(msgs, tools=tools or None)
+        opts = payload.setdefault("options", {})
+        if opts.get("num_ctx") != ctx:
+            # the preflight's window is not the one the adapter sends: a count against another
+            # window (and a model reload to get it) would answer a different question
+            out.update(result="skipped_ctx_mismatch", error=f"adapter num_ctx {opts.get('num_ctx')} != {ctx}")
+            return out
+        opts["num_predict"] = 1
+        payload.update(truncate=False, shift=False)
+    except Exception as e:
+        out.update(result="error", error=f"payload: {type(e).__name__}: {e}"[:200])
+        return out
+    chars = _convo_chars(msgs) + uncounted_chars(tools, act_form)
+    out["prompt_chars"] = chars
+    try:
+        budget = min(SEED_PROBE_TIMEOUT_S, float(getattr(llm, "timeout_seconds", None) or SEED_PROBE_TIMEOUT_S))
+    except (TypeError, ValueError):
+        budget = SEED_PROBE_TIMEOUT_S
+    out["timeout_s"] = budget
+    t0 = time.time()
+    try:
+        raw = (post or _ollama_post)(f"{host}/api/chat", payload, budget)
+    except urllib.error.HTTPError as e:
+        reason = _http_refusal_reason(e)
+        out.update(s=round(time.time() - t0, 1), http_status=e.code,
+                   error=f"HTTP {e.code}: {reason}".strip()[:200])
+        out["result"] = ("refused_by_server" if e.code == 400 and any(k in reason.lower()
+                                                                     for k in SEED_PROBE_CONTEXT_REFUSAL)
+                         else "http_error")
+        return out
+    except (socket.timeout, TimeoutError) as e:
+        out.update(result="timeout", s=round(time.time() - t0, 1), error=f"{type(e).__name__}: {e}"[:200])
+        return out
+    except urllib.error.URLError as e:
+        r = getattr(e, "reason", None)
+        kind = "timeout" if isinstance(r, (socket.timeout, TimeoutError)) else "error"
+        out.update(result=kind, s=round(time.time() - t0, 1), error=f"URLError: {r}"[:200])
+        return out
+    except Exception as e:
+        out.update(result="error", s=round(time.time() - t0, 1), error=f"{type(e).__name__}: {e}"[:200])
+        return out
+    out["s"] = round(time.time() - t0, 1)
+    toks = (raw or {}).get("prompt_eval_count")
+    if not isinstance(toks, int) or isinstance(toks, bool) or toks <= 0:
+        out["result"] = "no_count"
+        return out
+    ratio = chars / toks
+    out.update(prompt_eval_count=toks, ratio=round(ratio, 3))
+    if not 1.5 <= ratio <= 8.0 or (prior and ratio > prior * MEASURED_CPT_MAX_OVER_PRIOR):
+        out["result"] = "implausible"
+        return out
+    out.update(result="counted", value=round(ratio * MEASURED_CPT_MARGIN, 3))
+    return out
+
+
+def _refit_at_ratio(fit, llm, cal: dict, value: float, source: str, prior_res):
+    """fit() re-run with `value` as llm.preflight_cpt_measured, recorded as `source`. If the refit raises,
+    the ratio, cal["used"] and cal["source"] are put back as they were and `prior_res` is returned, so
+    the record never names a ratio the loop is not using (NOVA on #777)."""
+    from sage.gateway.being_tool_loop import preflight_cpt
+    saved = (getattr(llm, "preflight_cpt_measured", None), cal.get("used"), cal.get("source"))
+    try:
+        llm.preflight_cpt_measured = value
+        cal.update(used=preflight_cpt(llm), source=source)
+        return fit(), None
+    except Exception as e:
+        try:
+            llm.preflight_cpt_measured = saved[0]
+        except Exception:
+            pass
+        cal["used"], cal["source"] = saved[1], saved[2]
+        return prior_res, f"{type(e).__name__}: {e}"[:200]
+
+
+def fit_seed_calibrating(fit, probe, llm, cal: dict):
+    """fit_seed_to_preflight's result (`fit()`, at llm's current ratio), re-fitted at a better ratio when
+    the prior had to cut and this being has no measured one.
+
+    1. STILL REFUSED, WITH 1-4 OWN COUNTS (McNugget, #776): re-fit at the provisional measured ratio
+       (provisional_cpt_for_refused_seed). No server call. `source` "measured_provisional".
+    2. CUT, AND NO RATIO OF ITS OWN TO USE (McNugget on #774): `probe()` (probe_seed_count on the
+       untrimmed seed) asks the server once; a plausible count sets that seed's own ratio and re-fits from
+       the same untrimmed blocks. The seed is then sent and its step 1 recorded, so the measured ratio
+       takes over after MEASURED_CPT_MIN_SAMPLES beats and probing stops. `source` "probe".
+    The probe and what the fit at the prior would have done go on the record (`cal["probe"]`). A failed
+    probe, or a refit that raises, leaves the first fit and its ratio standing."""
+    res = fit()
+    iv = res[4]
+    if not iv or cal.get("source") == "measured":
+        return res
+    prov = provisional_cpt_for_refused_seed(iv, cal)
+    if prov is not None:
+        out, err = _refit_at_ratio(fit, llm, cal, prov, "measured_provisional", res)
+        if err:
+            cal["provisional_refit_error"] = err
+        else:
+            cal["refused_at_prior"] = {"estimated_after": iv.get("estimated_after"), "line": iv.get("line")}
+        return out
+    try:
+        p = probe()
+    except Exception as e:          # a measurement never costs the being its beat
+        p = {"result": "error", "error": f"{type(e).__name__}: {e}"[:200]}
+    p["fit_at_prior"] = {k: iv.get(k) for k in ("estimated_before", "estimated_after", "still_refused")}
+    cal["probe"] = p
+    if not p.get("value"):
+        return res
+    out, err = _refit_at_ratio(fit, llm, cal, p["value"], "probe", res)
+    if err:
+        p["refit_error"] = err
     return out
 
 
@@ -2948,7 +3165,18 @@ def _own_running_claims(instance: Path, member: str, stamp: str, most: int = 3) 
 TODO_WINDOW_H = 48
 TODO_SHOWN = 15
 _BLOCK = re.compile(r"^\s*(20\d\d-\d\d-\d\d)[ T](\d\d:\d\d)")
-_SECTION = re.compile(r"^\s*[-*]?\s*\[?\s*(still open|open|added|done|completed)\s*\]?\s*:?\s*$", re.I)
+# A SECTION HEADER IN THE SHAPES THE BEING WRITES IT (#779). Measured on mcnugget-being's todo.md 2026-11-18:
+# `## done`, `## added`, `## still open`, `**done:**` and `**still open:**` all occur, and none matched the
+# old pattern, so the items under `## done` took the section ABOVE them (often `open`) and were held open.
+_SECTION = re.compile(r"^\s*(?:#{1,6}\s*)?[-*]?\s*(?:\*\*|__)?\s*\[?\s*(still open|open|added|done|completed)"
+                      r"\s*\]?\s*:?\s*(?:\*\*|__)?\s*:?\s*$", re.I)
+# ANY OTHER HEADER ENDS THE SECTION (#779). An unknown header (`blocked:`, `notes:`, `next steps:`, `## Context`)
+# did not reset `section`, so its items inherited the section above: after a `done:` they CLOSED silently, after
+# an `open:` a reason or a note was held as a goal. A header here is a line with no list marker that is a
+# markdown heading, or a few words ending in a colon (optionally bold). Its items are not read as items.
+_OTHER_HEADER = re.compile(r"^\s*(?:#{1,6}\s+\S.*"
+                           r"|(?:\*\*|__)?\s*[A-Za-z][\w /'-]{0,40}?\s*:\s*(?:\*\*|__)?"
+                           r"|(?:\*\*|__)[A-Za-z][\w /'-]{0,40}?(?:\*\*|__)\s*:)\s*$")
 # "still open: none" CLEARS THE LIST, SO IT MUST BE THE WHOLE LINE (Legion's counterexample on #658): ending
 # in `(none|nothing)\b`, it also matched `- [still open] Nothing from sprout-being yet on the camera`, a real
 # open item, and wiped every open item above it. Now only "none" / "nothing" (optionally "nothing open"),
@@ -3073,7 +3301,7 @@ def _todo_parsed(text: str) -> tuple:
     key = hashlib.sha256(text.encode("utf-8", "surrogateescape")).hexdigest()
     hit = _TODO_PARSE.get(key)
     if hit is None:
-        hit = (_parse_todo(_canonical_todo(text)), list(_LAST_TODO_CLOSURES))
+        hit = (_parse_todo(_canonical_todo(text)), list(_LAST_TODO_CLOSURES), list(_LAST_TODO_MISSES))
         _TODO_PARSE.clear()
         _TODO_PARSE[key] = hit
     return hit
@@ -3088,15 +3316,65 @@ def todo_closures(text: str) -> list:
     return _todo_parsed(text or "")[1]
 
 
+_MISS_WORD = re.compile(r"[a-z0-9]{3,}")
+_SLUG = re.compile(r"^[a-z0-9]+(?:[-_][a-z0-9]+)+$", re.I)
+
+
+def _slug_shaped(entry: str) -> bool:
+    """`apt-cache-fix, install-sklearn-apt`: every comma part is one hyphen/underscore-joined token."""
+    parts = [x.strip() for x in entry.split(",") if x.strip()]
+    return bool(parts) and all(_SLUG.match(x) for x in parts)
+
+
+def todo_unmatched_done(before: str, after: str, shown: int = 3) -> list:
+    """[(entry, [closest open item texts])] for each done entry that `after` adds over `before` and that
+    closed no open item. SAGE #779, 2026-11-18 02:44Z: mcnugget-being wrote `done: apt-cache-fix,
+    install-sklearn-apt, ...` (slugs, not the items' text), the fuzzy match closed nothing, nothing said so,
+    and 30 min later the item it meant to close came back as a request_run. The parse already knows which
+    done lines matched nothing; this hands the new ones to the write receipt with the open items that share
+    the most words with them (the same way memory_edit's refusal names the closest line).
+
+    ONLY NAMES AND SLUGS. Measured 2026-11-18 on McNugget's two local instances: 1,073 of 1,126 done
+    lines in mcnugget-being's todo.md and 690 of 718 in cbp-qwen3.8-distill-4b's closed no open item --
+    beings log finished work as done ("Sent response to sprout-being ..."), and that is not a miss. A
+    note on all of them would ride nearly every todo write. Word overlap does not separate them either
+    (188 of 1,073 share >= 60% of their words with an open item, nearly all progress lines). The #779
+    shape -- every comma part one hyphen/underscore-joined token -- occurs 0 times there, so naming
+    only that shape costs the normal write nothing."""
+    from collections import Counter
+    new = (Counter(m for m in _todo_parsed(after or "")[2] if _slug_shaped(m))
+           - Counter(_todo_parsed(before or "")[2]))
+    if not new:
+        return []
+    items = _todo_parsed(after or "")[0]
+    out = []
+    for entry in _todo_parsed(after or "")[2]:
+        if new[entry] <= 0:
+            continue
+        new[entry] -= 1
+        words = set(_MISS_WORD.findall(entry.lower().replace("_", " ").replace("-", " ")))
+        scored = []
+        for k, (t, _s) in items.items():
+            hit = len(words & set(_MISS_WORD.findall(k.replace("_", " ").replace("-", " "))))
+            if hit:
+                scored.append((-hit, t))
+        scored.sort()
+        out.append((entry, [t for _h, t in scored[:shown]]))
+    return out
+
+
 _LAST_TODO_CLOSURES: list = []     # the `all:` closures of the most recent _parse_todo, read by _todo_parsed
+_LAST_TODO_MISSES: list = []       # its done lines that closed no open item (SAGE #779), read the same way
 
 
 def _parse_todo(text: str, closures: Optional[list] = None) -> dict:
     """norm -> (item text, since) for every item still open at the end of the log. `all: <words>` done lines
     close every open item containing the words (todo_membot); they are listed in `closures` when given, and
-    always in _LAST_TODO_CLOSURES."""
+    always in _LAST_TODO_CLOSURES. A done line (not `all:`) that closes no open item is listed in
+    _LAST_TODO_MISSES (SAGE #779)."""
     from sage.gateway import todo_membot as _tm
-    global _LAST_TODO_CLOSURES
+    global _LAST_TODO_CLOSURES, _LAST_TODO_MISSES
+    misses = _LAST_TODO_MISSES = []
     closures = [] if closures is None else closures
     _LAST_TODO_CLOSURES = closures
     items = {}          # norm -> (text, since_dt)
@@ -3117,6 +3395,9 @@ def _parse_todo(text: str, closures: Optional[list] = None) -> dict:
         sm = _SECTION.match(line)
         if sm:
             section = sm.group(1).lower()
+            continue
+        if _OTHER_HEADER.match(line):
+            section = None
             continue
         im = _ITEM.match(line)
         if not im:
@@ -3158,6 +3439,8 @@ def _parse_todo(text: str, closures: Optional[list] = None) -> dict:
                             and sm_.ratio() >= 0.85):
                         del items[k]
                         break
+                else:
+                    misses.append(body.strip())
     return items
 
 
@@ -5451,10 +5734,21 @@ def main(argv=None) -> int:
                     exists="it exists" if (instance / ESTABLISHED_NOTE).exists() else "not written yet")
         return _compose_seed(_states[rung], recall_text, digest_text)
 
-    (seed, posture_turn), _seed_rung, digest, recall, _seed_iv = fit_seed_to_preflight(
-        _render_seed, lambda r: preflight_tokens(r[0], _seed_uncounted, llm),
-        num_ctx=_num_ctx, rung_index=CONV_LADDER.index(conv_rung) if conv_rung in CONV_LADDER else 0,
-        digest=digest, recall=recall, cpt=preflight_cpt(llm))
+    _rung_index0 = CONV_LADDER.index(conv_rung) if conv_rung in CONV_LADDER else 0
+    _digest0, _recall0 = digest, recall
+
+    def _fit_seed():
+        return fit_seed_to_preflight(
+            _render_seed, lambda r: preflight_tokens(r[0], _seed_uncounted, llm),
+            num_ctx=_num_ctx, rung_index=_rung_index0, digest=_digest0, recall=_recall0,
+            cpt=preflight_cpt(llm))
+
+    _probe_form = explore_turn_mode(instance)       # the form explore will send the seed in
+    (seed, posture_turn), _seed_rung, digest, recall, _seed_iv = fit_seed_calibrating(
+        _fit_seed,
+        lambda: probe_seed_count(llm, _render_seed(CONV_LADDER[_rung_index0], _digest0, _recall0)[0],
+                                 _explore_specs, num_ctx=_num_ctx, prior=_cpt_prior, act_form=_probe_form),
+        llm, _cpt_cal)
     if _seed_rung != conv_rung:
         conv_rung, state_block = _seed_rung, _states[_seed_rung]
     # CALIBRATION IS EVIDENCE, NOT A SILENT CHANGE (NOVA on #774): the sent seed's estimate at the ratio used
@@ -5465,7 +5759,7 @@ def main(argv=None) -> int:
         _cpt_cal["seed_est_used"] = int(_seed_chars / _cpt_cal["used"])
         _cpt_cal["seed_est_prior"] = int(_seed_chars / _cpt_prior)
         _cpt_cal["admitted_by_calibration"] = bool(
-            _cpt_cal["source"] == "measured" and isinstance(_num_ctx, int)
+            _cpt_cal["source"] in ("measured", "measured_provisional", "probe") and isinstance(_num_ctx, int)
             and _cpt_cal["seed_est_prior"] > _num_ctx - _WSM >= _cpt_cal["seed_est_used"])
     except Exception:
         pass
