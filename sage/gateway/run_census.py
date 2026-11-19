@@ -114,7 +114,8 @@ def site_dirs() -> List[str]:
             out.append(p)
     # the user site is in the box too now (SAGE #701), so a `pip install --user` re-measures
     from sage.gateway import being_gate_client as bgc
-    us = bgc.host_user_site()
+    m = bgc.box_python_minor(_interp())
+    us = bgc.host_user_site(m) if m is not None else ""
     if us and us not in out:
         out.append(us)
     return [p for p in out if os.path.isdir(p)]
@@ -143,7 +144,7 @@ def box_command(stage: str) -> List[str]:
         f" --ro-bind {shlex.quote(interp)} {shlex.quote(interp)}"
         " --proc /proc --dev /dev --tmpfs /tmp"
         # the host user site, as run binds it (SAGE #701)
-        f"{bgc.user_site_bind()}"
+        f"{bgc.user_site_bind(interp)}"
         f" --ro-bind {shlex.quote(stage)} /work"
         " --unshare-pid --unshare-net --unshare-ipc --unshare-uts"
         " --new-session --die-with-parent"
