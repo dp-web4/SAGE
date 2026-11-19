@@ -445,10 +445,26 @@ def test_a_short_line_keeps_its_question_readable_and_the_block_stays_in_budget(
     assert st._neighbours(st.read(tmp_path)[0]), "the fixture links"
     shown = st.render(tmp_path)
     assert len(shown) <= st.RENDER_CHARS, len(shown)
-    for ln in shown.splitlines():
-        if ln.startswith("- [s") and " -> " not in ln:
-            q = ln.split("] ", 1)[1].rsplit(" (settled", 1)[0]
-            assert len(q) >= min(st.SHORT_QUESTION_FLOOR, 20) or q.endswith("…") and len(q) >= 8, ln
+    for ln in [ln for ln in shown.splitlines() if ln.startswith("- [s")][1:]:   # the newest is whole
+        q = ln.split("] ", 1)[1].rsplit(" (settled", 1)[0].split(" -> ", 1)[0]
+        assert len(q) >= min(st.SHORT_QUESTION_FLOOR, 20) or q.endswith("…") and len(q) >= 8, ln
+
+
+def test_a_short_line_keeps_the_head_of_its_answer(tmp_path):
+    # sprout-being 11-16..17: its question on restarting its seat stayed in view after 01:41Z and the answer
+    # did not; the next three acts started the seat
+    _s(tmp_path, question="Does the test gizmo need to be restarted?", answer="No - it is already answering here.")
+    for i in range(st.MAX_ENTRIES - 1):
+        _s(tmp_path, question=f"question number {i} " + "w" * 80, answer=f"answer {i} " + "x" * 300)
+    shown = st.render(tmp_path)
+    assert len(shown) <= st.RENDER_CHARS, len(shown)
+    line = next(ln for ln in shown.splitlines() if "test gizmo" in ln)
+    assert " -> No - it is already answ" in line, line
+    shorts = [ln for ln in shown.splitlines() if ln.startswith("- [s")][1:]
+    assert len(shorts) == st.MAX_ENTRIES - 1 and all(" -> answer " in ln or "gizmo" in ln for ln in shorts)
+    # with no room for both, the question keeps its floor and the answer is left off
+    e = {"id": "s1", "question": "q" * 100, "answer": "a" * 100, "at": "2026-11-17T00:00:00Z"}
+    assert " -> " not in st._short(e, 60) and " -> " in st._short(e, 90)
 
 
 

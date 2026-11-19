@@ -153,7 +153,7 @@ _REFUSAL_MUST_SAY = {
     "pr_open":     ("opens a pull request", None, ()),
     "pr_amend":    ("revises a pull request", None, ()),
     "pr_sync":     ("up to date with its base branch", None, ()),
-    "git_clean":   ("deletes one untracked file", None, ()),
+    "git_clean":   ("deletes one untracked file", "retire_note", ("path", "reason")),  # #637
     "camera":      ("No other tool captures a frame", None, ()),
 }
 # Minimal args per verb. Every composer refuses on the missing worktree before it reads them.
