@@ -95,8 +95,13 @@ def words_of(raw) -> List[str]:
     return out
 
 
+# A WORD STARTS AFTER AN UNDERSCORE TOO (mcnugget-being, 2026-11-18 22:39Z). `\b` treats `_` as part of
+# a word, so `drain` never hit `egress_drain` or `being_inbox_drain`: retire_thread words='drain' moved 2
+# items while 54 open items naming egress_drain stayed, and `done: all: drain` (a substring) closed all 56.
+# The being reported "consolidated the 56 items". The left edge is now "not a letter or digit", so a
+# snake_case part is a word start; `drain` still does not hit `redrain` or `xdrain`.
 def matcher(words: List[str]) -> Callable[[str], bool]:
-    pats = [re.compile((r"\b" if re.match(r"\w", w) else "") + re.escape(w), re.I) for w in words]
+    pats = [re.compile((r"(?<![^\W_])" if re.match(r"\w", w) else "") + re.escape(w), re.I) for w in words]
     return lambda text: any(p.search(text or "") for p in pats)
 
 
