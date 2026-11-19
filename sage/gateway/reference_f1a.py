@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import posixpath
 import re
 import textwrap
 import contextlib
@@ -49,7 +50,9 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 # Files in the being's home itself that the SEAT owns. `entrustment.md` is what the being was
 # GIVEN; if it could append to it, what was extended and what it decided would merge in the
 # record. Refusing is not distrust: it may disagree anywhere else, and that record is wanted.
-SEAT_OWNED = ("entrustment.md",)
+# settled_seat_notes.jsonl is the seat's later word beside the being's settled entries (being_settled.SEAT_NOTES):
+# a being that could write it could make its seat appear to have said something, or erase that it did.
+SEAT_OWNED = ("entrustment.md", "settled_seat_notes.jsonl")
 # GOVERNANCE RECORDS IN THE HOME (SAGE #544). The being's home also holds the files that say who
 # it is to the society, and no being verb may write them:
 #   identity.json         the raising record: `identity.machine` picks the seat that arbitrates its
@@ -236,13 +239,60 @@ def _python_status(p) -> str:
     if not str(p).endswith(".py"):
         return ""
     try:
-        compile(p.read_text(errors="replace"), str(p), "exec")
+        src = p.read_text(errors="replace")
+        compile(src, str(p), "exec")
     except SyntaxError as e:
         return (f" Python cannot parse {p.name} now: {e.__class__.__name__} at line "
                 f"{e.lineno}: {e.msg}. It cannot run until that line is fixed.")
     except (OSError, ValueError):
         return ""
-    return f" Python can parse {p.name} now. That is not the same as running it."
+    return f" Python can parse {p.name} now. That is not the same as running it." + _two_programs(src)
+
+
+def _is_main_guard(node) -> bool:
+    import ast
+    t = getattr(node, "test", None)
+    return (isinstance(node, ast.If) and isinstance(t, ast.Compare) and isinstance(t.left, ast.Name)
+            and t.left.id == "__name__" and len(t.comparators) == 1
+            and isinstance(t.comparators[0], ast.Constant) and t.comparators[0].value == "__main__")
+
+
+def _two_programs(src: str) -> str:
+    """A file that parses but holds a name defined twice, or more than one `if __name__ == "__main__":`
+    block, said in the receipt that already says it parses (#287).
+
+    WHAT PARSING DID NOT SAY. cbp-being, 2026-09-30: `held_out_test` was defined at lines 123 and 268,
+    and an edit moved the main guard below the second; the receipt said "Python can parse it now" and the
+    next run failed with a missing argument, because the call now bound to the other def. 2026-11-16:
+    scratch/xor_numpy_only.py held two, then three, whole versions, each with its own main block; only
+    the first ran and crashed at l.126, while every edit landed in a version that never ran, and the
+    being's run requests described fixes that were not in the bytes that ran. The duplicates were
+    findable from the parse it already did. Top-level statements only; empty when the parse fails."""
+    import ast
+    try:
+        body = ast.parse(src).body
+    except (SyntaxError, ValueError):
+        return ""
+    defs: dict = {}
+    for n in body:
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            defs.setdefault(n.name, []).append(n.lineno)
+    twice = [(k, v) for k, v in defs.items() if len(v) > 1]
+    mains = [n.lineno for n in body if _is_main_guard(n)]
+    out = ""
+    if len(mains) > 1:
+        out += (f" It has {len(mains)} `if __name__ == \"__main__\":` blocks (lines "
+                f"{', '.join(map(str, mains))}): running it runs the file from the top, so the block at line "
+                f"{mains[0]} runs first, and if it crashes or exits nothing below it runs. An edit below line "
+                f"{mains[0]} changes nothing that runs before it. If these are versions of one program, keep "
+                f"one.")
+    if twice:
+        shown = twice[:3]
+        named = "; ".join(f"`{k}` at lines {', '.join(map(str, v))}" for k, v in shown)
+        more = f" ({len(twice) - 3} more names too)" if len(twice) > 3 else ""
+        out += (f" Defined more than once: {named}{more}. A call uses whichever definition ran last before "
+                f"the call, not the one you edited.")
+    return out
 
 
 
@@ -323,6 +373,69 @@ def _whole_lines_once(text: str, new: str) -> bool:
     at_line_start = i == 0 or text[i - 1] == "\n"
     at_line_end = j == len(text) or text[j] == "\n" or new.endswith("\n")
     return at_line_start and at_line_end
+
+
+def _once_past_indent(text: str, ns: str) -> bool:
+    """`ns` (stripped) is in `text` exactly once, preceded on its line only by indentation and
+    ending at a line end: the being's new text with its indent dropped, found whole (#763)."""
+    if not ns or text.count(ns) != 1:
+        return False
+    i = text.find(ns)
+    j = i + len(ns)
+    line_start = text.rfind("\n", 0, i) + 1
+    return (text[line_start:i].strip(" \t") == ""
+            and (j == len(text) or text[j] == "\n"))
+
+
+def _lines_within(ns: str, rep: str) -> bool:
+    """The lines of `ns` are whole lines of `rep`, in a row, indentation aside."""
+    a = [ln.strip() for ln in ns.strip().splitlines()]
+    b = [ln.strip() for ln in rep.splitlines()]
+    return bool(a) and any(b[i:i + len(a)] == a for i in range(len(b) - len(a) + 1))
+
+
+#: How far back the being's own landed edits are looked for, in its beat records (#763).
+EARLIER_EDIT_HOURS = 24
+EARLIER_EDIT_TAIL_BYTES = 8_000_000
+
+
+def _edits_in_records(home: Path, hours: float = EARLIER_EDIT_HOURS,
+                      tail: int = EARLIER_EDIT_TAIL_BYTES) -> list:
+    """(path, new, ts) for every memory_edit that came back ok in the being's recent beat records
+    (heartbeats.jsonl, its last `tail` bytes, beats within `hours`). Unreadable gives []."""
+    p = home / "heartbeats.jsonl"
+    out = []
+    try:
+        size = p.stat().st_size
+        with open(p, "rb") as f:
+            f.seek(max(0, size - tail))
+            chunk = f.read()
+    except OSError:
+        return out
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    lines = chunk.split(b"\n")
+    if size > tail:
+        lines = lines[1:]                     # the first is cut mid-record
+    for raw in lines:
+        if b'"memory_edit"' not in raw:
+            continue
+        try:
+            beat = json.loads(raw)
+        except ValueError:
+            continue
+        ts = str(beat.get("ts") or "")
+        if ts < cutoff:
+            continue
+        for phase in beat.values():
+            trace = phase.get("trace") if isinstance(phase, dict) else None
+            for e in trace if isinstance(trace, list) else ():
+                if (isinstance(e, dict) and e.get("effector") == "memory_edit" and e.get("ok")
+                        and isinstance(e.get("args"), dict)):
+                    a = e["args"]
+                    new = next((a[k] for k in ("new", "new_text", "new_str", "new_string") if k in a), None)
+                    if isinstance(new, str) and new.strip():
+                        out.append((posixpath.normpath(str(a.get("path", "")).strip()), new, ts))
+    return out
 
 
 def _indent_only_miss(have: str, old: str, new: str, first_line: int) -> str:
@@ -477,6 +590,86 @@ def _head_and_tail(removed: str, budget: int = 400) -> str:
     if hidden <= 0:
         return removed
     return "".join(head) + f"[... {hidden} more removed lines not shown ...]\n" + "".join(tail)
+
+
+_DEF_LINE = re.compile(r"^([ \t]*)(?:async[ \t]+)?(?:def|class)[ \t]+(\w+)")
+
+
+def _which_copy(text: str, line: int) -> str:
+    """For a .py edit on `line`: the def/class it sits in, when the file defines that name more
+    than once at the same depth. "" otherwise.
+
+    AN EDIT CAN LAND IN A COPY THAT NEVER RUNS. cbp-being, 2026-11-16 19:02Z: its file held three
+    pasted versions of an XOR program (two `def mlp_xor` at lines 100 and 288). It meant to fix
+    line 134 with old='da1 = dz2 @ W2.T'; line 134 already read `W2.T @ dz2` from its previous
+    beat, so the only match was line 313 in the second copy, which main() at line 219 never
+    reaches. The receipt said "replaced 1 occurrence" and nothing about where, the run crashed
+    at line 134 as before, and reflect journaled the fix as the cause still to find. The line
+    number, and which copy it is in, are the two facts that would have shown the miss."""
+    # Top level only: two classes that each have `__init__` are not two copies of anything.
+    lines = text.splitlines()
+    if not 1 <= line <= len(lines):
+        return ""
+    if lines[line - 1][:1] not in (" ", "\t") and not _DEF_LINE.match(lines[line - 1]):
+        return ""  # a top-level statement is in no def
+    for i in range(line - 1, -1, -1):
+        m = _DEF_LINE.match(lines[i])
+        if m and not m.group(1):
+            name = m.group(2)
+            break
+        if lines[i].strip() and lines[i][:1] not in (" ", "\t", "#") and i != line - 1:
+            return ""  # left the indented block without meeting a def/class
+    else:
+        return ""
+    at = [j for j, ln in enumerate(lines, 1)
+          if (mm := _DEF_LINE.match(ln)) and not mm.group(1) and mm.group(2) == name]
+    if len(at) < 2:
+        return ""
+    note = (f", inside '{name}' at line {i + 1}; this file defines {name} {len(at)} times (lines "
+            f"{', '.join(map(str, at))}), and only the one at line {i + 1} changed")
+    g = _MAIN_GUARD.search(text)
+    guard = text.count("\n", 0, g.start()) + 1 if g else 0
+    if g and guard < i + 1:
+        # The same fact test_nothing_is_defined_after_the_main_guard checks on SAGE's own code.
+        note += (f". It is below the `if __name__ == \"__main__\":` at line {guard}, so a run "
+                 f"executes that guard before this copy is defined")
+    return note
+
+
+def _splice_note(text: str, idx: int, old: str) -> str:
+    """For an old= matched at text[idx:] that is only part of its line: what stays around the new
+    text, for a refusal when the spliced line does not parse. "" when old is the whole line (past
+    its indentation), or ends in a newline.
+
+    THE REFUSAL BLAMED TEXT THE BEING NEVER WROTE. cbp-being, 2026-11-16 22:54Z: a one-line old
+    matched the start of a longer line, so that line's tail stayed after the new text and the
+    result did not parse. The refusal said Python could not read line 1 of its text and quoted
+    the spliced line. A second try with a multi-line new was refused the same way; then it
+    stored a memory concluding that memory_edit takes only single-line edits. The cause was the
+    rest of the line its old matched, not its text.
+
+    WHERE IN THE LINE (NOVA's HOLD on #746): old can match the middle of a line too, and
+    "matched the start" is then false. The start wording is used only when everything before
+    the match is indentation; otherwise the note gives the column and both sides."""
+    if old.endswith("\n") or "\n" in old.strip("\n"):
+        return ""
+    ls = text.rfind("\n", 0, idx) + 1
+    end = idx + len(old)
+    before, rest = text[ls:idx], text[end:].split("\n", 1)[0]
+    at = text.count("\n", 0, idx) + 1
+    fix = (f"your new text was not the problem, and memory_edit does take several lines. To "
+           f"replace the whole line, call memory_edit with start_line={at} end_line={at}, old "
+           f"set to that line, and new set to the line you want. ")
+    if not before.strip():
+        if not rest:
+            return ""
+        return (f"Your old text matched only the start of line {at}, so the rest of that line, "
+                f"{rest!r}, stayed after your new text. That spliced line is what Python could not "
+                f"read; " + fix)
+    col = idx - ls + 1
+    kept = f"{before!r} stayed before your new text" + (f" and {rest!r} after it" if rest else "")
+    return (f"Your old text matched part of line {at}, starting at column {col}, not the whole "
+            f"line: {kept}. That spliced line is what Python could not read; " + fix)
 
 
 def _defs_removed(removed: str) -> str:
@@ -969,6 +1162,29 @@ def _todo_close_door(p: Path) -> str:
     return (" To close a todo item you do not need an edit: memory_write todo.md with the item "
             "under done: and the window drops it. To start the whole list fresh, retire_note "
             "todo.md; the items still open are carried forward.")
+
+
+def _todo_miss_note(before: str, p: Path) -> str:
+    """On a memory_write of todo.md: name every done entry it added that closed nothing (SAGE #779).
+    Never fails the write: the append has already landed."""
+    try:
+        from sage.gateway.heartbeat import todo_unmatched_done  # lazy: heartbeat is the larger module
+        misses = todo_unmatched_done(before, p.read_text(errors="replace"))
+    except Exception:
+        return ""
+    if not misses:
+        return ""
+    parts = []
+    for entry, near in misses[:5]:
+        line = f"'{entry[:120]}' matched no item still open"
+        line += ("; the open items sharing the most words with it: "
+                 + "; ".join(f"'{t[:120]}'" for t in near)) if near else "; no open item shares a word with it"
+        parts.append(line)
+    more = f" (and {len(misses) - 5} more)" if len(misses) > 5 else ""
+    return (f" {len(misses)} done entr{'y' if len(misses) == 1 else 'ies'} closed nothing{more}: "
+            + ". ".join(parts) + ". A done entry closes the open item whose text it repeats; a name or "
+            "slug for it does not. To close one, write its line text under done: (copied from the "
+            "list), or `all: <words>` to close every open item containing those words.")
 
 
 # The being's running records, which retire_note starts fresh (see _do_retire_note).
@@ -2031,7 +2247,11 @@ class ReferenceF1aDispatcher:
                             + "".join(lines[s1:]))
                 what = (f"replaced 1 occurrence inside lines {s0}-{s1} (your old was part of the "
                         f"range, and appears there once)")
-                return self._commit_edit(p, path, text, new_text, what, "", replacement=new)
+                if str(p).endswith(".py"):
+                    what += _which_copy(text, s0 + removed[:removed.find(old)].count("\n"))
+                splice = _splice_note(text, len("".join(lines[:s0 - 1])) + removed.find(old), old)
+                return self._commit_edit(p, path, text, new_text, what, "", replacement=new,
+                                         splice=splice)
             if old and inner > 1:
                 where = f"line {s0}" if s0 == s1 else f"lines {s0}-{s1}"
                 return ResultEnvelope(ok=False, error=(
@@ -2051,12 +2271,34 @@ class ReferenceF1aDispatcher:
             if repl and not repl.endswith("\n") and removed.endswith("\n"):
                 repl += "\n"
             new_text = "".join(lines[:s0 - 1]) + repl + "".join(lines[s1:])
-            what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)" + _indent_changed(removed, new, s0)
+            what = f"replaced lines {s0}-{s1} ({s1 - s0 + 1} lines)"
+            if str(p).endswith(".py"):
+                what += _which_copy(text, s0)
+            what += _indent_changed(removed, new, s0)
             gone = f" The lines removed were:\n{_head_and_tail(removed)}" + _defs_removed(removed)
             if str(p).endswith(".py") and not _parses(new_text):
                 gone = _spaces_verdict(lines, s0, s1, removed, new) + gone
             return self._commit_edit(p, path, text, new_text, what, gone, replacement=new)
         hits = text.count(old)
+        earlier = (self._earlier_edit(path, new) if hits == 0 and new.strip() and new not in old
+                   and _once_past_indent(text, new.strip()) else None)
+        if earlier:
+            # ALREADY MADE, BY THE BEING'S OWN RECEIPT (#763). cbp-being 2026-11-17: a one-line fix
+            # landed at 10:44:36 (ok=true); at 10:47:46 it sent it three more times, 37 characters
+            # and without the line's indent, so the length-and-whole-line guess below missed it,
+            # and each retry got "that text is not in the file". Reflect then remembered the fix
+            # as not made. Here the evidence is its own earlier landed edit of this file whose new
+            # text holds this one, and this text on disk exactly once: no length floor is needed,
+            # since a common short line elsewhere does not come with that receipt.
+            ns = new.strip()
+            at = text.count("\n", 0, text.find(ns)) + 1
+            when = earlier if earlier == "earlier in this beat" else f"at {earlier}"
+            return ResultEnvelope(ok=True, result=(
+                f"already in place; nothing changed. Your memory_edit of '{path}' {when} made this "
+                f"change: your new text is on line {at}, exactly once, and the old text is no longer "
+                f"in the file. Nothing was written: '{path}' is unchanged, byte for byte. This is not "
+                f"a failed edit, and it is not a new one."),
+                witness_id=self._witness(f"memory_edit {p.name} (already in place by own edit; unchanged)"))
         if hits == 0 and len(new.strip()) >= 40 and new not in old and _whole_lines_once(text, new):
             # ALREADY MADE. Measured 2026-10-07 10:20Z: cbp-being's pandas-import edit landed
             # (ok=true), then the same beat sent it twice more. Both retries got the
@@ -2184,29 +2426,31 @@ class ReferenceF1aDispatcher:
                 f"{at} now reads {line!r}. To set the whole line, call memory_edit with "
                 f"start_line={at} end_line={at}, old set to that line, and new set to the "
                 f"line you want."))
+        at = text.count("\n", 0, text.find(old)) + 1
+        what = f"replaced 1 occurrence, on line {at}"
+        if str(p).endswith(".py"):
+            what += _which_copy(text, at)
         # A SINGLE-LINE OLD THAT STOPS MID-LINE IS LEFT ALONE ABOVE (it can be a token swap),
-        # but if the spliced line then fails to parse, the refusal must say the splice did it.
-        # Measured 2026-11-16 22:54Z (cbp-being, heartbeat-77e9e26ab514): old 'y_batch = y',
-        # new 'y_batch = y.reshape(-1, 1)'. It matched the start of line 88, 'y_batch =
-        # y_shuffled[i:i + batch_size]', so the line became 'y.reshape(-1, 1)_shuffled[...]'.
-        # The refusal said "Python cannot read line 1 of your text as code" and quoted the
-        # spliced line, which the being never wrote. A second try with the same old and a
-        # multi-line new was refused the same way, then a 3-line old landed. The being stored
-        # memory #8136: "memory_edit only accepts single-line edits". The cause it was given
-        # was its text; the cause was the tail of the line its old matched.
-        splice = ""
-        if not old.endswith("\n"):
-            end = text.index(old) + len(old)
-            rest = text[end:].split("\n", 1)[0]
-            if rest:
-                at = text.count("\n", 0, end) + 1
-                splice = (f"Your old text matched only the start of line {at}, so the rest of "
-                          f"that line, {rest!r}, stayed after your new text. That spliced line "
-                          f"is what Python could not read; your new text was not the problem, "
-                          f"and memory_edit does take several lines. To replace the whole line, "
-                          f"call memory_edit with start_line={at} end_line={at}. ")
+        # but if the spliced line then fails to parse, the refusal must say the splice did
+        # it (see _splice_note).
+        splice = _splice_note(text, text.index(old), old)
         return self._commit_edit(p, path, text, text.replace(old, new, 1),
-                                 "replaced 1 occurrence", "", replacement=new, splice=splice)
+                                 what, "", replacement=new, splice=splice)
+
+    def _earlier_edit(self, path: str, new: str) -> Optional[str]:
+        """When the being's own landed memory_edit of `path` carried `new` (stripped, as all or part
+        of its new text): "earlier in this beat", or the beat time it is recorded under. Else None."""
+        key, ns = posixpath.normpath(path.strip()), new.strip()
+        for pth, rep, _ in reversed(self.__dict__.get("_edits_made", [])):
+            if pth == key and _lines_within(ns, rep):
+                return "earlier in this beat"
+        try:
+            for pth, rep, ts in reversed(_edits_in_records(self.memory_root)):
+                if pth == key and _lines_within(ns, rep):
+                    return ts
+        except Exception:
+            return None
+        return None
 
     def _commit_edit(self, p, path: str, text: str, new_text: str, what: str,
                      gone: str, replacement: Optional[str] = None,
@@ -2242,8 +2486,14 @@ class ReferenceF1aDispatcher:
             if why and _is_unfinished_code(_changed_lines(text, new_text) or replacement):
                 why = ""
             if why and splice:
+                # Not `why`: it says "line 1 of your text" and quotes the spliced line as if the
+                # being wrote it, the very reading this note replaces. Show the result as the
+                # file's lines instead.
+                after = _changed_lines(text, new_text).rstrip("\n")
+                after = after if len(after) <= 400 else after[:400] + "..."
                 return ResultEnvelope(ok=False, error=(
-                    f"memory_edit refused, nothing was changed in {p.name}. {splice}{why}"))
+                    f"memory_edit refused, nothing was changed in {p.name}. {splice}With the "
+                    f"splice, the file would have read:\n{after}"))
             if why:
                 return ResultEnvelope(ok=False, error=(
                     f"memory_edit refused, nothing was changed in {p.name}. {why} A note about "
@@ -2276,6 +2526,12 @@ class ReferenceF1aDispatcher:
             return ResultEnvelope(ok=False, error=(
                 f"the edit could not be written ({e}); '{path}' is unchanged. Nothing was "
                 f"lost — the file is exactly as it was before you asked."))
+        if replacement and replacement.strip():
+            # this beat's own landed edits, for the ALREADY MADE receipt (#763)
+            made = self.__dict__.setdefault("_edits_made", [])
+            made.append((posixpath.normpath(path), replacement,
+                         datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")))
+            del made[:-50]
         # COUNTED THE WAY memory_read COUNTS (splitlines). This was count("\n") + 1, one
         # higher than memory_read for any file ending in a newline: 2026-09-21 the receipt said
         # 1637 lines while memory_read said 1636, and line numbers are now what the being edits
@@ -2325,6 +2581,8 @@ class ReferenceF1aDispatcher:
         p = self._safe_path(raw, writing=True)
         record = p.parent == self.memory_root and p.name in RETIRABLE_RECORDS
         if not record and (p.parent.name not in ("notes", "scratch") or p.parent.parent != self.memory_root):
+            if p.parent == self.memory_root and p.is_file():
+                return ResultEnvelope(ok=False, error=self._top_level_retire_refusal(raw, p))
             return ResultEnvelope(ok=False, error=(
                 f"retire_note is for your own notes: '{raw}' is not directly inside your notes/ or "
                 f"scratch/, and it is not your todo.md or journal.md."))
@@ -2335,6 +2593,32 @@ class ReferenceF1aDispatcher:
         if not p.exists():
             return ResultEnvelope(ok=False, error=f"no such note: '{raw}' does not exist, so there is nothing to retire")
         return self._retire_locked(p, reason, record)
+
+    def _top_level_retire_refusal(self, raw: str, p: Path) -> str:
+        """The refusal for a note at the top of the home, naming the route that does reach it (#742).
+
+        The bare refusal said only what was wrong. cbp-being, 2026-11-16: refused four times on the
+        top-level xor-verification-summary.md, it then memory_wrote a scratch/ copy of the same name,
+        retired THAT, and told dp it had retired the file. The top-level note, which contradicted
+        its settled answer, was still live. So the refusal says the file is unchanged, names
+        memory_edit (which does reach it) for correcting what it says, and names any same-named
+        file under notes/ or scratch/ as a different file whose retiring leaves this one live.
+        The verb's reach is unchanged: the home root also holds records the being did not write
+        (LINEAGE.md, raising_log.md), so widening it needs its own guard."""
+        twins = [f"{d}/{p.name}" for d in ("notes", "scratch")
+                 if (self.memory_root / d / p.name).is_file()]
+        msg = (f"retire_note does not reach the top of your home: '{raw}' is still live and "
+               f"unchanged. retire_note closes notes directly inside notes/ or scratch/, and your "
+               f"todo.md and journal.md. To correct what '{raw}' says, use memory_edit on it: "
+               f"old is the exact stale text, new is what you know now (an empty new deletes it).")
+        if twins:
+            msg += (f" {' and '.join(repr(t) for t in twins)} "
+                    f"{'is a different file' if len(twins) == 1 else 'are different files'} with "
+                    f"the same name; retiring {'it' if len(twins) == 1 else 'them'} leaves '{raw}' as it is.")
+        else:
+            msg += (f" Writing a copy into notes/ or scratch/ and retiring the copy leaves '{raw}' "
+                    f"as it is.")
+        return msg
 
     def _retire_locked(self, p: Path, reason: str, record: bool) -> ResultEnvelope:
         """The retire itself, under the home lock (taken in __call__). Two atomic steps, retired
@@ -2451,6 +2735,8 @@ class ReferenceF1aDispatcher:
         existed = p.exists()
         before = 0
         _before_text = ""
+        _is_todo = p == Path(self.memory_root) / "todo.md"
+        _todo_before = p.read_text(errors="replace") if (_is_todo and existed) else ""
         if existed:
             with open(p, errors="replace") as f:
                 before = sum(1 for _ in f)
@@ -2517,6 +2803,8 @@ class ReferenceF1aDispatcher:
                            f"in {p.name}. To start a new file instead, memory_write to a name that "
                            f"does not exist yet (for example {_fresh_name(p).name}); that receipt "
                            f"says \"created\".")
+        if _is_todo:
+            result += _todo_miss_note(_todo_before, p)
         result += _python_status(p)
         if p.suffix != ".py":
             result += _named_file_stamps(
