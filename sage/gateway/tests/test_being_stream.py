@@ -229,3 +229,10 @@ def test_read_tail_keeps_a_line_its_window_starts_exactly_on(tmp_path):
     tail = len(lines[-1]) + len(lines[-2])
     assert [e["n"] for e in bs.read_tail(p, max_bytes=tail)] == [3, 4]
     assert [e["n"] for e in bs.read_tail(p, max_bytes=tail - 1)] == [4]
+
+
+def test_stop_is_idempotent_so_atexit_can_close_a_beat_that_raised(tmp_path):
+    bs.start(tmp_path, "b")
+    bs.stop()
+    bs.stop()                                            # what atexit runs after the normal stop: nothing more
+    assert [e["k"] for e in _events(tmp_path)] == ["beat", "end"]

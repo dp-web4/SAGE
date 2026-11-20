@@ -40,7 +40,9 @@ def _read_stream(resp, on_chunk, timeout_s) -> Dict[str, Any]:
     Each line is a JSON chunk; its message's content and thinking are pieces to join, its tool_calls are
     added to the list, and the last chunk (done: true) carries done_reason and the counts. A chunk with
     "error" (ollama reports a failure after the status line was sent) raises, as the HTTP error would
-    have. The whole call is held to timeout_s from its first byte, as the unstreamed read was."""
+    have. The deadline is checked as each line arrives, and each read also has the socket's timeout_s, so a
+    call that stops sending ends within about twice timeout_s; one that keeps sending ends at timeout_s
+    (legion on #799)."""
     import time as _time
     deadline = _time.time() + float(timeout_s or 0) if timeout_s else None
     content, thinking, tool_calls = [], [], []
@@ -315,8 +317,8 @@ class OllamaIRP(IRPPlugin):
         piece's "message" ({"content", "thinking", "tool_calls"}) as it arrives (being_stream:
         the live view of what the being is producing). The return value is the same either way:
         the pieces are joined into one message, and 'raw' is the final chunk with that message,
-        which is the shape of a non-streamed reply. timeout_seconds stays a bound on the whole
-        call, as it was when nothing arrived before the end. on_chunk never affects the result:
+        which is the shape of a non-streamed reply. timeout_seconds still bounds the call: a reply
+        still arriving stops at it, one that goes silent within about twice it (_read_stream). on_chunk never affects the result:
         an exception from it is swallowed.
 
         Supports structured messages and native tool calling (T1).
