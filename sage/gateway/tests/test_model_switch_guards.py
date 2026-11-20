@@ -67,6 +67,27 @@ def test_vision_is_read_from_ollamas_capabilities_and_unknown_is_no(monkeypatch)
     assert hb.model_reads_images("gone") is False                      # unknown is no, never a failed beat
 
 
+def test_an_unanswered_vision_question_is_retried_not_cached_and_not_told_as_blindness(monkeypatch):
+    """10:13Z 11-17: a busy server's timeout was cached and told to the being as 'your model cannot read images'."""
+    import urllib.request
+    calls = []
+
+    def flaky(req, timeout=0):
+        calls.append(timeout)
+        if len(calls) < 5:                                           # 2 beats' asks fail, then it answers
+            raise TimeoutError("timed out")
+        return io.BytesIO(json.dumps({"capabilities": ["vision"]}).encode())
+    monkeypatch.setattr(urllib.request, "urlopen", flaky)
+    monkeypatch.setattr(hb, "_READS_IMAGES", {})
+    monkeypatch.setattr(hb, "_VISION_UNKNOWN", {})
+    assert hb.model_reads_images("seer") is False and calls == [5.0, 15.0]   # asked twice, the second time longer
+    withheld = hb.frames_the_model_can_read([FRAME], "seer")[0][1]["why"]
+    assert "did not say whether your model (seer) reads images" in withheld and "TimeoutError" in withheld
+    assert "not a fact about your model" in withheld and "cannot read images" not in withheld
+    assert hb.model_reads_images("seer") is True                      # not cached: the next ask is answered
+    assert "seer" not in hb._VISION_UNKNOWN
+
+
 def _last(t0, *acts):
     return {"t0": t0, "explore": {"trace": [dict(effector="camera", ok=ok, args={"out_path": p},
                                                 result={"out_path": p} if ok else None) for p, ok in acts]}}

@@ -584,11 +584,20 @@ EMPTY_THINKING_KEEP_S = 7 * 24 * 3600
 EMPTY_THINKING_NAME_MIN_CHARS = 4000
 
 
+# A `length` CUT IS NOT A DRAFT BY ITSELF (2026-11-16). The cut said the provider ran out of
+# tokens, not that the returned text holds a draft: #448 saw 6000 tokens return 149-700 chars and
+# kept the pointer, effect unmeasured. Measured on cbp-being (qwen3.8-distill-4b): 57 of its 71
+# kept `length` cuts are under 4,000 chars, and 14 of the 16 kept files it read back were those.
+# They restate the beat's premises, not code. 02:25Z: a 704-char one opened with "the script
+# has been run and confirmed to work" (from its own unrun 02:19 journal); offered as "what you
+# drafted", it was read, then journaled as "Results confirmed ... (exit code 0)" and stored as
+# remember #7968 -- the script had exited 1 at the seat 4 min earlier. legion-being's drafts
+# (smallest 7,203 chars) clear the size bar unaided, so size alone decides.
 def empty_thinking_worth_naming(raw: dict, thinking: str) -> bool:
     """Whether the stopped-thinking nudge should point the being at its kept thinking:
-    a `length` cut (a draft stopped mid-way), or thinking long enough to hold one."""
-    return ((raw or {}).get("done_reason") == "length"
-            or len(thinking) >= EMPTY_THINKING_NAME_MIN_CHARS)
+    only when the returned text is long enough to hold a draft. `raw` is unused, kept for
+    the call signature (a `length` cut with little text returned is a restatement)."""
+    return len(thinking) >= EMPTY_THINKING_NAME_MIN_CHARS
 
 
 def keep_empty_thinking(root: Optional[str], raw: dict, msg: dict) -> Optional[str]:
@@ -1054,7 +1063,15 @@ def preflight_cpt(llm) -> float:
     from 2026-10-27 07:46Z was refused before it was sent — 125 beats with no step (SAGE #582).
     A family declares `preflight_chars_per_token` in its model config, from a measured ratio and
     BELOW every measured value, so the guard still errs high. Absent, unreadable or implausible
-    (outside 1.5..8) -> PREFLIGHT_CPT, so no undeclared model changes behaviour."""
+    (outside 1.5..8) -> PREFLIGHT_CPT, so no undeclared model changes behaviour.
+
+    MEASURED BEATS DECLARED (#582 part 2). A heartbeat that has this being's own recent step-1 counts for
+    this model sets `llm.preflight_cpt_measured` (heartbeat.measured_preflight_cpt: the lowest recent ratio,
+    less a margin, so it still errs high against every count it was taken from). It wins over the declared
+    value, so a new model calibrates itself from its first counted beats instead of waiting for a config."""
+    m = getattr(llm, "preflight_cpt_measured", None)
+    if isinstance(m, (int, float)) and not isinstance(m, bool) and 1.5 <= m <= 8.0:
+        return float(m)
     try:
         v = llm._adapter.capabilities.preflight_chars_per_token
     except AttributeError:
@@ -1064,6 +1081,36 @@ def preflight_cpt(llm) -> float:
     except (TypeError, ValueError):
         return PREFLIGHT_CPT
     return v if 1.5 <= v <= 8.0 else PREFLIGHT_CPT
+
+
+# ONE COUNT FOR THE SEED, USED BY THE LOOP THAT SENDS IT AND BY THE HEARTBEAT THAT BUILDS IT (SAGE #582).
+# The heartbeat's seed fitter budgeted the seed from parts (posture, state, inbox, measured schemas, and
+# constants for the header and template), while this loop's step-1 preflight counted the whole message list
+# it was about to send. The two disagreed by ~9-10k chars on hub-being (2026-10-27), so the fitter found
+# nothing to trim and the preflight refused every explore with `interventions: []`: hub-being silent 11 h,
+# pub-being 125 beats, mcnugget-being from 2026-11-17 15:40Z (a 235-char schema change on a seed ~28 tokens
+# under the line). Per-model ratios (#592, #629) and trimming schema text (#769) each moved the line; none
+# made the two sides count the same thing. These functions are the step-1 preflight; the heartbeat calls
+# them on the composed seed, so it can never hand this loop a seed the loop will refuse without knowing it.
+def uncounted_chars(tools, act_form: str = "native") -> int:
+    """Chars a prompt carries beyond its messages: the tool schemas as sent (none in the JSON act form,
+    which sends no tools with the request) plus the chat template."""
+    return (len(json.dumps(tools)) if (tools is not None and act_form != "json") else 0) + _TEMPLATE_CHARS
+
+
+def preflight_tokens(msgs, uncounted: int, llm) -> float:
+    """The step-1 preflight's estimate of a prompt with no server count yet: whole prompt over this
+    model's preflight chars-per-token. The tool loop refuses to send above num_ctx - WINDOW_SEND_MARGIN."""
+    return (_convo_chars(msgs) + uncounted) / preflight_cpt(llm)
+
+
+def preflight_refuses(est: float, num_ctx) -> bool:
+    """Whether the step-1 preflight would end the phase unsent ("window_full: preflight")."""
+    try:
+        ctx = int(num_ctx or 0)
+    except (TypeError, ValueError):
+        return False
+    return ctx > 0 and est > ctx - WINDOW_SEND_MARGIN
 
 # A count far below a server-anchored estimate means the server truncated what was sent: the
 # server's prompt_eval_count is then of what survived its own cut, not of the list we sent.
@@ -1400,7 +1447,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     # guard exists to prevent (a seed that passes, then is cut by the server). The tools list is in
     # hand here, so it is measured, as heartbeat._schema_chars_for measures it (len of the JSON). In
     # the JSON act form no schemas are sent with the request (_json_act), so only the template counts.
-    uncounted = (len(json.dumps(tools)) if act_form != "json" else 0) + _TEMPLATE_CHARS
+    uncounted = uncounted_chars(tools, act_form)
     # Keep the think block per generate: when a small model narrates instead of acting,
     # whether it decided not to call or failed to format the call is only visible here.
     thoughts: List[str] = []
@@ -1576,10 +1623,10 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                 _est, _cause = _est_tokens(_convo_chars(msgs), measured), "over_window"
                 if not _same_tail and _tail == _TAIL_USER:
                     # anchored on a count made WITHOUT the tool schemas, which this prompt carries
-                    _est = max(_est, (_convo_chars(msgs) + uncounted) / preflight_cpt(llm))
+                    _est = max(_est, preflight_tokens(msgs, uncounted, llm))
             else:
-                _est, _cause = (_convo_chars(msgs) + uncounted) / preflight_cpt(llm), "preflight"
-            if _est > _ctx - WINDOW_SEND_MARGIN:
+                _est, _cause = preflight_tokens(msgs, uncounted, llm), "preflight"
+            if preflight_refuses(_est, _ctx):
                 return _window_full(_cause, int(_est), _ctx)
         retried = 0
         retry_cause = None
@@ -1646,6 +1693,23 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             # deliberating, and handing it a bigger budget bought a longer silence.
             thought_only = (bool(str(msg.get("thinking") or "").strip())
                             and not str(msg.get("content") or "").strip())
+            # ACTED, THEN STOPPED, IS DONE (nomad-claude, 2026-11-12). A clean stop after this
+            # turn already ran tools is the being's turn ending, not a silence. The seed holds
+            # no tool messages, so one in `convo` means it acted in this turn. nomad-being
+            # (gemma4:e2b), measured on its kept empty turns 11-05..11-12: 539 of 652 thinkings
+            # say so in words (the calls were already made, the task was complete, and it would
+            # stop); 531 of those stopped cleanly, median 181 output tokens of 3000.
+            # Each got "[harness] Your previous attempt returned thinking without a reply ...
+            # Act now: one tool call", which it obeyed with a witness of its own "failure",
+            # and its journal and seat messages filled with apologies for a fault it never
+            # had. The Sprout case above (zero acts, a person's question unanswered) has no
+            # tool message in convo, so it is still retried.
+            acted_then_stopped = bool(thought_only and raw.get("done_reason") == "stop"
+                                      and any(m.get("role") == "tool" for m in convo))
+            if acted_then_stopped:
+                thought_only = False
+                print("[tool-loop] acted, then stopped cleanly: the turn is done, no retry",
+                      file=_sys.stderr)
             # A THINK-ONLY TURN IS THE SAME DEFECT WHETHER OR NOT THE WINDOW CUT IT. The
             # discriminator above was computed and then used only inside `done_reason ==
             # "length"`, so the model that deliberated and stopped CLEANLY with an empty
@@ -1806,6 +1870,16 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
                  "attempts": [dict(a) for a in attempts]}
         if retry_cause:
             entry["retry_cause"] = retry_cause   # what the FIRST attempt hit; the counts above are the retry's
+        # WHAT WAS SENT, IN THE PREFLIGHT'S OWN UNITS (#582 part 2). Beside the server's count of the same
+        # prompt it is a measured chars-per-token for this model on this being's real seed, which the next
+        # beat's preflight calibrates from (heartbeat.measured_preflight_cpt). The phase's first generate
+        # only, native form only (the JSON form sends an extra ask and no schemas), and never a cut count.
+        # PAIRED WITH THE SAME PROMPT (NOVA on #774): only a first attempt that stood. A retry may append a
+        # nudge or be retaken as a JSON act (another prompt shape, no schemas), and its count is of that.
+        if (raw.get("prompt_eval_count") and not _server_cut and act_form != "json"
+                and not retried and not response_from_json_act
+                and not generates and _tail in (None, _TAIL_USER)):
+            entry["prompt_chars"] = _convo_chars(msgs) + uncounted
         if _server_cut:
             entry["server_cut"] = _server_cut
             entry["window_full"] = "server_cut"

@@ -163,7 +163,7 @@ def answers_line(seqs: list[int]) -> str:
     return "Answers your request seq " + ", ".join(str(s) for s in sorted(seqs)) + "."
 
 
-def pending(inst: Path, cid: str) -> list[dict]:
+def pending(inst: Path, cid: str, seat: str | None = None) -> list[dict]:
     """Requests no seat turn has ANSWERED. Seq-keyed, not time-keyed.
 
     GPT's review of the request_run tools: the first version closed every earlier request
@@ -177,7 +177,7 @@ def pending(inst: Path, cid: str) -> list[dict]:
     same file — a result about a file answers every request for that file made before it,
     except one newer than every seq the result names. Nothing else closes one."""
     turns = conv.recent(inst, cid, limit=400)
-    seat = _seat_id()
+    seat = seat or _seat_id()    # the being's dispatcher passes the seat it identified (#755)
     out = []
     for i, t in enumerate(turns):
         if t.get("from") == seat or MARKER not in (t.get("text") or ""):
@@ -231,12 +231,18 @@ def bind(inst: Path, cid: str, rel: str, seqs: list[int] | None) -> list[int]:
     return sorted(int(t["seq"]) for t in open_reqs if _same_file(inst, request_path(t), rel))
 
 
-def _target(inst: Path, raw: str) -> Path:
-    """Resolve inside the being's home. The being's path check is not trusted a second time:
-    this process is the one that will execute, so it does its own."""
+def _in_home(inst: Path, raw: str) -> Path:
+    """Resolve inside the being's home, whether or not the file is there."""
     p = (inst / raw).resolve() if not os.path.isabs(raw) else Path(raw).resolve()
     if not (p == inst.resolve() or inst.resolve() in p.parents):
         sys.exit(f"refusing: {p} is outside the being's home {inst.resolve()}")
+    return p
+
+
+def _target(inst: Path, raw: str) -> Path:
+    """Resolve inside the being's home. The being's path check is not trusted a second time:
+    this process is the one that will execute, so it does its own."""
+    p = _in_home(inst, raw)
     if not p.is_file():
         sys.exit(f"refusing: {p} is not a file")
     return p
@@ -493,36 +499,135 @@ def _run(args) -> None:
     where = where_clause(args.gpu, source_bytes.decode("utf-8", "replace"))
     rc, out, err, timed = run_child(interp + [str(p)] + script_args, str(inst), args.timeout, child_env(args.gpu, str(inst)))
 
-    def block(name: str, s: str) -> str:
-        s = (s or "").rstrip()
-        if not s:
-            return f"{name}: (empty)"
-        clipped = s[-OUT_CAP:]
-        head = f"{name} (last {OUT_CAP} chars of {len(s)}):" if len(s) > OUT_CAP else f"{name}:"
-        return head + "\n" + clipped
-
     verdict = (f"timed out after {args.timeout}s — no exit code, so this is not a pass or a fail"
                if timed else f"exit code {rc}")
     print(f"ran {rel}: {verdict}")
-    text = "\n".join([
-        f"[request_run] I ran {rel} (sha {ran_sha}) {ran_line(script_args)}"
-        f"{', ' + where if where else ''}. {verdict}.",
-        "",
-        block("stdout", out),
-        "",
-        block("stderr", err),
-        "",
-        _answers(seqs),
-        "That is the whole output, unedited. Nothing is owed by you on this.",
-    ])
+    header = (f"[request_run] I ran {rel} (sha {ran_sha}) {ran_line(script_args)}"
+              f"{', ' + where if where else ''}. {verdict}.")
+    text, lifted, dropped = run_answer(header, out, err, _answers(seqs))
     shown, hidden = as_shown(text)
     if hidden:
-        # The run answer is shaped for the cut (verdict first, stderr and the answers line last),
-        # so it posts; the seat just gets told what the being will and will not see of it.
+        # The run answer is shaped for the cut (#290): verdict first; when it would be cut, repeated
+        # runs of lines are counted, and the stdout lines with numbers that the cut would hide are
+        # copied into the shown tail, ahead of stderr. The seat is told what is still not seen.
         print(f"note: {len(text)} chars; the being's beat shows {_window_cap()} and cuts "
-              f"{len(hidden)} from the middle (stdout's later lines). The verdict and the end of "
-              f"stderr are in the shown part.", file=sys.stderr)
+              f"{len(hidden)} from the middle. The verdict and the end of stderr are in the shown part"
+              + (f"; {lifted} stdout line(s) with numbers are copied into the shown part" if lifted else "")
+              + (f"; {dropped} more such line(s) did not fit and are not seen" if dropped else "")
+              + ".", file=sys.stderr)
     _say(text)
+
+
+# A RUN ANSWER THE CUT WOULD HOLLOW OUT (#290). The beat shows a long turn's first 2/5 and last 3/5 of
+# CONV_TURN_CHARS. On a run that printed a banner, then its results, then more, the middle is the
+# results. Measured on cbp-being: 6 of 6 long exit-0 answers (09-21..09-30) lost every numeric result
+# line; 8 runs of one file (10-04) lost `Final correlation: -1.000000`; on 11-12 the head kept the
+# banner's EXPECTATION ("scores near 1.0") and cut the measured 0.4548, and the being re-requested the
+# same bytes 19 times; on 11-16 the tail was four copies of one sklearn ConvergenceWarning and all 24
+# result lines were cut. So, only when the answer would be cut:
+#   * a run of 1-3 lines repeated back to back is shown once and counted (no fact is lost: the count is
+#     the fact);
+#   * stdout lines that hold a number beside a word, and fall in the cut, are COPIED into a short
+#     section placed after stdout and before stderr, newest kept when they do not all fit in the tail.
+# stdout and stderr stay in place, in order; a crash's traceback stays last.
+REPEAT_BLOCK_MAX = 3
+LIFT_LINE_MAX = 200
+_NUMBER = re.compile(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
+_NOT_A_NUMBER = re.compile(r"\b(?:nan|inf)\b", re.I)
+
+
+def is_result_line(t: str) -> bool:
+    """A number (or nan/inf) beside a word: `Final correlation: nan`, `R2: 0.91`. Not a printed array
+    row, whose only letters are exponents (`[1.2e-05 3.4e-06]`)."""
+    if not (re.search(r"\d", t) or _NOT_A_NUMBER.search(t)):
+        return False
+    return re.search(r"[A-Za-z]", _NUMBER.sub("", t)) is not None
+
+
+def collapse_repeats(s: str, max_block: int = REPEAT_BLOCK_MAX) -> tuple[str, int]:
+    """(`s` with each run of a 1..max_block-line block repeated back to back shown once and counted,
+    lines removed). Picks the block size that covers the most lines; ties go to the smaller block."""
+    lines = s.split("\n")
+    out: list[str] = []
+    i = removed = 0
+    while i < len(lines):
+        best = None
+        for k in range(1, max_block + 1):
+            blk = lines[i:i + k]
+            if len(blk) < k or not any(x.strip() for x in blk):
+                continue
+            n = 1
+            while lines[i + n * k:i + (n + 1) * k] == blk:
+                n += 1
+            if n >= 2 and (best is None or n * k > best[0] * best[1]):
+                best = (n, k)
+        if best:
+            n, k = best
+            out.extend(lines[i:i + k])
+            what = "line" if k == 1 else f"{k} lines"
+            out.append(f"[the {what} above, {n - 1} more time{'s' if n > 2 else ''}]")
+            removed += (n - 1) * k
+            i += n * k
+        else:
+            out.append(lines[i])
+            i += 1
+    return "\n".join(out), removed
+
+
+def _block(name: str, s: str) -> str:
+    s = (s or "").rstrip()
+    if not s:
+        return f"{name}: (empty)"
+    clipped = s[-OUT_CAP:]
+    head = f"{name} (last {OUT_CAP} chars of {len(s)}):" if len(s) > OUT_CAP else f"{name}:"
+    return head + "\n" + clipped
+
+
+def _compose(header: str, out_block: str, lifted: list[str], dropped: int, err_block: str,
+             answers: str, closing: str) -> str:
+    parts = [header, "", out_block, ""]
+    if lifted:
+        more = f" ({dropped} earlier one{'s' if dropped != 1 else ''} did not fit here)" if dropped else ""
+        parts += ["Lines with numbers from stdout above, copied here because your view of this answer"
+                  f" cuts its middle (in order{more}):", *lifted, ""]
+    return "\n".join(parts + [err_block, "", answers, closing])
+
+
+def run_answer(header: str, out: str, err: str, answers: str, cap: int | None = None) -> tuple[str, int, int]:
+    """(the run answer, stdout lines copied into the shown tail, such lines that did not fit)."""
+    whole = "That is the whole output, unedited. Nothing is owed by you on this."
+    text = _compose(header, _block("stdout", out), [], 0, _block("stderr", err), answers, whole)
+    cap = cap or _window_cap()
+    if len(text) <= cap:
+        return text, 0, 0
+    out_c, r1 = collapse_repeats(out or "")
+    err_c, r2 = collapse_repeats(err or "")
+    closing = (whole if not (r1 or r2) else
+               "That is the whole output; a run of repeated lines is shown once and counted. "
+               "Nothing is owed by you on this.")
+    out_block, err_block = _block("stdout", out_c), _block("stderr", err_c)
+    text = _compose(header, out_block, [], 0, err_block, answers, closing)
+    if len(text) <= cap:
+        return text, 0, 0
+    # The copied lines take the shown tail, so the end of stdout moves into the cut with them; every
+    # line with numbers that the shown HEAD (which this does not move) lacks is a candidate.
+    head_n = cap * 2 // 5
+    tail_n = cap - head_n
+    in_head = text[:head_n]
+    cands, seen = [], set()
+    for ln in out_block.split("\n")[1:]:
+        t = ln.strip()
+        if t and len(t) <= LIFT_LINE_MAX and is_result_line(t) and t not in seen and t not in in_head:
+            seen.add(t)
+            cands.append(t)
+    keep = list(cands)
+    while keep:
+        text = _compose(header, out_block, keep, len(cands) - len(keep), err_block, answers, closing)
+        start = text.index("\nLines with numbers from stdout above, copied here") + 1
+        if start >= len(text) - tail_n:
+            return text, len(keep), len(cands) - len(keep)
+        keep = keep[1:]
+    return _compose(header, out_block, [], 0, err_block, answers, closing), 0, len(cands)
 
 
 def _answers(seqs: list[int]) -> str:
@@ -569,7 +674,11 @@ def cmd_decline(args) -> None:
 
 def _decline(args) -> None:
     inst = _instance()
-    rel = _target(inst, args.path).relative_to(inst.resolve())
+    # A DECLINE EXECUTES NOTHING, so it needs the path inside the home but not the file (#721).
+    # cbp-being 2026-11-15 seq 15545: its reflect retire_note renamed the script it had just asked
+    # to run, `decline` refused with "is not a file", and the request stayed owed with no way to
+    # close it. bind() and require_pending still demand a pending request for exactly this path.
+    rel = _in_home(inst, args.path).relative_to(inst.resolve())
     seqs = bind(inst, _conv_id(), str(rel), args.seq)
     require_pending(seqs, rel, args, "declined")
     text = decline_text(rel, args.reason, seqs, decline_closing(inst))

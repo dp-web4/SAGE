@@ -129,10 +129,12 @@ def test_relative_memory_path_is_judged_at_the_being_memory_root():
         evaluate=lambda ev, prof, ws, policy=None: SimpleNamespace(
             decision="allow", rule="", reason="ok", innate=False),
     )
+    # realpath: on macOS /tmp is a link to /private/tmp, and the gate judges the resolved path.
+    want = [os.path.realpath("/tmp/being-home/notes/x.md")]
     c.gate(BeingIntent("memory_write", {"path": "notes/x.md", "content": "x"}))
-    assert seen["paths"] == ["/tmp/being-home/notes/x.md"], seen["paths"]
+    assert seen["paths"] == want, seen["paths"]
     c.gate(BeingIntent("memory_read", {"path": "/tmp/being-home/notes/x.md"}))
-    assert seen["paths"] == ["/tmp/being-home/notes/x.md"]
+    assert seen["paths"] == want
 
 
 def test_pr_review_is_judged_as_the_gh_command_the_seat_runs():
@@ -624,6 +626,33 @@ def test_search_refuses_what_its_grammar_cannot_represent():
         assert "worktree" in str(e)
 
 
+def test_git_read_ls_lists_a_directory_through_cat():
+    """mcnugget-being sent {"op": "ls", "path": "sage/gateway/"} 6 times in 2026-11 while looking
+    for file names that do not exist; each was refused, so the listing that would have settled it
+    never ran. `cat` on a directory already lists it (`git show <rev>:<dir>`), so `ls` is that op
+    under the name the being reaches for. It composes exactly what `cat` composes, the published
+    enum is unchanged, and an unknown op is still refused with the valid set."""
+    from sage.gateway.being_gate_client import git_read_command, GIT_OPS, ollama_tools
+
+    ctx = {"worktree": "/wt"}
+    for path in ("sage/gateway/", "sage/gateway"):
+        assert (git_read_command({"op": "ls", "path": path}, ctx)
+                == git_read_command({"op": "cat", "path": path}, ctx)), path
+    assert git_read_command({"op": "ls", "path": "sage/gateway/"}, ctx).endswith(" show --no-ext-diff "
+                                                                                 "--no-textconv HEAD:sage/gateway")
+    assert "ls" not in GIT_OPS, "an alias, not a new verb in the published enum"
+    try:
+        git_read_command({"op": "ls"}, ctx)
+        assert False, "ls with no path must refuse like cat"
+    except ValueError as e:
+        assert "needs a 'path'" in str(e) and "directory" in str(e), e
+    try:
+        git_read_command({"op": "tree", "path": "sage"}, ctx)
+        assert False, "an op that is neither verb nor alias is still refused"
+    except ValueError as e:
+        assert "must be one of" in str(e), e
+
+
 def test_git_read_refuses_what_its_grammar_cannot_represent():
     """The being names an op, a revision and a path; it never supplies a flag. Anything the
     grammar cannot represent raises, and the refusal names its own valid set — a refusal the
@@ -677,8 +706,10 @@ def test_the_judged_command_round_trips_even_when_seat_paths_contain_spaces():
     for label, cmd in (("git_read", git_read_command({"op": "show", "path": "sage"}, ctx)),
                        ("search", search_command({"pattern": "def x", "path": "sage"}, ctx))):
         argv = shlex.split(cmd)
-        assert argv[-1] == f"{wt}/sage", f"{label}: pathspec split into {argv[-3:]}"
-        assert wt in argv[argv.index("-C") + 1] if "-C" in argv else True
+        # realpath: on macOS /home is a link into /System/Volumes/Data, and the worktree is resolved.
+        rwt = os.path.realpath(wt)
+        assert argv[-1] == f"{rwt}/sage", f"{label}: pathspec split into {argv[-3:]}"
+        assert os.path.realpath(argv[argv.index("-C") + 1]) == rwt if "-C" in argv else True
 
     # and the being-supplied pattern stays one element beside them
     argv = shlex.split(search_command({"pattern": "seed, posture = compose"}, ctx))
@@ -842,7 +873,9 @@ def test_check_runs_exactly_one_test_in_one_file(tmp_path):
     """legion-being 2026-10-07, fixing #360: it typed 'gateway::test_pr_read::test_x' (refused
     "bare identifier") and 'gateway::test_pr_readtest_x' (collected nothing), then ran the whole
     file every step. '<suite>::<file>::<test>' runs exactly that pytest node id."""
-    from sage.gateway.being_gate_client import check_command, CHECK_TARGETS
+    from sage.gateway.being_gate_client import check_command, CHECK_TARGETS, sandbox_available
+    if not sandbox_available():
+        pytest.skip("check composes only where its bubblewrap sandbox exists (Linux); it refuses elsewhere")
     wt = tmp_path / "wt"
     for rel in CHECK_TARGETS.values():
         (wt / rel).mkdir(parents=True, exist_ok=True)
@@ -898,7 +931,8 @@ def test_single_gate_judges_a_runs_script_in_the_home():
     assert ev["raw"]["path"] == "scratch/t.py", "raw keeps what the being said"
     assert ev["cwd"] == "/tmp/ws"
     c.gate(BeingIntent("run", {"path": "/tmp/being-home/scratch/t.py"}))
-    assert calls[-1][0]["tool_input"]["path"] == os.path.realpath("/tmp/being-home/scratch/t.py")
+    # left alone, as given (on macOS /tmp is a link, so this is not its realpath)
+    assert calls[-1][0]["tool_input"]["path"] == "/tmp/being-home/scratch/t.py"
 
 
 def test_a_relative_write_is_never_redirected_to_a_granted_file():
@@ -1104,7 +1138,9 @@ def _assert_every_bind_is_judged_or_plumbing(calls):
     line = next(e for e in events if e.get("egress"))["egress"][-1]
     judged = {p for e in events for p in (e["tool_input"].get("paths") or [])}
     interp = os.path.dirname(os.path.dirname(sys.executable))
+    from sage.gateway.being_gate_client import RUN_ETC_BINDS
     plumbing = {"/usr", "/lib", "/lib64", "/bin", "/etc/alternatives", interp}
+    plumbing |= {t for t in RUN_ETC_BINDS.split() if t.startswith("/")}   # fixed system config
     for src in _line_bind_sources(line):
         if src in plumbing or src.startswith(STAGE_ROOT + "-"):
             continue
@@ -1180,3 +1216,23 @@ def test_a_run_name_that_could_add_a_bind_never_reaches_the_law(tmp_path, monkey
     v = c.gate(BeingIntent("run", {"path": "scratch/s.py", "data": data}))
     assert v.blocks, v
     assert not calls, "refused at composition, before any decide()"
+
+
+def test_a_target_that_means_the_tests_folder_is_told_to_use_tests(tmp_path):
+    """nomad-being, three times (11-12, 11-16, 11-18): a folder or path in front of '::tests', or a
+    script path, each meaning "run my tests/ folder". The refusal now says the target is just 'tests',
+    and that nothing ran. A target with no such shape keeps the plain refusal."""
+    from sage.gateway.being_gate_client import check_command, CHECK_TARGETS, sandbox_available
+    if not sandbox_available():
+        pytest.skip("check composes only where its bubblewrap sandbox exists (Linux); it refuses elsewhere")
+    wt = tmp_path / "wt"
+    for rel in CHECK_TARGETS.values():
+        (wt / rel).mkdir(parents=True, exist_ok=True)
+    ctx = {"worktree": str(wt)}
+    for bad in ("textstats::tests", "being-worktrees/nomad-being::tests", "scratch/fix_textstats.py"):
+        with pytest.raises(ValueError) as e:
+            check_command({"target": bad}, ctx)
+        assert "the target is just 'tests'" in str(e.value) and "Nothing ran" in str(e.value), bad
+    with pytest.raises(ValueError) as e:
+        check_command({"target": "nosuite"}, ctx)
+    assert "just 'tests'" not in str(e.value)

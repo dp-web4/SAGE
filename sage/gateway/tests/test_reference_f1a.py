@@ -509,6 +509,18 @@ def test_the_todo_can_be_retired_and_starts_fresh_with_what_is_still_open():
     assert "old thing again" in fresh and kept[0] in fresh, fresh
 
 
+def test_retiring_a_scratch_file_says_the_whole_file_moved():
+    """cbp-being, 2026-11-15 21:53Z: it retired a file to drop an appended second half ("leaves only
+    lines 1-26"), and the receipt "retired X -> Y" did not say the whole file was gone."""
+    disp, root = _disp()
+    disp(BeingIntent("memory_write", {"path": "scratch/two.py", "content": "a = 1\nb = 2\nc = 3"}), _ALLOW)
+    ret = disp(BeingIntent("retire_note", {"path": "scratch/two.py", "reason": "drop lines 2-3"}), _ALLOW)
+    assert ret.ok, ret.error
+    assert "whole file (3 lines)" in ret.result and "nothing is left at scratch/two.py" in ret.result, ret.result
+    assert "memory_edit" in ret.result and "start_line" in ret.result, ret.result
+    assert not os.path.exists(os.path.join(root, "scratch", "two.py"))
+
+
 def test_appending_to_the_journal_does_not_offer_retire_note():
     """The journal is meant to grow, so an append to it does not suggest starting it fresh; the
     being can still retire it when it chooses (test_home_records_start_fresh)."""
@@ -1239,6 +1251,28 @@ def test_memory_edit_reads_delete_lines_as_the_range():
     assert "replaced lines 2-6 (5 lines)" in r.result, r.result
 
 
+def test_memory_edit_start_line_zero_says_numbering_starts_at_one():
+    """2026-11-14 00:15Z: pub-being sent start_line 0 five times in one beat; the refusal said
+    'lines 0-1 are not all in it: it has 3 lines', and each retry changed only end_line."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "scratch").mkdir(exist_ok=True)
+    f = home / "scratch" / "h.py"
+    f.write_text("import sys\nimport sys\nprint('abc')\n")
+    r = disp(BeingIntent("memory_edit", {"path": "scratch/h.py", "old": "abc", "start_line": 0, "end_line": 1, "new": ""}), _ALLOW)
+    assert not r.ok and "line numbers start at 1" in r.error and "Nothing was changed" in r.error, r.error
+    assert "without start_line and end_line would replace it" in r.error, r.error
+    assert f.read_text() == "import sys\nimport sys\nprint('abc')\n"
+    # 'old' repeated (or absent): no claim that dropping the range would work
+    r = disp(BeingIntent("memory_edit", {"path": "scratch/h.py", "old": "import sys", "start_line": 0, "end_line": 2, "new": ""}), _ALLOW)
+    assert not r.ok and "line numbers start at 1" in r.error and "would replace it" not in r.error, r.error
+    r = disp(BeingIntent("memory_edit", {"path": "scratch/h.py", "start_line": 0, "end_line": 2, "new": ""}), _ALLOW)
+    assert not r.ok and "line numbers start at 1" in r.error and "would replace it" not in r.error, r.error
+    # a range past the end keeps the existing refusal
+    r = disp(BeingIntent("memory_edit", {"path": "scratch/h.py", "start_line": 2, "end_line": 9, "new": ""}), _ALLOW)
+    assert not r.ok and "are not all in" in r.error, r.error
+
+
 def test_memory_edit_delete_lines_agrees_with_end_line_or_refuses():
     disp, root = _disp()
     home = Path(root)
@@ -1394,6 +1428,37 @@ def test_memory_read_find_whose_spaces_kept_it_from_matching_says_so():
     r = disp(BeingIntent("memory_read", {"path": rel, "find": "    head = nn.Linear"}), _ALLOW)
     assert "line 2:   head = nn.Linear(5, 8)" in r.result, r.result
     assert "exactly as sent" in r.result, r.result
+
+
+def test_memory_read_find_with_regex_escapes_tries_the_text_without_them():
+    """#724: cbp-being sent find `MLP\\(4,` (search's regex dialect) to a file holding `MLP(4,`
+    on 28 lines, got 'found none', and concluded there was 'no mention of MLP(4,)'. find stays
+    literal, but a miss whose query has backslash-escaped metacharacters also tries the text
+    without the backslashes, and says so."""
+    disp, root = _disp()
+    rel = _scratch(root, "m = MLP(4, 8)\nx = 1\npath = 'train.npy'\nraw = r'a\\(b'\n")
+    # the cbp-being case: escaped query, unescaped text in the file
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "MLP\\(4,"}), _ALLOW)
+    assert r.ok and r.witness_id
+    assert "[found 1 line of 4 in 'scratch/train.py' containing 'MLP(4,'" in r.result, r.result
+    assert "line 1: m = MLP(4, 8)" in r.result, r.result
+    assert "not a regex" in r.result and "backslash escapes" in r.result, r.result
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "train\\.npy"}), _ALLOW)
+    assert "line 3:" in r.result and "backslash escapes" in r.result, r.result
+    # an exact match of the escaped text still wins, with no unescape note
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "a\\(b"}), _ALLOW)
+    assert "line 4:" in r.result and "backslash escapes" not in r.result, r.result
+    # still absent without the backslashes: found none names both texts
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "MLP\\(64,"}), _ALLOW)
+    assert r.result.startswith("[found none:"), r.result
+    assert "'MLP(64,' was looked for: it is not there either" in r.result, r.result
+    assert "true answer about this one file only" in r.result, r.result
+    # a backslash before an ordinary character is not a regex escape: no retry, no note
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "x\\n"}), _ALLOW)
+    assert r.result.startswith("[found none:") and "was looked for" not in r.result, r.result
+    # whitespace and escapes together: trimmed, then unescaped
+    r = disp(BeingIntent("memory_read", {"path": rel, "find": "  MLP\\(4,"}), _ALLOW)
+    assert "line 1:" in r.result and "'MLP(4,'" in r.result, r.result
 
 
 def test_memory_read_find_caps_the_list_and_says_how_many_more():
@@ -1819,3 +1884,155 @@ def test_memory_write_through_a_file_names_the_file_not_a_raw_errno():
     assert "did not happen" in env.error
     assert "Errno" not in env.error
     assert open(blocker).read() == "an old note"
+
+
+# --- memory_edit refuses non-Python text in a .py file (SAGE #188, salvaged 2026-11-09) ---
+
+def test_memory_edit_refuses_a_prose_replacement_but_never_a_deletion():
+    """The append guard worked and the pattern walked to the other verb. cbp-being,
+    2026-09-23: at 11:22Z two label APPENDS were refused and it used memory_edit twice
+    instead, both landing — then at ~11:50Z it replaced lines 974-976 with the text
+    "[remove these lines]". That did the deletion it wanted and wrote a fresh defect in the
+    same act: prose at column 0 in the middle of a program.
+
+    The deletion path must stay open: an empty replacement is how lines are removed."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "s.py").write_text("a = 1\nb = 2\nc = 3\n")
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2,
+                                         "end_line": 2, "new": "[remove these lines]"}), _ALLOW)
+    assert not r.ok, "a prose replacement must be refused"
+    assert "memory_edit refused" in (r.error or ""), r.error
+    assert "empty replacement" in (r.error or ""), "it must name the deletion path"
+    assert (home / "notes" / "s.py").read_text() == "a = 1\nb = 2\nc = 3\n", "file must be untouched"
+
+    # THE CONTROL: deletion still works, and so does a real code replacement.
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "start_line": 2,
+                                         "end_line": 2, "new": ""}), _ALLOW)
+    assert r.ok, f"an empty replacement is a deletion and must be allowed: {r.error}"
+    r = disp(BeingIntent("memory_edit", {"path": "notes/s.py", "old": "a = 1",
+                                         "new": "a = 42"}), _ALLOW)
+    assert r.ok, f"a real code replacement must be allowed: {r.error}"
+    assert "a = 42" in (home / "notes" / "s.py").read_text()
+
+
+def test_memory_edit_in_a_non_python_file_takes_any_text():
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "j.md").write_text("one\ntwo\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/j.md", "start_line": 1,
+                                         "end_line": 1, "new": "[a label]"}), _ALLOW)
+    assert r.ok, f"prose belongs in notes and must never be refused there: {r.error}"
+
+
+def test_editing_prose_inside_a_docstring_is_not_refused():
+    """THE CONTROL that shapes the rule. A line inside a docstring IS prose, so the
+    standalone "is this Python" test refuses it — and refusing an ordinary docstring edit to
+    stop a rarer mistake is the kind of friction that gets a guard routed around. So the
+    standalone verdict is only acted on when the edit actually makes the file worse: when it
+    moves the first parse error earlier, or introduces one."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "d.py").write_text(
+        'def f(x):\n    """Do a thing.\n\n    Returns:\n        Dictionary of gradients.\n    """\n    return x\n')
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/d.py", "start_line": 5, "end_line": 5,
+                                         "new": "        Dictionary of updated gradients."}), _ALLOW)
+    assert r.ok, f"a docstring edit must not be refused: {r.error}"
+    assert "updated gradients" in (home / "notes" / "d.py").read_text()
+
+    # ...while replacing a CODE line with the same shape of text is still refused.
+    r = disp(BeingIntent("memory_edit", {"path": "notes/d.py", "start_line": 7, "end_line": 7,
+                                         "new": "[remove these lines]"}), _ALLOW)
+    assert not r.ok and "memory_edit refused" in (r.error or ""), r.error
+
+
+def test_prose_below_an_existing_error_is_still_refused():
+    """GPT's review of #188. The first version let the standalone verdict be overridden
+    whenever the edit did not move the FIRST SyntaxError earlier — and a file under repair is
+    almost always already broken, so that escape was open nearly all the time and a new defect
+    could be planted anywhere BELOW the existing one. Asking where the edit LANDS (inside a
+    docstring or not) answers the real question and has no such hole."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    # already broken at line 1; the edit lands far below it
+    (home / "notes" / "b.py").write_text("def f(:\n" + "".join(f"x{i} = {i}\n" for i in range(2, 30)))
+
+    r = disp(BeingIntent("memory_edit", {"path": "notes/b.py", "start_line": 20,
+                                         "end_line": 20, "new": "[remove these lines]"}), _ALLOW)
+    assert not r.ok, "prose below an existing error must still be refused"
+    assert "memory_edit refused" in (r.error or ""), r.error
+    assert "[remove these lines]" not in (home / "notes" / "b.py").read_text()
+
+    # ...and the deletion path through the same region is untouched.
+    r = disp(BeingIntent("memory_edit", {"path": "notes/b.py", "start_line": 20,
+                                         "end_line": 20, "new": ""}), _ALLOW)
+    assert r.ok, f"deletion must still work in a broken file: {r.error}"
+
+
+def test_a_text_mode_fragment_is_judged_by_its_whole_line():
+    """Ported control (2026-11-09): "foo(a" -> "foo(b" is not Python on its own, but the line it
+    leaves is, so the edit lands, even in a file that is already broken elsewhere."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "f.py").write_text("def g(:\n    pass\nx = foo(a, 2)\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/f.py", "old": "foo(a", "new": "foo(b"}), _ALLOW)
+    assert r.ok, f"a fragment that leaves a valid line must not be refused: {r.error}"
+    assert "foo(b, 2)" in (home / "notes" / "f.py").read_text()
+
+
+def test_a_line_that_only_parses_in_its_block_is_not_refused_when_the_file_parses():
+    """Ported control (2026-11-09): "    elif y:" is not Python alone, but the file parses after it."""
+    disp, root = _disp()
+    home = Path(root)
+    (home / "notes").mkdir(exist_ok=True)
+    (home / "notes" / "e.py").write_text("if x:\n    a = 1\nelse:\n    a = 2\n")
+    r = disp(BeingIntent("memory_edit", {"path": "notes/e.py", "start_line": 3, "end_line": 3,
+                                         "new": "elif y:"}), _ALLOW)
+    assert r.ok, f"an edit that leaves the file parsing must not be refused: {r.error}"
+
+
+def test_memory_read_pages_a_directory_listing_by_start_line():
+    """cbp-being 2026-11-14 02:30Z: notes/inbox held 423 entries; start_line 420 end_line 423 came
+    back as the same first 50 names four times. start_line/end_line now page the sorted listing."""
+    disp, root = _disp()
+    inbox = Path(root) / "inbox"
+    inbox.mkdir()
+    for i in range(1, 124):
+        (inbox / f"n{i:03d}.md").write_text("x")
+    # unpaged: the first 50, and the call that reads on
+    r = disp(BeingIntent("memory_read", {"path": "inbox"}), _ALLOW)
+    assert r.ok and r.result.startswith("[directory: 'inbox' holds 123 entries]"), r.result
+    assert "- n050.md" in r.result and "- n051.md" not in r.result, r.result
+    assert "…and 73 more after entry 50" in r.result and "start_line=51" in r.result, r.result
+    assert "(entries" not in r.result
+    # the being's own call, string args as it sends them
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "start_line": "120", "end_line": "123"}),
+             _ALLOW)
+    assert "(entries 120-123 of 123, sorted by name)" in r.result, r.result
+    assert "- n120.md" in r.result and "- n123.md" in r.result and "- n001.md" not in r.result
+    assert "more after" not in r.result
+    # start alone: a page of 50, then the next call
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "start_line": 51}), _ALLOW)
+    assert "(entries 51-100 of 123" in r.result and "start_line=101" in r.result, r.result
+    # end_line alone, and a page asked larger than 50 is cut to 50
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "end_line": "1"}), _ALLOW)
+    assert "(entries 1-1 of 123" in r.result and "- n002.md" not in r.result, r.result
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "start_line": 1, "end_line": 500}), _ALLOW)
+    assert "(entries 1-50 of 123" in r.result, r.result
+    # past the end says so instead of showing an empty list as if the directory were empty
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "start_line": 400}), _ALLOW)
+    assert "past the end" in r.result and "holds 123 entries" in r.result, r.result
+    # a junk number falls back to the first page; find still says it did not run
+    r = disp(BeingIntent("memory_read", {"path": "inbox", "start_line": "abc", "find": "x"}), _ALLOW)
+    assert "- n001.md" in r.result and "find was NOT run" in r.result, r.result
+    # empty directory keeps its answer
+    (Path(root) / "empty").mkdir()
+    r = disp(BeingIntent("memory_read", {"path": "empty", "start_line": 3}), _ALLOW)
+    assert "(empty directory)" in r.result, r.result

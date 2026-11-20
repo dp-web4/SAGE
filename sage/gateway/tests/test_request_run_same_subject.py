@@ -306,3 +306,24 @@ def test_no_answer_does_not_promise_one():
     assert by[1]["answer_seq"] is None
     said = rv.earlier_requests_said(list(by.values()))
     assert "seq 1 (notes/x.py): (no answer to these bytes)" in said and "yet" not in said, said
+
+
+def test_what_was_settled_comes_after_nothing_has_run_and_says_it_is_not_output():
+    # cbp 2026-11-14 (seq 14877/14881): an evidence-less settled answer holding an expectation ("expected to
+    # achieve 80-90%+") led the receipt, "NOTHING HAS RUN YET" came last, and the reflect reported 80-90% as the
+    # run's result while the real run exited 1. The note now comes first and the entry says what it is.
+    d, home = _seat_home()
+    st.settle(home, {"question": "does the test gadget script reach /dev/gadget7?",
+                     "answer": "yes, it is expected to answer 90% of the time"})
+    st.settle(home, {"question": "which test gadget port is open on /dev/gadget7?",
+                     "answer": "port 7", "evidence": "seq 3"})
+    r = _ask(d, home, "probe_a.py", "check the test gadget script at /dev/gadget7 one more time")
+    keys = list(r.result)
+    assert keys.index("note") < keys.index("you_settled"), keys
+    said = r.result["you_settled"]
+    assert "not this run's output" in said, said
+    lines = {ln.split("]")[0]: ln for ln in said.splitlines() if ln.startswith("- [")}
+    no_ev = [ln for ln in lines.values() if "expected to answer" in ln]
+    with_ev = [ln for ln in lines.values() if "port 7" in ln]
+    assert no_ev and "no evidence given" in no_ev[0], said
+    assert not with_ev or "no evidence given" not in with_ev[0], said

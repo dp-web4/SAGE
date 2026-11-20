@@ -211,3 +211,12 @@ def test_if_even_the_undo_fails_the_being_is_told_what_state_it_is_in(tmp_path, 
     monkeypatch.setattr(pathlib.Path, "write_bytes", boom)
     ok, text = bp.tune(h, "num_ctx", "28672", "why")
     assert not ok and "could not be undone" in text and "num_ctx=28672" in text
+
+
+def test_reflection_can_undo_a_window_the_being_made_too_small():
+    """nomad-being, 2026-11-13: it tuned num_ctx down to 8192, and from the next beat explore and
+    posture were refused at preflight (prompts 13,582 and 15,418 tokens). Reflect still ran (about
+    2,600 tokens) and the being wrote down that it should tune back to 16384, but reflect offered no
+    `tune`, so it could not. The one turn that survives a too-small window must hold the way back."""
+    from sage.gateway import heartbeat as hb
+    assert "tune" in hb.REFLECT_TOOLS

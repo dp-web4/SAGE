@@ -37,7 +37,7 @@ Trust on an individual pretrained expert is a **separate learning intervention**
 Measure tokens/sec, TTFT, p50/p95 latency, actual per-tier byte traffic, NVMe misses, expert cache hit/churn, power, task success, numerical KL/top-1 agreement, and routing fidelity. Compare storage and RAM configurations fairly. Failure condition: optimization breaks native choices, degrades output quality, or imposes memory/complexity costs exceeding savings.
 
 ## Fleet applicability
-- **Legion RTX 4090 (24 GB):** closest fit, but profile RAM/SSD/PCIe first; no promised throughput.
+- **Legion RTX 4090 Laptop (16 GB, measured 2026-11-10; about 14.8 GB held by the resident being):** closest fit, but profile RAM/SSD/PCIe first; no promised throughput.
 - **Thor:** unified memory changes the architectural tradeoffs; kernel rework required; competition priorities remain unchanged.
 - **Sprout 8 GB / CBP / McNugget:** principles only unless profiler shows sparse working set and meaningful headroom; avoid transplanting the full runtime.
 

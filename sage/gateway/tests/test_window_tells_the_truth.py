@@ -146,6 +146,74 @@ def test_a_waiting_request_is_named_and_an_answered_one_is_not(tmp_path):
     assert facts["pending"] == {"b.py": [req]}
 
 
+def test_a_repeat_of_answered_bytes_is_not_waiting(tmp_path):
+    """sprout-being, 2026-11-16: 8 requests whose receipts said UNCHANGED (bytes the seat had already
+    answered) stood in this block as "waiting to be run", every beat, the oldest for 13 days. A seat
+    does not answer a repeat again, so they never stopped waiting. A repeat names the answer it
+    repeats instead; a request that is really new (SAME AS, not yet answered) still waits."""
+    inst = _home(tmp_path)
+    _script(inst, "a.py")
+    _script(inst, "b.py")
+    _script(inst, "c.py")
+    conv.append(inst, SEAT, speaker=BEING, text="[request_run] a.py\nwhy: x")
+    ans = conv.append(inst, SEAT, speaker=SEAT, text="Answering seq 1. I'm not running a.py: it changes "
+                                                       "the machine's accounts.")["seq"]
+    conv.append(inst, SEAT, speaker=BEING, text=f"[request_run] a.py\nwhy: x\n(10 bytes, sha256:abc)\n"
+                                                f"UNCHANGED since the request at seq 1; the seat answered "
+                                                f"at seq {ans}.")
+    conv.append(inst, SEAT, speaker=BEING, text="[request_run] b.py\nwhy: y\n"
+                                                "UNCHANGED since the seat ran this exact file at seq 7.")
+    first = conv.append(inst, SEAT, speaker=BEING, text="[request_run] c.py\nwhy: z")["seq"]
+    again = conv.append(inst, SEAT, speaker=BEING, text=f"[request_run] c.py\nwhy: z\n"
+                                                        f"SAME AS the request at seq {first}, not yet answered.")["seq"]
+    block, _, facts = hb.files_and_runs(inst, BEING)
+    row = {l[2:6]: l for l in block.splitlines() if l.startswith("- ")}
+    assert "waiting to be run" not in row["a.py"] and f"already answered (seq {ans})" in row["a.py"]
+    assert "adds nothing to wait for" in row["a.py"]
+    assert "The seat ran these exact bytes at seq 7." in row["b.py"] and "Never run" not in row["b.py"]
+    assert f"Your request (seq {first}, {again}) is waiting to be run." in row["c.py"]
+    assert facts["pending"] == {"c.py": [first, again]}
+
+
+def test_a_repeat_does_not_close_a_newer_request_for_other_bytes(tmp_path):
+    """legion-claude's probe on #737: request v1, the seat declines, the being edits and requests v2
+    (new bytes, unanswered), then reverts and requests v1 again (UNCHANGED, answered earlier). The
+    seat's answer covers only requests made before it, so v2's request still waits."""
+    inst = _home(tmp_path)
+    _script(inst, "a.py")
+    conv.append(inst, SEAT, speaker=BEING, text="[request_run] a.py\nwhy: x")
+    ans = conv.append(inst, SEAT, speaker=SEAT, text="[request_run] I did not run a.py.")["seq"]
+    v2 = conv.append(inst, SEAT, speaker=BEING, text="[request_run] a.py\nwhy: x")["seq"]
+    conv.append(inst, SEAT, speaker=BEING, text=f"[request_run] a.py\nwhy: x\n"
+                                                f"UNCHANGED since the request at seq 1; the seat answered "
+                                                f"at seq {ans}.")
+    block, _, facts = hb.files_and_runs(inst, BEING)
+    row = next(l for l in block.splitlines() if l.startswith("- a.py"))
+    assert facts["pending"] == {"a.py": [v2]}
+    assert f"Your request (seq {v2}) is waiting to be run." in row
+    assert "adds nothing to wait for" not in row
+
+
+def test_a_seat_answer_without_the_prefix_still_answers(tmp_path):
+    """sprout-being seq 2507: the seat wrote "I did not run scratch/....py (sha ...)" with no
+    [request_run] prefix, and the request it answered read as waiting for ten days. Only a
+    runnable path is read this way, so ordinary sentences are not taken for answers."""
+    inst = _home(tmp_path)
+    (inst / "scratch").mkdir()
+    _script(inst, "scratch/r.py")
+    _script(inst, "scratch/s.py")
+    conv.append(inst, SEAT, speaker=BEING, text="[request_run] scratch/r.py\nwhy: x")
+    no = conv.append(inst, SEAT, speaker=SEAT, text="I did not run scratch/r.py (sha 0123456789ab). "
+                                                     "It is the file declined before.")["seq"]
+    s_req = conv.append(inst, SEAT, speaker=BEING, text="[request_run] scratch/s.py\nwhy: y")["seq"]
+    conv.append(inst, SEAT, speaker=SEAT, text="I ran into a question about scratch/s.py first.")
+    conv.append(inst, SEAT, speaker=BEING, text="I did not run scratch/s.py yet")   # the being's own words
+    block, _, facts = hb.files_and_runs(inst, BEING)
+    r_row = next(l for l in block.splitlines() if l.startswith("- scratch/r.py"))
+    assert f"Last request was declined at seq {no}" in r_row and "waiting to be run" not in r_row
+    assert facts["pending"] == {"scratch/s.py": [s_req]}
+
+
 def test_a_process_that_is_really_running_is_reported_and_nothing_is_refuted(tmp_path):
     """The measurement reads /proc: a live `python3 a.py` in the home IS running, and then a
     "still running" of the being's is true and must not be marked refuted."""
