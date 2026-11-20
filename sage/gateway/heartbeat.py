@@ -5211,6 +5211,10 @@ def main(argv=None) -> int:
     # THE LIVE VIEW OF THIS BEAT'S OUTPUT (being_stream): every model call below streams into it.
     from sage.gateway import being_stream
     being_stream.start(instance, host_session_id, member=args.member, model=args.model or "")
+    # stop() is idempotent: the normal path calls it after the model calls; this covers any exception that leaves
+    # main() first, so the live view never shows a dead beat as still running (legion on #799)
+    import atexit
+    atexit.register(being_stream.stop)
     _phase("wake", "start", host_session_id)
     # WHAT WOKE THIS BEAT (SAGE #295): claim every pending event now, before anything is composed,
     # so an event arriving from here on is pending for the NEXT beat rather than lost in this one.
