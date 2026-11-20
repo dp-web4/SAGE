@@ -1280,3 +1280,29 @@ def test_a_value_passed_as_data_is_told_data_only_stages_files(tmp_path):
     assert "base name with no directory" in g.error and "hand values" not in g.error
     s = d._do_run(BeingIntent("run", {"path": "nope"}))                  # the script itself: no value hint
     assert s.ok is False and "hand values" not in s.error
+
+
+def _host_has_matplotlib():
+    import subprocess
+    return subprocess.run([sys.executable, "-c", "import matplotlib"], capture_output=True).returncode == 0
+
+
+@needs_bwrap
+@pytest.mark.skipif(not _host_has_matplotlib(), reason="the seat's interpreter has no matplotlib")
+def test_a_library_the_seat_python_imports_also_plots_inside_run(tmp_path):
+    """cbp-being, 2026-11-06..11-20: every `import matplotlib.pyplot` in `run` raised "Could not
+    find matplotlibrc file; your Matplotlib install is broken", because Debian's matplotlib reads
+    its default rc from /etc and the box binds /usr only. The being hunted the file for 13 days.
+    The assertion is on what the script printed and wrote, so a box that drops RUN_ETC_BINDS (or
+    a seat whose matplotlib needs another config file) turns this red."""
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "plot.py").write_text(
+        "import os, matplotlib\n"
+        "matplotlib.use('Agg')\n"
+        "import matplotlib.pyplot as plt\n"
+        "fig, ax = plt.subplots(); ax.plot([0, 1], [1, 0]); fig.savefig('out.png')\n"
+        "print('saved', os.path.getsize('out.png') > 0)\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/plot.py"}))
+    assert r.ok, r.error
+    assert "Could not find matplotlibrc" not in r.result["stderr"], r.result["stderr"]
+    assert r.result["exit"] == 0 and "saved True" in r.result["stdout"], r.result
