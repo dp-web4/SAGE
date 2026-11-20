@@ -1282,13 +1282,35 @@ def test_a_value_passed_as_data_is_told_data_only_stages_files(tmp_path):
     assert s.ok is False and "hand values" not in s.error
 
 
-def _host_has_matplotlib():
+def _box_sees_debian_matplotlib():
+    """True only where this test exercises RUN_ETC_BINDS: the box's interpreter imports matplotlib
+    from a tree the box mounts, and that matplotlib is Debian's (default rc read from
+    /etc/matplotlibrc, which exists). The probe runs the box's interpreter with the box's cleared
+    environment (HOME=/tmp, no PYTHONPATH), so a matplotlib only in the host user site or on an
+    inherited PYTHONPATH skips instead of failing on a ModuleNotFoundError the bind cannot fix
+    (codex, SAGE #795 review), and an upstream wheel with mpl-data skips instead of passing
+    without the bind (it never reads /etc)."""
     import subprocess
-    return subprocess.run([sys.executable, "-c", "import matplotlib"], capture_output=True).returncode == 0
+    interp = os.path.dirname(os.path.dirname(sys.executable))
+    probe = ("import inspect, os, matplotlib as m\n"
+             "src = inspect.getsource(m.matplotlib_fname)\n"
+             "print(os.path.realpath(m.__file__)); print('/etc/matplotlibrc' in src)\n")
+    try:
+        p = subprocess.run([f"{interp}/bin/python3", "-c", probe], capture_output=True, text=True,
+                           env={"HOME": "/tmp", "PATH": f"{interp}/bin:/usr/bin:/bin"}, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    lines = p.stdout.split()
+    if p.returncode != 0 or len(lines) != 2:
+        return False
+    roots = [os.path.realpath(r) + os.sep for r in (interp, "/usr", "/lib")]
+    return (any(lines[0].startswith(r) for r in roots) and lines[1] == "True"
+            and os.path.isfile("/etc/matplotlibrc"))
 
 
 @needs_bwrap
-@pytest.mark.skipif(not _host_has_matplotlib(), reason="the seat's interpreter has no matplotlib")
+@pytest.mark.skipif(not _box_sees_debian_matplotlib(),
+                    reason="no Debian matplotlib on a path the run box mounts")
 def test_a_library_the_seat_python_imports_also_plots_inside_run(tmp_path):
     """cbp-being, 2026-11-06..11-20: every `import matplotlib.pyplot` in `run` raised "Could not
     find matplotlibrc file; your Matplotlib install is broken", because Debian's matplotlib reads
