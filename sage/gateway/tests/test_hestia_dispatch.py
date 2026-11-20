@@ -15,6 +15,21 @@ from sage.gateway.hestia_dispatch import HestiaF1aDispatcher  # noqa: E402
 
 _ALLOW = GatewayVerdict("allow")
 
+# THE SAME HERMETICITY, FOR THE TWO MACHINE FACTS A MAC CHANGES (#729). Linux CI never sees either.
+# 1. macOS's temp dir is a symlink: mkdtemp() returns /var/folders/... while resolve() gives
+#    /private/var/folders/..., and a worktree compared in both spellings raised ValueError in
+#    relative_to (7 tests on McNugget). A real temp dir makes the two spellings one; on Linux
+#    /tmp is already real, so nothing changes there.
+# 2. `check` runs a bare `python3` from PATH. Under a venv's pytest on a Mac that resolved to
+#    Homebrew's interpreter, which has no pytest, so a check reported FAIL where the test expects
+#    NO_SUCH_TEST/PASS. The interpreter running these tests has pytest, so it goes first on PATH.
+# Both are scoped to THIS module's tests by monkeypatch: set at import, they leaked into the rest
+# of the session and broke 7 tests elsewhere that reason about the unresolved temp path.
+@pytest.fixture(autouse=True)
+def _hermetic_mac_paths(monkeypatch):
+    monkeypatch.setattr(tempfile, "tempdir", os.path.realpath(tempfile.gettempdir()))
+    monkeypatch.setenv("PATH", os.path.dirname(sys.executable) + os.pathsep + os.environ.get("PATH", ""))
+
 # THE ROSTER THESE TESTS REASON ABOUT, and the reason it is written here rather than read.
 #
 # known_peers() reads the live hub roster at $HUB_MESH_STATE/members.json, so every mesh
@@ -1372,6 +1387,17 @@ def _dispatcher(wt, judged=None):
     return d
 
 
+@pytest.fixture
+def _sandbox_composable(monkeypatch):
+    """These tests pin the COMPOSED command string; none of them executes bwrap. check_command
+    refuses outright where bubblewrap is absent (macOS), which made them fail there on a missing
+    binary rather than on the string (#729). Reporting the sandbox available lets the same
+    composition be checked on every machine; the refusal itself is pinned by its own tests."""
+    import sage.gateway.being_gate_client as bgc
+    monkeypatch.setattr(bgc, "sandbox_available", lambda: True)
+
+
+@pytest.mark.usefixtures("_sandbox_composable")
 def test_the_sandbox_binds_source_read_only_and_hashes_conftest():
     """GPT's evidence-integrity finding on #84.
 
@@ -1417,6 +1443,7 @@ def test_the_sandbox_binds_source_read_only_and_hashes_conftest():
         "a changed conftest must change the source identity — it is executable test input"
 
 
+@pytest.mark.usefixtures("_sandbox_composable")
 def test_check_reaches_the_top_level_tests_of_a_worktree_that_is_not_sage():
     """nomad-being's D0 worktree is a fixture repo with its suite at tests/. With only the two
     SAGE suites allowed, `check` refused every target there, so the being could patch the bug
@@ -1434,6 +1461,7 @@ def test_check_reaches_the_top_level_tests_of_a_worktree_that_is_not_sage():
         check_command({"target": "tests/../../etc"}, {"worktree": wt})
 
 
+@pytest.mark.usefixtures("_sandbox_composable")
 def test_a_space_in_the_worktree_path_cannot_split_the_judged_command():
     """judged==executed is a property of the STRING, not of today's directory names.
 
@@ -1583,8 +1611,14 @@ def test_a_broken_pattern_is_a_failure_not_an_absence(tmp_path):
         return {}
     d._call = _call
 
-    # An unmatched paren: valid as a literal, invalid as the extended regex git applies.
-    broken = d._do_search(BeingIntent("search", {"pattern": "def compose("}))
+    # An unmatched paren (`def compose(`) is no longer this case: a pattern that is not a valid
+    # regex is searched as literal text (search_mode), so it RUNS and its answer is real. A
+    # pattern Python's re accepts but git's ERE rejects still never runs: `[[:foo:]]`, an
+    # invalid character class, exits 128 — and that must stay a failure, never an absence.
+    literal = d._do_search(BeingIntent("search", {"pattern": "def compose("}))
+    assert literal.ok and literal.result["matches"] == 1 and "literal text" in literal.result["literal"], \
+        f"an invalid regex is searched literally and says so: {literal.result!r}"
+    broken = d._do_search(BeingIntent("search", {"pattern": "[[:foo:]]"}))
 
     assert broken.ok is False, (
         f"a pattern that never ran must not succeed; got result={broken.result!r}")

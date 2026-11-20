@@ -280,33 +280,7 @@ class OllamaIRP(IRPPlugin):
             if not self._ollama_available:
                 return {'content': '[OllamaIRP: Ollama not reachable]', 'tool_calls': [], 'role': 'assistant', 'raw': {}}
 
-        num_predict = self.resolve_num_predict()
-
-        payload: Dict[str, Any] = {
-            'model': self.model_name,
-            'messages': messages,
-            'stream': False,
-            # Bounded, not `-1`. See OLLAMA_KEEP_ALIVE in sage/irp/adapters/model_adapter.py
-            # for the measurement: pinning the model held ~89% of an 8 GiB card that also
-            # drives two displays, and cost CBP a 0x116 VIDEO_TDR_ERROR on 2026-09-18.
-            # Imported rather than re-spelled so the two call paths cannot drift apart —
-            # this one is reached dynamically through llm_pool.py, which is exactly how a
-            # second copy survives a fix applied to the first.
-            'keep_alive': _keep_alive(),
-            'think': self.think,
-            'options': {
-                'num_predict': num_predict,
-                'temperature': self.temperature,
-                **({'num_ctx': int(self.num_ctx)} if self.num_ctx else {}),
-            },
-        }
-
-        if tools:
-            payload['tools'] = tools
-        if fmt is not None:
-            # Ollama structured output: "json" or a JSON schema. The reply's content is then
-            # constrained to that shape (the answer turn uses it, heartbeat.answer_turn_json).
-            payload['format'] = fmt
+        payload = self.chat_payload(messages, tools=tools, fmt=fmt)
 
         try:
             data = json.dumps(payload).encode('utf-8')
@@ -343,6 +317,47 @@ class OllamaIRP(IRPPlugin):
                     'tool_calls': [], 'role': 'assistant', 'raw': {}}
         except Exception as e:
             return {'content': f'[OllamaIRP: Error: {e}]', 'tool_calls': [], 'role': 'assistant', 'raw': {}}
+
+    def chat_payload(
+        self,
+        messages: List[Dict[str, str]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        fmt: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """The /api/chat body get_chat_response sends for these messages, built in one place.
+
+        The heartbeat's seed-count probe (heartbeat.probe_seed_count, SAGE #582) builds its
+        request from this too and changes only num_predict and the truncation flags, so its
+        count is of the prompt step 1 will send: same model, template, think, tools, num_ctx.
+        """
+        num_predict = self.resolve_num_predict()
+
+        payload: Dict[str, Any] = {
+            'model': self.model_name,
+            'messages': messages,
+            'stream': False,
+            # Bounded, not `-1`. See OLLAMA_KEEP_ALIVE in sage/irp/adapters/model_adapter.py
+            # for the measurement: pinning the model held ~89% of an 8 GiB card that also
+            # drives two displays, and cost CBP a 0x116 VIDEO_TDR_ERROR on 2026-09-18.
+            # Imported rather than re-spelled so the two call paths cannot drift apart —
+            # this one is reached dynamically through llm_pool.py, which is exactly how a
+            # second copy survives a fix applied to the first.
+            'keep_alive': _keep_alive(),
+            'think': self.think,
+            'options': {
+                'num_predict': num_predict,
+                'temperature': self.temperature,
+                **({'num_ctx': int(self.num_ctx)} if self.num_ctx else {}),
+            },
+        }
+
+        if tools:
+            payload['tools'] = tools
+        if fmt is not None:
+            # Ollama structured output: "json" or a JSON schema. The reply's content is then
+            # constrained to that shape (the answer turn uses it, heartbeat.answer_turn_json).
+            payload['format'] = fmt
+        return payload
 
     def _update_memory(self, prompt: str, response: str):
         """Update conversation memory for context."""

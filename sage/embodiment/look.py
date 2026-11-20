@@ -72,7 +72,8 @@ def _remove(path: str) -> None:
 
 # ---- the cortex's half -------------------------------------------------------------------------
 
-def _answer(rid: str, frames: List, sids: List[int], gaze: str, frm_dir: str, now: float) -> dict:
+def _answer(rid: str, frames: List, sids: List[int], gaze: str, frm_dir: str, now: float,
+            corrections: Optional[List[dict]] = None) -> dict:
     res = {"id": rid, "ts": round(now, 2)}
     if gaze == "closed":
         return dict(res, ok=False, why="your eyes are closed (gaze closed); open them to look")
@@ -89,12 +90,17 @@ def _answer(rid: str, frames: List, sids: List[int], gaze: str, frm_dir: str, no
         return dict(res, ok=False, why="the frame could not be encoded")
     path = os.path.join(frm_dir, f"{rid}.jpg")
     _atomic_write(path, buf.tobytes())
-    return dict(res, ok=True, path=path, eye=SIDES.get(sids[i], str(sids[i])),
-                width=int(f.shape[1]), height=int(f.shape[0]), bytes=len(buf))
+    out = dict(res, ok=True, path=path, eye=SIDES.get(sids[i], str(sids[i])),
+               width=int(f.shape[1]), height=int(f.shape[0]), bytes=len(buf))
+    # what the sensor shim did to this eye's frames (sage/embodiment/sensor_shim.py); absent = the raw sensor
+    corr = (corrections or [])[i] if i < len(corrections or []) else None
+    if corr:
+        out["correction"] = corr
+    return out
 
 
 def respond(frames: List, sids: List[int], gaze: str = "", body_dir: Optional[str] = None,
-            now: Optional[float] = None) -> List[dict]:
+            now: Optional[float] = None, corrections: Optional[List[dict]] = None) -> List[dict]:
     """Answer pending requests (oldest first, at most MAX_PER_CALL); return the results written."""
     req_dir, res_dir, frm_dir = _dirs(body_dir or BODY_DIR)
     now = time.time() if now is None else now
@@ -123,7 +129,7 @@ def respond(frames: List, sids: List[int], gaze: str = "", body_dir: Optional[st
         rid = str(req.get("id") or "")
         if not rid or rid != name[:-5] or now - float(req.get("ts") or 0) > STALE_S:
             continue                                   # malformed, mislabelled, or its asker has gone
-        res = _answer(rid, frames, sids, gaze, frm_dir, now)
+        res = _answer(rid, frames, sids, gaze, frm_dir, now, corrections)
         _atomic_write(os.path.join(res_dir, f"{rid}.json"), json.dumps(res).encode())
         out.append(res)
         if len(out) >= MAX_PER_CALL:
@@ -169,8 +175,11 @@ def request(out_path: str, body_dir: Optional[str] = None, wait_s: float = WAIT_
     _remove(res["path"])
     os.makedirs(os.path.dirname(os.path.abspath(out_path)) or ".", exist_ok=True)
     _atomic_write(out_path, data)
-    print(json.dumps({"eye": res.get("eye"), "width": res.get("width"), "height": res.get("height"),
-                      "bytes": len(data), "at": res.get("ts")}))
+    said = {"eye": res.get("eye"), "width": res.get("width"), "height": res.get("height"),
+            "bytes": len(data), "at": res.get("ts")}
+    if res.get("correction"):
+        said["correction"] = res["correction"]
+    print(json.dumps(said))
     return 0
 
 

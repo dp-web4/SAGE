@@ -135,6 +135,7 @@ def box_command(stage: str) -> List[str]:
         f"{bgc.SANDBOX} --clearenv"
         " --ro-bind /usr /usr --ro-bind /lib /lib --ro-bind-try /lib64 /lib64 --ro-bind /bin /bin"
         " --ro-bind /etc/alternatives /etc/alternatives"
+        f"{bgc.RUN_ETC_BINDS}"
         f" --ro-bind {shlex.quote(interp)} {shlex.quote(interp)}"
         " --proc /proc --dev /dev --tmpfs /tmp"
         f" --ro-bind {shlex.quote(stage)} /work"

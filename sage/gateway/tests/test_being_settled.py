@@ -83,13 +83,45 @@ def test_a_refused_settle_says_why_and_changes_nothing(tmp_path, args, says):
     assert not (tmp_path / st.SETTLED_FILE).exists()
 
 
+#: Thirty questions on distinct subjects, which read close to none of the others (the ≈ the beat marks).
+DISTINCT = [f"Where does the {w} belong?" for w in (
+    "anchor", "bucket", "candle", "dagger", "easel", "funnel", "goblet", "hammock", "igloo", "jigsaw", "kettledrum",
+    "ladder", "mitten", "napkin", "oar", "pulley", "quilt", "rudder", "saddle", "trowel", "umbrella", "violin",
+    "wagon", "xylophone", "yoke", "zither", "abacus", "bellows", "compass", "doorknob")]
+
+
 def test_a_full_list_refuses_a_new_question_but_still_changes_an_old_one(tmp_path):
-    for i in range(st.MAX_ENTRIES):
-        assert _s(tmp_path, question=f"question {i}", answer="a")[0]
+    for q in DISTINCT[:st.MAX_ENTRIES]:
+        assert _s(tmp_path, question=q, answer="a")[0]
     ok, msg, _ = _s(tmp_path, question="one more", answer="a")
     assert not ok and "the most this list holds" in msg and "reopen" in msg
-    assert "(\u00abquestion 0\u00bb, " in msg, msg  # the longest held are shown copyable (cbp on #676)
-    assert _s(tmp_path, question="question 3", answer="b")[0]
+    # NOT THE LONGEST HELD (sprout-being 11-18..19 reopened the three it named, in order, to make room): with no
+    # question asked twice, no entry is named, and the way to see them all is
+    assert "\u00ab" not in msg and "s1 " not in msg and "longest" not in msg, msg
+    assert "Settle with no arguments to see every entry" in msg
+    assert _s(tmp_path, question=DISTINCT[3], answer="b")[0]
+
+
+def test_a_full_list_names_the_questions_settled_more_than_once_not_the_oldest(tmp_path):
+    for q in DISTINCT[:st.MAX_ENTRIES - 3]:
+        assert _s(tmp_path, question=q, answer="a")[0]
+    for q in ("Is the test widget connected to this machine?", "Is the test widget connected here?",
+              "Is the test widget connected and ready?"):
+        assert _s(tmp_path, question=q, answer="yes")[0]
+    ok, msg, _ = _s(tmp_path, question="What colour is the sky at dusk?", answer="b")
+    assert not ok and "settled more than once" in msg, msg
+    first = st.read(tmp_path)[0][-3]["id"]
+    assert f"{first} \u00abIs the test widget connected to this machine?\u00bb \u2248 " in msg, msg
+    assert "s1 " not in msg and "anchor" not in msg, "the oldest is not named for its age"
+    assert len(st.read(tmp_path)[0]) == st.MAX_ENTRIES
+
+
+def test_close_groups_join_through_a_shared_neighbour_and_stay_in_list_order():
+    es = [{"id": "s1", "question": "x"}, {"id": "s2", "question": "y"}, {"id": "s3", "question": "z"},
+          {"id": "s4", "question": "w"}]
+    import unittest.mock as m
+    with m.patch.object(st, "_neighbours", return_value={"s1": ["s3"], "s3": ["s1", "s4"], "s4": ["s3"]}):
+        assert [[e["id"] for e in g] for g in st._close_groups(es)] == [["s1", "s3", "s4"]]
 
 
 def test_a_full_list_names_the_entry_a_refused_question_reads_close_to(tmp_path):
@@ -292,7 +324,7 @@ def test_a_full_list_names_what_to_reopen_and_never_advises_folding(tmp_path):
         assert _s(tmp_path, question=f"question {i} about lamps", answer="a")[0]
     ok, msg, _ = _s(tmp_path, question="What colour is the sky at dusk?", answer="b")
     assert not ok and "fold" not in msg and "settling that id with a new answer" not in msg
-    assert "reopen" in msg and "s1 (" in msg and "different question" in msg, msg
+    assert "reopen" in msg and "different question" in msg, msg
 
 
 def test_a_hyphenated_name_and_its_spaced_spelling_read_close_and_the_receipt_quotes_the_earlier_answer(tmp_path):
@@ -445,10 +477,26 @@ def test_a_short_line_keeps_its_question_readable_and_the_block_stays_in_budget(
     assert st._neighbours(st.read(tmp_path)[0]), "the fixture links"
     shown = st.render(tmp_path)
     assert len(shown) <= st.RENDER_CHARS, len(shown)
-    for ln in shown.splitlines():
-        if ln.startswith("- [s") and " -> " not in ln:
-            q = ln.split("] ", 1)[1].rsplit(" (settled", 1)[0]
-            assert len(q) >= min(st.SHORT_QUESTION_FLOOR, 20) or q.endswith("…") and len(q) >= 8, ln
+    for ln in [ln for ln in shown.splitlines() if ln.startswith("- [s")][1:]:   # the newest is whole
+        q = ln.split("] ", 1)[1].rsplit(" (settled", 1)[0].split(" -> ", 1)[0]
+        assert len(q) >= min(st.SHORT_QUESTION_FLOOR, 20) or q.endswith("…") and len(q) >= 8, ln
+
+
+def test_a_short_line_keeps_the_head_of_its_answer(tmp_path):
+    # sprout-being 11-16..17: its question on restarting its seat stayed in view after 01:41Z and the answer
+    # did not; the next three acts started the seat
+    _s(tmp_path, question="Does the test gizmo need to be restarted?", answer="No - it is already answering here.")
+    for i in range(st.MAX_ENTRIES - 1):
+        _s(tmp_path, question=f"question number {i} " + "w" * 80, answer=f"answer {i} " + "x" * 300)
+    shown = st.render(tmp_path)
+    assert len(shown) <= st.RENDER_CHARS, len(shown)
+    line = next(ln for ln in shown.splitlines() if "test gizmo" in ln)
+    assert " -> No - it is already answ" in line, line
+    shorts = [ln for ln in shown.splitlines() if ln.startswith("- [s")][1:]
+    assert len(shorts) == st.MAX_ENTRIES - 1 and all(" -> answer " in ln or "gizmo" in ln for ln in shorts)
+    # with no room for both, the question keeps its floor and the answer is left off
+    e = {"id": "s1", "question": "q" * 100, "answer": "a" * 100, "at": "2026-11-17T00:00:00Z"}
+    assert " -> " not in st._short(e, 60) and " -> " in st._short(e, 90)
 
 
 
@@ -555,3 +603,55 @@ def test_the_replace_receipt_shows_the_question_copyable(tmp_path):
     _s(tmp_path, question=held, answer="yes")
     ok, msg, _ = _s(tmp_path, id="s1", question=held, answer="no")
     assert ok and "\u00ab" + held + "\u00bb" in msg, msg
+
+
+def test_an_entry_naming_a_process_number_gets_the_runs_numbering_beside_it_in_the_block(tmp_path):
+    # sprout-being 11-05..12: 13 of 170 settled answers cited a PID that a listing inside a run gave (its user id,
+    # or pgrep's own shell), both ways about whether its seat was alive; s140 headed the block at a relapse
+    import os
+    uid = str(os.getuid())
+    _s(tmp_path, question="Is the test gizmo running?", answer=f"yes, PID {uid} on port 9")
+    _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    _s(tmp_path, question="Does the gizmo restart itself?", answer="yes (PID 3), at boot")
+    shown = st.render(tmp_path)
+    assert "(s3, s1 name a process number." in shown, shown
+    assert "numbers its own processes from 1" in shown and "finds that shell or that grep itself" in shown
+    assert f"{uid} at the start of a ps line there is the run's user id" in shown
+    assert "says nothing about a process on this machine, running or not" in shown
+    # the entries themselves are untouched: the harness never rewords one
+    assert "yes (PID 3), at boot" in shown and "s2 name" not in shown
+
+
+def test_no_process_number_no_fact_and_no_uid_clause_without_the_uid(tmp_path):
+    _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    assert "process number" not in st.render(tmp_path)
+    _s(tmp_path, question="Is the test gizmo running?", answer="yes, pid: 48213")
+    shown = st.render(tmp_path)
+    assert "(s2 names a process number." in shown and "user id" not in shown, shown
+
+
+def test_settling_an_answer_with_a_process_number_says_where_such_numbers_come_from(tmp_path):
+    ok, msg, changed = _s(tmp_path, question="Is the test gizmo running?", answer="Running (PID 3).")
+    assert ok and changed and "This answer names a process number." in msg, msg
+    ok, msg, changed = _s(tmp_path, question="Is the test gizmo running?", answer="Running (PID 3).")
+    assert not changed and "process number" not in msg       # unchanged: nothing new to say
+    ok, msg, _ = _s(tmp_path, question="what colour is the test sky?", answer="blue")
+    assert "process number" not in msg
+
+
+def test_the_block_stays_in_budget_when_every_entry_names_a_process_number(tmp_path):
+    (tmp_path / st.SETTLED_FILE).write_text(json.dumps({"next": 131, "entries": [
+        {"id": f"s{101 + i}", "question": (f"Can the gizmo daemon be restarted, case {i}? " + "w" * 200)[:st.QUESTION_MAX_CHARS],
+         "answer": ("PID 2002 " + "a" * st.ANSWER_MAX_CHARS)[:st.ANSWER_MAX_CHARS],
+         "evidence": "e" * st.EVIDENCE_MAX_CHARS, "at": "2026-11-09T00:00:00Z"}
+        for i in range(st.MAX_ENTRIES)]}))
+    shown = st.render(tmp_path)
+    assert len(shown) <= st.RENDER_CHARS, len(shown)
+    assert "(s130, s129, s128, s127 +26 name a process number." in shown, shown[:900]
+
+
+def test_the_plural_is_a_process_number_too(tmp_path):
+    # legion's review of #703: cbp-being settled "PIDs 1 and 2" (bwrap's own) as a daemon being alive
+    ok, msg, _ = _s(tmp_path, question="Is the test daemon alive?", answer="Yes, PIDs 1 and 2 confirmed.")
+    assert "This answer names a process number." in msg, msg
+    assert "(s1 names a process number." in st.render(tmp_path)

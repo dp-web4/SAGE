@@ -377,9 +377,17 @@ NO_WORKTREE_REFUSAL = {
         "pr_sync brings a pull request you opened up to date with its base branch, by merging "
         "inside your code-repository checkout (a worktree), and this seat has none, so pr_sync "
         "cannot update your proposal here."),
+    # #637: cbp-being meant "retire scratch/svd-compress-tests.py", was told only that git_clean
+    # had nothing to delete, and then memory_edited the file into one that failed to run; on
+    # 11-15 it sent 61 git_clean calls in one phase. retire_note is the verb that closes a file
+    # in notes/ or scratch/ (it renames, nothing is deleted), so the refusal names it, and says
+    # that leaving the file is also fine, so the refusal does not push the being into an edit.
     "git_clean": (
         "git_clean deletes one untracked file you added to your code-repository checkout (a "
-        "worktree), and this seat has none, so there is nothing here for git_clean to delete."),
+        "worktree), not files in your home, and this seat has none, so there is nothing here for "
+        "git_clean to delete. To close one of your own files in notes/ or scratch/, use "
+        "retire_note with its path and a reason: it is renamed .retired-<date> and kept, so "
+        "nothing is lost. No tool deletes a file in your home, and leaving one in place is fine."),
     # CAMERA'S HONEST ALTERNATIVE IS DIFFERENT: there is none. It never reads a worktree (the
     # frame lands in the being's home); the requirement is the policy hold described in
     # camera_command. So it says it is not enabled, says why without pointing at a step the
@@ -397,6 +405,12 @@ _SEARCH_HOME_POINTER = (
     "with the file's path and find: it lists matching line numbers in that file.")
 
 GIT_OPS =("log", "show", "diff", "status", "blame", "cat")
+#: Ops a being reaches for that the grammar already serves under another name. `ls` on a
+#: directory is `cat`: `git show <rev>:<dir>` prints the tree's entries. mcnugget-being sent
+#: `{"op": "ls", "path": "sage/gateway/"}` 6 times in 2026-11 while searching for file names
+#: that do not exist (`being_in_drain*.py`); each was refused, so the one read that would have
+#: settled the question never ran. The published enum stays GIT_OPS (a name, not a new verb).
+GIT_OP_ALIASES = {"ls": "cat"}
 
 # A revision the being may name: a hex sha, HEAD with optional ~n/^n, or a plain branch or
 # tag name. Deliberately excludes anything containing a flag, a space, or a path separator
@@ -445,6 +459,7 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
     if not worktree:
         raise ValueError(NO_WORKTREE_REFUSAL["git_read"])
     op = str(args.get("op", "")).strip()
+    op = GIT_OP_ALIASES.get(op, op)
     if op not in GIT_OPS:
         raise ValueError(f"git_read 'op' must be one of {list(GIT_OPS)}, got {op!r}")
 
@@ -525,7 +540,8 @@ def git_read_command(args: dict, ctx: Optional[dict] = None) -> str:
         return f"{base} diff --no-ext-diff --no-textconv {span}" + (f" -- {shlex.quote(path)}" if path else "")
     if op == "cat":
         if not path:
-            raise ValueError("git_read op='cat' needs a 'path': the file whose content you want")
+            raise ValueError("git_read op='cat' needs a 'path': the file whose content you want, "
+                             "or a directory whose entries you want")
         # `<rev>:<path>` is ONE argument to git and the being supplies neither half raw —
         # the rev passed _REV, the path was resolved absolute inside the worktree above. The
         # path must be repo-relative here, so it is relativised back; an absolute path after
@@ -1017,6 +1033,25 @@ SEARCH_MAX_N = 60        # matches returned at most; a search is a pointer, not 
 
 
 
+def search_mode(pattern: str) -> str:
+    """`-E` for a pattern that is a valid regex, `-F` (literal text) for one that is not.
+
+    A PATTERN GIT CANNOT PARSE NEVER RUNS. The being searches for code as it appears in source:
+    `drain_once(` failed `git grep -E` with exit 128 ("parentheses not balanced") 6 times on
+    mcnugget-being in 6 hours on 2026-11-17, each with a receipt telling it to add a backslash,
+    and the next beat sent the same text again. Read literally, that text has one meaning, so
+    it is searched literally and the result says so. The mode is chosen HERE, before the law
+    judges the command, so judged == executed still holds: no retry with a different command.
+    Python's `re` is the validity test; it rejects what git's ERE rejects for the shapes seen
+    (`(` unbalanced, `=**` nothing to repeat)."""
+    import re
+    try:
+        re.compile(pattern)
+        return "-E"
+    except re.error:
+        return "-F"
+
+
 def search_command(args: dict, ctx: Optional[dict] = None) -> str:
     """The shell command the seat runs for a `search` intent.
 
@@ -1071,7 +1106,7 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
     # directory names. A worktree path containing a space would split into two argv elements
     # and the law would have judged a command that is not the one executed (GPT review of
     # #83). Fleet paths are simple today; the invariant must not depend on that staying true.
-    return (f"git --no-pager -C {shlex.quote(worktree)} grep -n -I -E --max-count={n} "
+    return (f"git --no-pager -C {shlex.quote(worktree)} grep -n -I {search_mode(pattern)} --max-count={n} "
             f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
 
 
@@ -1119,7 +1154,7 @@ def _reach_search_command(pattern: str, n: int, path: str, ctx: dict) -> str:
     if not os.path.exists(target):
         raise ValueError(f"search 'path' {path!r} does not exist, so there is nothing there to "
                          f"search. Name a folder or file that exists, by its absolute path.")
-    return (f"grep -r -n -I -E -s --max-count={n} --exclude-dir=.git "
+    return (f"grep -r -n -I {search_mode(pattern)} -s --max-count={n} --exclude-dir=.git "
             f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
 
 
@@ -1453,6 +1488,17 @@ RUN_MAX_DATA = 8                      # data files copied in beside the script
 RUN_TMP_BYTES = 1 << 30               # the sandbox's /tmp
 RUN_WORK_BYTES = 1 << 30              # /work: the staged inputs (read-only) and whatever it writes
 RUN_FSIZE_BYTES = 512 << 20           # any one file the run writes, its output files included
+# SYSTEM CONFIG A /usr PACKAGE NEEDS, read-only and -try (absent on a seat = no mount). The box
+# binds /usr but not /etc, and Debian's python3-matplotlib patches matplotlib_fname() to look for
+# its default rc at /etc/matplotlibrc INSTEAD of mpl-data, so with /etc unbound `import
+# matplotlib` raised "Could not find matplotlibrc file; your Matplotlib install is broken" in
+# every run. cbp-being read that as its own fault and spent 13 days (2026-11-06..11-20) hunting
+# the file: scripts to locate it, searches of the workspace and home, then a write_note to the
+# host home's config dir (scope-b0972998b89d, refused). No file the being could write fixes a
+# mount, and the census listed matplotlib as missing from the box while the host had it.
+# Measured 2026-11-20 on cbp: the same bwrap line exits 1 with that error, and with this bind it
+# imports pyplot and saves a PNG. A default config file, not private state: nothing else in /etc.
+RUN_ETC_BINDS = " --ro-bind-try /etc/matplotlibrc /etc/matplotlibrc"
 RUN_MIN_S = 30                        # a beat with less than this left starts no run (Nova)
 
 
@@ -1545,7 +1591,7 @@ def run_names(args: dict, ctx: Optional[dict] = None) -> List[str]:
             parsed = _json.loads(data)
         except ValueError:
             parsed = None
-        if isinstance(parsed, list):
+        if isinstance(parsed, (list, dict)):
             data = parsed
         else:
             # A LIST OF PATHS ARRIVES AS PROSE. Measured 2026-09-18 06:46Z: it sent
@@ -1556,6 +1602,33 @@ def run_names(args: dict, ctx: Optional[dict] = None) -> List[str]:
             # space is still refused, by the per-path check below, where the message is about
             # that path rather than about the blob.
             data = [x for x in _re.split(r"[,\s]+", data.strip()) if x]
+    if isinstance(data, dict):
+        # A MAPPING ARRIVES AND IS READ AS PROSE. cbp-being, 2026-10-23..11-16: 189 run calls
+        # sent `data` as a JSON object, and none ran. The prose split above cut the object at
+        # whitespace, so the first "path" was `{"name.py":` and the refusal said "you gave a
+        # base name with no directory", which was false about what it sent; it re-sent the
+        # same object 6 times in one beat (11-16 02:44). Its objects take two forms. 58 entries
+        # were {base name: source path}: exactly the name the stager gives that source anyway,
+        # so the values are taken as the list. The rest rename a file ({"test_image": ".../
+        # test_image.npy"}) or pass settings ({"verbose": true}), and run does neither, so the
+        # refusal says which, and spells out the list to send instead.
+        import json
+        vals = list(data.values())
+        if all(isinstance(v, str) and v.strip() and isinstance(k, str)
+                        and k.strip() == os.path.basename(v.strip().rstrip("/"))
+                        for k, v in data.items()):
+            data = [v.strip() for v in vals]
+        else:
+            paths = [v.strip() for v in vals if isinstance(v, str) and v.strip()]
+            route = (f" If the values are the files you want, send data={json.dumps(paths)}; "
+                     f"each appears in the sandbox under its own base name"
+                     if paths else "")
+            raise ValueError(
+                f"run 'data' is a LIST of files to copy into the sandbox, and you sent a mapping "
+                f"(keys {json.dumps([str(k) for k in data][:4])}). A file appears in the sandbox "
+                f"under its source's base name, which a key cannot change, and run passes no "
+                f"arguments or settings to the script: write those into the script itself."
+                + route)
     if not isinstance(data, (list, tuple)):
         raise ValueError(f"run 'data' must be a list of paths in your home, got {type(data).__name__}")
     names = [path] + [str(d).strip() for d in data]
@@ -1651,7 +1724,8 @@ def sandbox_reach(effector: str, args: dict, ctx: Optional[dict] = None) -> List
     """What a sandboxed verb's box exposes to the program, which is the being's reach for that act.
 
     The rest of the line is the box's own plumbing, fixed by this module and not chosen by the
-    being: the wrapper (prlimit, bwrap), the system mounts (/usr, /lib, /bin, /etc/alternatives),
+    being: the wrapper (prlimit, bwrap), the system mounts (/usr, /lib, /bin, /etc/alternatives,
+    RUN_ETC_BINDS),
     the interpreter, /proc, /dev and the tmpfs. Judging those as the being's reach refused every
     run on Legion (SAGE #441 replay, 2026-10-25: 271/271 on /usr/bin/prlimit) and, before that,
     every check and game (miniforge3, 2026-10-05). What the law must still see is what a grant
@@ -1912,12 +1986,21 @@ def run_command(args: dict, ctx: Optional[dict] = None) -> str:
         # `run` read as unavailable there (legion-claude, #470)
         " --ro-bind /usr /usr --ro-bind /lib /lib --ro-bind-try /lib64 /lib64 --ro-bind /bin /bin"
         " --ro-bind /etc/alternatives /etc/alternatives"
+        f"{RUN_ETC_BINDS}"
         f" --ro-bind {interp} {interp}"
         f" --proc /proc --dev /dev --size {RUN_TMP_BYTES} --tmpfs /tmp"
         f"{wt_bind}"
         f"{grant_binds}"
         # Writable in there: these two size-limited tmpfs, and what the being's grants reach.
         f" --size {RUN_WORK_BYTES} --tmpfs /work{inputs}"
+        # THE ROOT IS READ-ONLY, LAST, AFTER EVERY MOUNT. bwrap's root is a writable tmpfs, so a write
+        # to a path nothing is mounted at landed there and succeeded. sprout-being, 2026-11-19 20:32Z: a
+        # script appended a user entry to the system user list and made a home directory; both "worked",
+        # the run printed that the user was created, and the beat took it as done and reopened a settled
+        # conclusion that said it could not be. Nothing on the machine had changed. Read-only, such a
+        # write fails as "Read-only file system" in the run itself. Remounting / changes only the root
+        # mount: /tmp, /work and the grant binds are mounts of their own and keep their mode.
+        " --remount-ro /"
         " --unshare-pid --unshare-net --unshare-ipc --unshare-uts"
         " --new-session --die-with-parent"
         " --setenv HOME /tmp --setenv PYTHONUTF8 1 --setenv PYTHONDONTWRITEBYTECODE 1"
@@ -2019,9 +2102,16 @@ def check_command(args: dict, ctx: Optional[dict] = None) -> str:
         # Otherwise a single node id INSIDE a declared suite: "gateway::test_name".
         suite, sep, node = target.partition("::")
         if not sep or suite not in CHECK_TARGETS:
+            # NAME THE FIX WHEN THE SHAPE SAYS WHAT WAS MEANT. nomad-being, 11-12 and 11-16..18,
+            # three times: a folder or path in front of '::tests' ('<name>::tests', a worktree
+            # path '::tests') and once a script path, each meaning "run my tests/ folder". The
+            # refusal listed the valid forms and the being did not get from there to 'tests'.
+            meant_tests = ("tests" in target.lower() or "/" in target or target.endswith(".py"))
+            hint = (" Nothing ran; this is not a test failure. To run the tests/ folder of your "
+                    "worktree, the target is just 'tests'." if meant_tests else "")
             raise ValueError(
                 f"check 'target' must be one of {sorted(CHECK_TARGETS)} or "
-                f"'<suite>::<test_name>'; got {target!r}")
+                f"'<suite>::<test_name>'; got {target!r}.{hint}")
         if not re.fullmatch(r"[A-Za-z0-9_]+", node):
             raise ValueError(f"check test name must be a bare identifier; got {node!r}")
         path = f"{shlex.quote(os.path.join(worktree, CHECK_TARGETS[suite]))} -k {node}"
@@ -2904,11 +2994,15 @@ _TOOL_SCHEMAS = {
                  "beats, and to compare a `check` result's tree block against what is "
                  "actually in the history.",
                  {"op": "one of " + ", ".join(repr(o) for o in GIT_OPS)
-                        + " ('cat' reads a file's content at a revision, and needs 'path')",
+                        + " ('cat' reads a file or lists a directory at a revision; needs 'path')",
                   "rev": "optional: a commit sha, HEAD, HEAD~2, or a branch name",
                   "rev2": "optional, for op='diff': the second revision of the span",
                   "path": "optional: a path inside your worktree to narrow the answer to",
-                  "n": "optional, for op='log': how many commits (1-50, default 20)"},
+                  "n": "optional, for op='log': how many commits (1-50, default 20)",
+                  # Kept to one clause: each part of a long cat already names the start_line
+                  # that reads on. The longer text cost 235 schema chars, and that tipped
+                  # mcnugget-being's step-1 preflight over 16,384 (2026-11-17 15:40Z; SAGE #582).
+                  "start_line": "optional, for op='cat': the line to start from (default 1)"},
                  ["op"]),
     "search": ("Find where something IS, without reading the file it is in. Give a pattern "
                "(text, or an extended regex) and optionally a path to narrow it; you get "
@@ -3080,7 +3174,8 @@ _TOOL_SCHEMAS = {
     # and asked the seat about the device again on each of them. A conclusion in a 12k-line journal does
     # not reach the next beat; this list does (being_settled).
     "settle": ("Keep something you have concluded, as a question and your answer in your own words, "
-               "shown to you every beat. Settling a question again replaces its answer (the old one is "
+               "shown to you every beat; when many are kept, older ones show only the start of their "
+               "answer. Settling a question again replaces its answer (the old one is "
                "logged). No arguments lists them. What did not work is worth keeping too.",
                {"question": "what you settled",
                 "answer": "what you concluded",
@@ -3092,17 +3187,20 @@ _TOOL_SCHEMAS = {
     # A WHOLE LINE OF WORK CAN BE CLOSED AT ONCE (dp, 2026-11-01: "retire the whole hestia thread and work
     # on something different"; cbp-being had 550 open todo items and 29 settled entries on it, and could
     # only retire one note or one entry per act).
-    "retire_thread": ("Close a whole line of work at once: every OPEN todo item and every settled entry "
-                      "that names one of your words is moved out of what you are shown each beat, into one "
-                      "retired file (todo.retired-thread-<id>.md) that recall still searches. Use it when a "
-                      "topic is finished or someone asks you to drop it, so it stops coming back uninvited. "
-                      "Other items and entries stay as they are. preview='true' shows what would move and "
+    "retire_thread": ("Close a whole line of work at once: every OPEN todo item that names one of your words "
+                      "is moved out of what you are shown each beat, into one retired file "
+                      "(todo.retired-thread-<id>.md) that recall still searches. Use it when a topic is finished "
+                      "or someone asks you to drop it, so it stops coming back uninvited. Your settled "
+                      "conclusions stay unless you name them in settled; the receipt lists the ones your words "
+                      "name. Other items and entries stay as they are. preview='true' shows what would move and "
                       "changes nothing. A retire that takes most of a list needs the confirmation its preview "
                       "(with the same words and reason) returns, used in the same beat.",
                       {"words": "the topic, as words separated by commas, e.g. 'webserver, port 8080'. A word "
                                 "matches at the start of a word: 'install' also matches 'installer'",
                        "reason": "why this line of work is finished (needed unless preview='true')",
                        "preview": "optional: 'true' lists what would move and changes nothing",
+                       "settled": "optional: settled entries to retire with the thread, by id ('s3, s7') or 'all' "
+                                  "for every one your words name. Without it, none leaves",
                        "confirmation": "for a retire that takes most of a list: the one-use value its preview returned"},
                       ["words"]),
     # SKILLS (dp, 2026-10-27: "a 'skills' structure, and membot-type index for them ... model it on your

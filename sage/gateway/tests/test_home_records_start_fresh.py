@@ -271,3 +271,35 @@ def test_a_retired_record_names_no_resident_it_cannot_verify():
         assert "cbp-being" not in text and " by " not in text.split("\n", 1)[0], (p.name, text[:160])
     copy = next(p for p in written if p.name.startswith("journal.retired-"))
     assert copy.read_text().startswith("> RETIRED ") and "with retire_note" in copy.read_text()
+
+
+def test_a_retired_script_still_parses_and_a_retired_note_keeps_the_markdown_header():
+    """#656: the `> RETIRED ...` header made every retired .py a SyntaxError on line 1 (91 of 93 on
+    cbp-being), and a beat that ran one spent its steps editing the header. A `#`-comment file now
+    gets the header as comments, with a multi-line reason kept on one comment line; a note keeps
+    the markdown form."""
+    import ast
+    d = Path(tempfile.mkdtemp(prefix="home-records-")) / "cbp-being"
+    d.mkdir()
+    disp = ReferenceF1aDispatcher(memory_root=str(d))
+    (d / "scratch").mkdir()
+    (d / "notes").mkdir()
+    src = "import os\n\n\ndef f(x):\n    return x * 2\n"
+    (d / "scratch" / "train.py").write_text(src)
+    (d / "scratch" / "run.sh").write_text("echo hi\n")
+    (d / "notes" / "draft.md").write_text("a draft\n")
+    reason = "superseded by train2.py\nimport sys  # a newline in the reason must not escape the comment"
+    for path in ("scratch/train.py", "scratch/run.sh", "notes/draft.md"):
+        env = disp(BeingIntent("retire_note", {"path": path, "reason": reason}), _ALLOW)
+        assert env.ok, env.error
+    py = next((d / "scratch").glob("train.retired-*.py")).read_text()
+    assert py.startswith("# RETIRED ") and "with retire_note" in py, py[:200]
+    assert py.endswith(src), "the script is kept whole below the header"
+    ast.parse(py)  # raises if the header broke it
+    head = py.split("\n\n", 1)[0].splitlines()
+    assert all(line.startswith("# ") for line in head), head
+    assert "superseded by train2.py import sys" in head[0], head
+    sh = next((d / "scratch").glob("run.retired-*.sh")).read_text()
+    assert sh.startswith("# RETIRED ") and sh.endswith("echo hi\n"), sh
+    md = next((d / "notes").glob("draft.retired-*.md")).read_text()
+    assert md.startswith("> RETIRED ") and "> Kept whole below" in md, md
