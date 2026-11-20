@@ -1138,7 +1138,9 @@ def _assert_every_bind_is_judged_or_plumbing(calls):
     line = next(e for e in events if e.get("egress"))["egress"][-1]
     judged = {p for e in events for p in (e["tool_input"].get("paths") or [])}
     interp = os.path.dirname(os.path.dirname(sys.executable))
+    from sage.gateway.being_gate_client import RUN_ETC_BINDS
     plumbing = {"/usr", "/lib", "/lib64", "/bin", "/etc/alternatives", interp}
+    plumbing |= {t for t in RUN_ETC_BINDS.split() if t.startswith("/")}   # fixed system config
     for src in _line_bind_sources(line):
         if src in plumbing or src.startswith(STAGE_ROOT + "-"):
             continue

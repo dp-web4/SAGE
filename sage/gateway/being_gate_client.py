@@ -1488,6 +1488,17 @@ RUN_MAX_DATA = 8                      # data files copied in beside the script
 RUN_TMP_BYTES = 1 << 30               # the sandbox's /tmp
 RUN_WORK_BYTES = 1 << 30              # /work: the staged inputs (read-only) and whatever it writes
 RUN_FSIZE_BYTES = 512 << 20           # any one file the run writes, its output files included
+# SYSTEM CONFIG A /usr PACKAGE NEEDS, read-only and -try (absent on a seat = no mount). The box
+# binds /usr but not /etc, and Debian's python3-matplotlib patches matplotlib_fname() to look for
+# its default rc at /etc/matplotlibrc INSTEAD of mpl-data, so with /etc unbound `import
+# matplotlib` raised "Could not find matplotlibrc file; your Matplotlib install is broken" in
+# every run. cbp-being read that as its own fault and spent 13 days (2026-11-06..11-20) hunting
+# the file: scripts to locate it, searches of the workspace and home, then a write_note to the
+# host home's config dir (scope-b0972998b89d, refused). No file the being could write fixes a
+# mount, and the census listed matplotlib as missing from the box while the host had it.
+# Measured 2026-11-20 on cbp: the same bwrap line exits 1 with that error, and with this bind it
+# imports pyplot and saves a PNG. A default config file, not private state: nothing else in /etc.
+RUN_ETC_BINDS = " --ro-bind-try /etc/matplotlibrc /etc/matplotlibrc"
 RUN_MIN_S = 30                        # a beat with less than this left starts no run (Nova)
 
 
@@ -1713,7 +1724,8 @@ def sandbox_reach(effector: str, args: dict, ctx: Optional[dict] = None) -> List
     """What a sandboxed verb's box exposes to the program, which is the being's reach for that act.
 
     The rest of the line is the box's own plumbing, fixed by this module and not chosen by the
-    being: the wrapper (prlimit, bwrap), the system mounts (/usr, /lib, /bin, /etc/alternatives),
+    being: the wrapper (prlimit, bwrap), the system mounts (/usr, /lib, /bin, /etc/alternatives,
+    RUN_ETC_BINDS),
     the interpreter, /proc, /dev and the tmpfs. Judging those as the being's reach refused every
     run on Legion (SAGE #441 replay, 2026-10-25: 271/271 on /usr/bin/prlimit) and, before that,
     every check and game (miniforge3, 2026-10-05). What the law must still see is what a grant
@@ -1974,6 +1986,7 @@ def run_command(args: dict, ctx: Optional[dict] = None) -> str:
         # `run` read as unavailable there (legion-claude, #470)
         " --ro-bind /usr /usr --ro-bind /lib /lib --ro-bind-try /lib64 /lib64 --ro-bind /bin /bin"
         " --ro-bind /etc/alternatives /etc/alternatives"
+        f"{RUN_ETC_BINDS}"
         f" --ro-bind {interp} {interp}"
         f" --proc /proc --dev /dev --size {RUN_TMP_BYTES} --tmpfs /tmp"
         f"{wt_bind}"
