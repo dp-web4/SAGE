@@ -1021,7 +1021,10 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
                 form["trimmed_from"] = cut_from
         res.reply = message
         if form["answer"] and message:
-            intent = BeingIntent("say", {"to": selected.cid, "text": message})
+            # The answer turn answers the turn it was asked about, by seq: the one link this
+            # harness KNOWS rather than the being asserting it (#675).
+            intent = BeingIntent("say", {"to": selected.cid, "text": message,
+                                         **({"answers": [int(selected.seq)]} if selected.seq else {})})
             env = client.dispatch(intent)
             res.trace.append((intent, env))
             res.steps = 1

@@ -49,7 +49,9 @@ def _run(*contents, client=None, acts=""):
 
 def test_an_answer_is_dispatched_as_the_beings_own_say():
     res, llm, client = _run(json.dumps({"answer": True, "message": "Yes, I heard you. Thank you."}))
-    assert [(i.effector, i.args) for i in client.sent] == [("say", {"to": "dp", "text": "Yes, I heard you. Thank you."})]
+    assert [(i.effector, i.args) for i in client.sent] == [
+        ("say", {"to": "dp", "text": "Yes, I heard you. Thank you.", "answers": [67]})], \
+        "the answer turn names the turn it was asked about (#675)"
     f = res.answer_form
     assert (f["parsed"], f["answer"], f["sent"], f["retried"]) == (True, True, True, 0)
     assert res.generates[0]["num_predict"] == 6000
