@@ -55,7 +55,7 @@ def _open(h):
 
 def test_a_thread_leaves_the_todo_and_the_settled_list_and_the_rest_stays(tmp_path):
     h = _home(tmp_path)
-    ok, msg, changed = _go(h, {"words": "widget, daemon", "reason": "dp: drop it"}, now=0)
+    ok, msg, changed = _go(h, {"settled": "all", "words": "widget, daemon", "reason": "dp: drop it"}, now=0)
     assert ok and changed, msg
     assert "3 open todo item(s) and 2 settled entries" in msg and "Still open: 2" in msg
     assert _open(h) == ["Build a small neural net and test it on the sine data",
@@ -89,7 +89,7 @@ def test_recall_still_finds_what_was_retired(tmp_path):
 def test_a_preview_changes_nothing_and_says_what_would_move(tmp_path):
     h = _home(tmp_path)
     before = {p.name: p.read_bytes() for p in h.iterdir() if p.is_file()}
-    ok, msg, changed = bt.retire_thread(h, {"words": "widget", "preview": "true"}, now=0)
+    ok, msg, changed = bt.retire_thread(h, {"settled": "all", "words": "widget", "preview": "true"}, now=0)
     assert ok and not changed and msg.startswith("PREVIEW, nothing was changed")
     assert "3 of 5 open todo item(s) and 2 of 3 settled entries would be retired" in msg
     assert "STAYS: Build a small neural net" in msg
@@ -198,7 +198,7 @@ def test_an_interleaved_retire_cannot_move_this_one_off_its_declared_paths(tmp_p
 
 def test_a_failed_settled_commit_rolls_back_within_the_declared_paths(tmp_path, monkeypatch):
     h = _home(tmp_path)
-    args = {"words": "widget", "reason": "r"}
+    args = {"settled": "all", "words": "widget", "reason": "r"}
     declared = _declared(h, args)
     entries_before = (h / "settled.json").read_bytes()
     ok, msg, _ = bt.retire_thread(h, dict(args, preview="true"))
@@ -247,7 +247,7 @@ def test_evidence_alone_does_not_select_a_settled_entry(tmp_path):
     h = _home(tmp_path)
     assert st.settle(h, {"question": "Does the sine net generalise?", "answer": "yes, test error 0.04",
                          "evidence": "ran widget-free eval.py"}, now=0)[0]
-    ok, msg, _ = bt.retire_thread(h, {"words": "widget", "preview": "true"})
+    ok, msg, _ = bt.retire_thread(h, {"settled": "all", "words": "widget", "preview": "true"})
     assert "Does the sine net generalise?" not in msg and "2 of 4 settled entries" in msg, msg
 
 
@@ -383,7 +383,7 @@ def test_the_closed_block_shows_the_newest_few_and_counts_the_rest(tmp_path):
     for i, w in enumerate(("lantern", "kettle", "compass", "teapot", "harbour")):
         assert st.settle(h, {"question": f"Where is the {w}?", "answer": "here"}, now=0)[0]
         reasons.append(f"closed number {i}")
-        ok, msg, _ = _go(h, {"words": w, "reason": reasons[-1]}, now=86400 * i)
+        ok, msg, _ = _go(h, {"settled": "all", "words": w, "reason": reasons[-1]}, now=86400 * i)
         assert ok and "1 settled entry" in msg, msg
     shown = bt.render_closed(h)
     lines = shown.splitlines()[1:]
@@ -431,7 +431,7 @@ def _confirmed(h, args):
 def test_a_failed_settled_rollback_preserves_recovery_evidence(tmp_path, monkeypatch):
     """A failed commit can mean the settled replacement happened but its undo failed."""
     h = _home(tmp_path)
-    args = {"words": "widget", "reason": "r"}
+    args = {"settled": "all", "words": "widget", "reason": "r"}
     call = _confirmed(h, args)   # preview first, before any failure is injected
     original = (h / st.SETTLED_FILE).read_bytes()
 
@@ -454,7 +454,7 @@ def test_a_failed_settled_rollback_preserves_recovery_evidence(tmp_path, monkeyp
 
 def test_real_settled_log_and_restore_failures_do_not_erase_recovery(tmp_path, monkeypatch):
     h = _home(tmp_path)
-    args = {"words": "widget", "reason": "r"}
+    args = {"settled": "all", "words": "widget", "reason": "r"}
     call = _confirmed(h, args)   # preview first, before any failure is injected
     original = (h / st.SETTLED_FILE).read_bytes()
     real_open, real_write_bytes = builtins.open, Path.write_bytes
@@ -481,7 +481,7 @@ def test_real_settled_log_and_restore_failures_do_not_erase_recovery(tmp_path, m
 
 def test_todo_restore_failure_preserves_archive_and_reports_partial_effect(tmp_path, monkeypatch):
     h = _home(tmp_path)
-    args = {"words": "widget", "reason": "r"}
+    args = {"settled": "all", "words": "widget", "reason": "r"}
     call = _confirmed(h, args)   # preview first, before any failure is injected
     real_write = bt._write_atomic
     todo_writes = 0

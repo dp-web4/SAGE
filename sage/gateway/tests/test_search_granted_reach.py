@@ -159,7 +159,11 @@ def test_no_match_is_a_bounded_absence_and_a_bad_regex_is_never_one(tree):
     d = _disp(tree, [(os.path.realpath(tree.gov), True)])
     miss = _search(d, tree, {"pattern": "zzz_absent", "path": tree.gov})
     assert miss.ok and miss.result["matches"] == 0 and "WHAT WAS SEARCHED" in miss.result["note"]
-    bad = _search(d, tree, {"pattern": "a(", "path": tree.gov})
+    # `a(` is not a valid regex, so it is searched as literal text and answers (search_mode);
+    # a pattern git's ERE rejects but Python's re accepts still never runs, and is no absence.
+    lit = _search(d, tree, {"pattern": "a(", "path": tree.gov})
+    assert lit.ok and "literal text" in lit.result["literal"], lit
+    bad = _search(d, tree, {"pattern": "[[:foo:]]", "path": tree.gov})
     assert not bad.ok and "not an absence" in bad.error
 
 

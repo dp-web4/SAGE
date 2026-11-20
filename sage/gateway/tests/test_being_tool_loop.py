@@ -166,7 +166,7 @@ def test_generate_stats_record_the_window_wall_and_the_retry():
     # one generate as the loop sees it: the empty turn was retried once and the retry stood
     assert r.reply == "done" and calls["n"] == 2
     # num_predict: the retry's budget (no window declared -> the 6000 floor), not the first 1024
-    assert [{k: v for k, v in g.items() if k != "attempts"} for g in r.generates] == [{"done_reason": "stop", "prompt_eval_count": 5000, "eval_count": 40, "retried": 1,
+    assert [{k: v for k, v in g.items() if k not in ("attempts", "prompt_chars")} for g in r.generates] == [{"done_reason": "stop", "prompt_eval_count": 5000, "eval_count": 40, "retried": 1,
                             "num_predict": 6000, "retry_cause": "length"}]   # no num_ctx on this fake: not guessed
 
 
@@ -435,7 +435,7 @@ def test_length_retry_gets_the_room_the_window_has_left_via_the_override():
     assert seen == [None, 16384 - 6721 - RETRY_MARGIN]      # first attempt: config budget; retry: the window's room
     assert llm.num_predict_override is None                  # restored
     assert llm.max_response_tokens == 3000                   # untouched: it is not the lever
-    assert [{k: v for k, v in g.items() if k != "attempts"} for g in r.generates] == [{"done_reason": "stop", "prompt_eval_count": 6721, "eval_count": 700, "retried": 1,
+    assert [{k: v for k, v in g.items() if k not in ("attempts", "prompt_chars")} for g in r.generates] == [{"done_reason": "stop", "prompt_eval_count": 6721, "eval_count": 700, "retried": 1,
                             "num_predict": 16384 - 6721 - RETRY_MARGIN,
                             "retry_cause": "output_budget"}]   # 6721 + 6000 < 16384: num_predict ran out
 
