@@ -172,12 +172,16 @@ def read_tail(path, max_bytes: int = 256 * 1024) -> list:
         with open(path, "rb") as f:
             f.seek(0, os.SEEK_END)
             size = f.tell()
-            f.seek(max(0, size - max_bytes))
+            start = max(0, size - max_bytes)
+            f.seek(max(0, start - 1))
             data = f.read()
     except OSError:
         return []
+    if start > 0:
+        # one byte before the window: a newline there means the window starts a line, which is whole
+        whole, data = data[:1] == b"\n", data[1:]
     lines = data.split(b"\n")
-    if size > max_bytes:
+    if start > 0 and not whole:
         lines = lines[1:]
     out = []
     for l in lines:

@@ -172,7 +172,7 @@ def read_stream(path: str, max_bytes: int = STREAM_TAIL_BYTES) -> list:
     except OSError:
         return []
     lines = data.split(b"\n")
-    if size > max_bytes:
+    if size > max_bytes and not _starts_a_line(path, size - max_bytes):
         lines = lines[1:]              # cut by the window
     out = []
     for l in lines:
@@ -181,6 +181,16 @@ def read_stream(path: str, max_bytes: int = STREAM_TAIL_BYTES) -> list:
         except ValueError:
             continue
     return out
+
+
+def _starts_a_line(path: str, at: int) -> bool:
+    """Whether byte `at` begins a line (the byte before it is a newline), so a window starting there is not cut."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(at - 1)
+            return f.read(1) == b"\n"
+    except OSError:
+        return False
 
 
 def _hms(t) -> str:
@@ -200,6 +210,8 @@ def stream_status(events: list, now: float) -> str:
     k = last.get("k")
     if k == "end":
         return f"○ resting: last beat ended {_ago(age)} ago"
+    if k == "beat":
+        return f"◐ beat starting ({_ago(age)} ago), no model call yet"
     if k in ("think", "text", "tool", "call") and age <= LIVE_S:
         doing = {"think": "thinking", "text": "writing", "tool": "calling a tool", "call": "waiting for the model"}[k]
         return f"● live: {doing} ({turn})"
