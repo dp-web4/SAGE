@@ -220,3 +220,12 @@ def test_the_being_cannot_write_its_output_stream():
             r._safe_path(name, writing=True)
         assert "the harness writes into it" in str(e.value)
     assert r._safe_path(bs.STREAM_FILE, writing=False) == (home / bs.STREAM_FILE).resolve()
+
+
+def test_read_tail_keeps_a_line_its_window_starts_exactly_on(tmp_path):
+    p = tmp_path / bs.STREAM_FILE
+    lines = [json.dumps({"k": "text", "n": i}) + "\n" for i in range(5)]
+    p.write_text("".join(lines))
+    tail = len(lines[-1]) + len(lines[-2])
+    assert [e["n"] for e in bs.read_tail(p, max_bytes=tail)] == [3, 4]
+    assert [e["n"] for e in bs.read_tail(p, max_bytes=tail - 1)] == [4]

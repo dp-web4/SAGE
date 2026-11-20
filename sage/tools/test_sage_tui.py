@@ -238,3 +238,17 @@ def test_the_page_switch_waits_while_composing():
     st.update([DP]); st.begin(DP)
     st.toggle_page()
     assert st.page == "conversations", "a draft keeps its destination on screen"
+
+
+def test_a_beat_with_no_call_yet_says_it_is_starting():
+    assert t.stream_status(BEAT[:1], 103.0) == "◐ beat starting (3s ago), no model call yet"
+
+
+def test_a_window_that_starts_exactly_on_a_line_keeps_that_line(tmp_path):
+    import json as _json
+    p = tmp_path / t.STREAM_FILE
+    lines = [_json.dumps({"k": "text", "n": i}) + "\n" for i in range(5)]
+    p.write_text("".join(lines))
+    tail = len(lines[-1]) + len(lines[-2])          # exactly the last two lines
+    assert [e["n"] for e in t.read_stream(str(p), max_bytes=tail)] == [3, 4]
+    assert [e["n"] for e in t.read_stream(str(p), max_bytes=tail - 1)] == [4], "a cut line is still dropped"
