@@ -1138,7 +1138,9 @@ def _assert_every_bind_is_judged_or_plumbing(calls):
     line = next(e for e in events if e.get("egress"))["egress"][-1]
     judged = {p for e in events for p in (e["tool_input"].get("paths") or [])}
     interp = os.path.dirname(os.path.dirname(sys.executable))
+    from sage.gateway.being_gate_client import RUN_ETC_BINDS
     plumbing = {"/usr", "/lib", "/lib64", "/bin", "/etc/alternatives", interp}
+    plumbing |= {t for t in RUN_ETC_BINDS.split() if t.startswith("/")}   # fixed system config
     # the host user site is box plumbing by operator decision (dp, 2026-11-16, SAGE #701 option 2):
     # package code, read-only, like /usr. Judging it as the being's read would refuse every run.
     from sage.gateway.being_gate_client import host_user_site

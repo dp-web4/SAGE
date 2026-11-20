@@ -5644,7 +5644,9 @@ def _run_reach_note(mounts: list, skipped: list) -> str:
                               "can mount. ")
             + "Any other path, your home included, does not exist in there, so a check like "
               "os.path.exists() is False for it whatever is on disk; memory_read answers about "
-              "the disk.")
+              "the disk. Outside /tmp, /work and what is WRITABLE above, nothing in there can be "
+              "written: a write elsewhere (/etc/passwd, /home/...) fails as 'Read-only file system', "
+              "so a run cannot change those files on this machine.")
     if skipped:
         text += " Not mounted: " + "; ".join(f"{p} ({why})" for p, why in skipped) + "."
     return text
