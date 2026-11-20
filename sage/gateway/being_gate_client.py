@@ -1980,6 +1980,14 @@ def run_command(args: dict, ctx: Optional[dict] = None) -> str:
         f"{grant_binds}"
         # Writable in there: these two size-limited tmpfs, and what the being's grants reach.
         f" --size {RUN_WORK_BYTES} --tmpfs /work{inputs}"
+        # THE ROOT IS READ-ONLY, LAST, AFTER EVERY MOUNT. bwrap's root is a writable tmpfs, so a write
+        # to a path nothing is mounted at landed there and succeeded. sprout-being, 2026-11-19 20:32Z: a
+        # script appended a user entry to the system user list and made a home directory; both "worked",
+        # the run printed that the user was created, and the beat took it as done and reopened a settled
+        # conclusion that said it could not be. Nothing on the machine had changed. Read-only, such a
+        # write fails as "Read-only file system" in the run itself. Remounting / changes only the root
+        # mount: /tmp, /work and the grant binds are mounts of their own and keep their mode.
+        " --remount-ro /"
         " --unshare-pid --unshare-net --unshare-ipc --unshare-uts"
         " --new-session --die-with-parent"
         " --setenv HOME /tmp --setenv PYTHONUTF8 1 --setenv PYTHONDONTWRITEBYTECODE 1"

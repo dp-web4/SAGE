@@ -371,6 +371,33 @@ def test_both_writable_places_are_size_bounded_from_inside(tmp_path, monkeypatch
     assert "CHANGED-INSIDE" not in (home / "scratch" / "fill.py").read_text()
 
 
+@needs_bwrap
+def test_a_write_outside_the_writable_places_fails_in_the_run_itself(tmp_path):
+    """sprout-being, 2026-11-19 20:32Z: a script appended a user entry to /etc/passwd and made a home under
+    /home. bwrap's root was a writable tmpfs, so both succeeded in there, the run printed that the user was
+    created, and the beat took it as done. The root is now read-only: the write fails where it is made."""
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "w.py").write_text(
+        "import os\n"
+        "def w(p):\n"
+        "    try:\n"
+        "        os.makedirs(os.path.dirname(p), exist_ok=True)\n"
+        "        with open(p, 'a') as f:\n"
+        "            f.write('x\\n')\n"
+        "        return 'WROTE'\n"
+        "    except OSError as e:\n"
+        "        return 'refused ' + (e.strerror or '')\n"
+        "for p in ('/etc/passwd', '/home/test-user/.profile', '/opt/x', '/tmp/t', '/work/k'):\n"
+        "    print(p, w(p))\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/w.py"}))
+    assert r.ok, r.error
+    out = r.result["stdout"]
+    for p in ("/etc/passwd", "/home/test-user/.profile", "/opt/x"):
+        assert f"{p} refused Read-only file system" in out, out
+    assert "/tmp/t WROTE" in out and "/work/k WROTE" in out, out
+    assert "fails as 'Read-only file system'" in r.result["note"], r.result["note"]
+
+
 @needs_sandbox
 def test_output_goes_to_capped_files_and_only_head_and_tail_come_back(tmp_path, monkeypatch):
     """capture_output read everything into the seat (outside every limit) before trimming it."""
