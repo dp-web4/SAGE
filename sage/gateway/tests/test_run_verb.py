@@ -371,6 +371,33 @@ def test_both_writable_places_are_size_bounded_from_inside(tmp_path, monkeypatch
     assert "CHANGED-INSIDE" not in (home / "scratch" / "fill.py").read_text()
 
 
+@needs_bwrap
+def test_a_write_outside_the_writable_places_fails_in_the_run_itself(tmp_path):
+    """sprout-being, 2026-11-19 20:32Z: a script appended a user entry to /etc/passwd and made a home under
+    /home. bwrap's root was a writable tmpfs, so both succeeded in there, the run printed that the user was
+    created, and the beat took it as done. The root is now read-only: the write fails where it is made."""
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "w.py").write_text(
+        "import os\n"
+        "def w(p):\n"
+        "    try:\n"
+        "        os.makedirs(os.path.dirname(p), exist_ok=True)\n"
+        "        with open(p, 'a') as f:\n"
+        "            f.write('x\\n')\n"
+        "        return 'WROTE'\n"
+        "    except OSError as e:\n"
+        "        return 'refused ' + (e.strerror or '')\n"
+        "for p in ('/etc/passwd', '/home/test-user/.profile', '/opt/x', '/tmp/t', '/work/k'):\n"
+        "    print(p, w(p))\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/w.py"}))
+    assert r.ok, r.error
+    out = r.result["stdout"]
+    for p in ("/etc/passwd", "/home/test-user/.profile", "/opt/x"):
+        assert f"{p} refused Read-only file system" in out, out
+    assert "/tmp/t WROTE" in out and "/work/k WROTE" in out, out
+    assert "fails as 'Read-only file system'" in r.result["note"], r.result["note"]
+
+
 @needs_sandbox
 def test_output_goes_to_capped_files_and_only_head_and_tail_come_back(tmp_path, monkeypatch):
     """capture_output read everything into the seat (outside every limit) before trimming it."""
@@ -1253,3 +1280,51 @@ def test_a_value_passed_as_data_is_told_data_only_stages_files(tmp_path):
     assert "base name with no directory" in g.error and "hand values" not in g.error
     s = d._do_run(BeingIntent("run", {"path": "nope"}))                  # the script itself: no value hint
     assert s.ok is False and "hand values" not in s.error
+
+
+def _box_sees_debian_matplotlib():
+    """True only where this test exercises RUN_ETC_BINDS: the box's interpreter imports matplotlib
+    from a tree the box mounts, and that matplotlib is Debian's (default rc read from
+    /etc/matplotlibrc, which exists). The probe runs the box's interpreter with the box's cleared
+    environment (HOME=/tmp, no PYTHONPATH), so a matplotlib only in the host user site or on an
+    inherited PYTHONPATH skips instead of failing on a ModuleNotFoundError the bind cannot fix
+    (codex, SAGE #795 review), and an upstream wheel with mpl-data skips instead of passing
+    without the bind (it never reads /etc)."""
+    import subprocess
+    interp = os.path.dirname(os.path.dirname(sys.executable))
+    probe = ("import inspect, os, matplotlib as m\n"
+             "src = inspect.getsource(m.matplotlib_fname)\n"
+             "print(os.path.realpath(m.__file__)); print('/etc/matplotlibrc' in src)\n")
+    try:
+        p = subprocess.run([f"{interp}/bin/python3", "-c", probe], capture_output=True, text=True,
+                           env={"HOME": "/tmp", "PATH": f"{interp}/bin:/usr/bin:/bin"}, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    lines = p.stdout.split()
+    if p.returncode != 0 or len(lines) != 2:
+        return False
+    roots = [os.path.realpath(r) + os.sep for r in (interp, "/usr", "/lib")]
+    return (any(lines[0].startswith(r) for r in roots) and lines[1] == "True"
+            and os.path.isfile("/etc/matplotlibrc"))
+
+
+@needs_bwrap
+@pytest.mark.skipif(not _box_sees_debian_matplotlib(),
+                    reason="no Debian matplotlib on a path the run box mounts")
+def test_a_library_the_seat_python_imports_also_plots_inside_run(tmp_path):
+    """cbp-being, 2026-11-06..11-20: every `import matplotlib.pyplot` in `run` raised "Could not
+    find matplotlibrc file; your Matplotlib install is broken", because Debian's matplotlib reads
+    its default rc from /etc and the box binds /usr only. The being hunted the file for 13 days.
+    The assertion is on what the script printed and wrote, so a box that drops RUN_ETC_BINDS (or
+    a seat whose matplotlib needs another config file) turns this red."""
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "plot.py").write_text(
+        "import os, matplotlib\n"
+        "matplotlib.use('Agg')\n"
+        "import matplotlib.pyplot as plt\n"
+        "fig, ax = plt.subplots(); ax.plot([0, 1], [1, 0]); fig.savefig('out.png')\n"
+        "print('saved', os.path.getsize('out.png') > 0)\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/plot.py"}))
+    assert r.ok, r.error
+    assert "Could not find matplotlibrc" not in r.result["stderr"], r.result["stderr"]
+    assert r.result["exit"] == 0 and "saved True" in r.result["stdout"], r.result
