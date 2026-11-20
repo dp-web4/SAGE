@@ -388,11 +388,24 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
         # the refused questions read close to one it held; the receipt named neither.
         # NO "FOLD IT INTO ONE YOU HAVE". That advice, without a close entry, is how cbp-being's questions came to
         # carry answers to other questions (s10, s20, s42: 10-28..30). A full list is made room in by reopening.
-        oldest = ", ".join(f"{e['id']} ({_copyable(e['question'])}, {str(e.get('at', ''))[:10]})" for e in entries[:3])
+        # NOT THE LONGEST HELD. This receipt named the three oldest entries, and sprout-being reopened them in that
+        # order, 11-18..19: s20, s71, s72, s80, each to make room, none because it had stopped holding; s72 was its
+        # conclusion that the seat has no restart path. Age is not a reason a conclusion stops holding. What the list
+        # can lose without losing a conclusion is a question asked twice, so the receipt names those groups, by the
+        # beat's own ≈ (18 of its 30 entries, 5 questions, on 11-20), and otherwise names none.
+        groups = _close_groups(entries)
+        shown = "; ".join(f"{g[0]['id']} {_copyable(g[0]['question'])} \u2248 {', '.join(e['id'] for e in g[1:])}"
+                          for g in groups[:CAP_GROUPS_SHOWN])
+        extra = len(groups) - CAP_GROUPS_SHOWN
+        more = f" (+{extra} more group{'s' if extra > 1 else ''})" if extra > 0 else ""
         return False, (f"you have {len(entries)} settled entries, the most this list holds, so a new one was "
                        "not added. Nothing was changed. To make room, reopen one that no longer needs holding (its "
-                       f"id and reopen='true'); the longest held are {oldest}. Do not put this answer under a "
-                       "different question: every beat reads a settled answer as the answer to its question."
+                       "id and reopen='true')."
+                       + (f" These read like one question settled more than once (their answers may agree or "
+                          f"not): {shown}{more}. Where two say the same, one can go without giving up a "
+                          "conclusion." if groups else "")
+                       + " Settle with no arguments to see every entry with its answer. Do not put this answer "
+                       "under a different question: every beat reads a settled answer as the answer to its question."
                        # "THE ANSWER THAT HOLDS", AS IN THE RECEIPT (legion on #661): followed literally at the cap,
                        # "your newest answer" replaced s30's true answer with the false one on the s100/s101 shape
                        + (f" This reads close to {close['id']} ({_copyable(close['question'])}), which says "
@@ -575,6 +588,30 @@ def _named(q: str) -> set:
     """The device nodes, scope ids, file names and numbers a question names, which its terms leave out or reduce."""
     from sage.gateway.relevance import _IDS
     return {m.group(0).lower() for m in _IDS.finditer(q or "")} | set(re.findall(r"\d+", q or ""))
+
+
+#: How many groups of close questions the full-list refusal names.
+CAP_GROUPS_SHOWN = 4
+
+
+def _close_groups(entries: List[dict]) -> List[List[dict]]:
+    """The entries whose questions read close to each other (the beat's ≈), joined into groups, each in list
+    order and the groups by their first entry; entries close to no other are in none."""
+    near = _neighbours(entries)
+    by_id = {e["id"]: e for e in entries}
+    seen, groups = set(), []
+    for e in entries:
+        if e["id"] in seen or e["id"] not in near:
+            continue
+        group, todo = set(), [e["id"]]
+        while todo:
+            i = todo.pop()
+            if i not in group:
+                group.add(i)
+                todo.extend(near.get(i, []))
+        seen |= group
+        groups.append([x for x in entries if x["id"] in group and x["id"] in by_id])
+    return groups
 
 
 def _neighbours(entries: List[dict]) -> Dict[str, List[str]]:
