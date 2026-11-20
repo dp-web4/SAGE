@@ -1033,6 +1033,117 @@ SEARCH_MAX_N = 60        # matches returned at most; a search is a pointer, not 
 
 
 
+# Perl shorthands Python's `re` accepts and POSIX ERE does not have, as ERE bracket classes. Outside a
+# bracket expression each becomes a whole class; inside one, the class name joins that bracket.
+_PERL_CLASS = {"d": ("[[:digit:]]", "[:digit:]"), "s": ("[[:space:]]", "[:space:]"),
+               "w": ("[[:alnum:]_]", "[:alnum:]_"),
+               "D": ("[^[:digit:]]", None), "S": ("[^[:space:]]", None), "W": ("[^[:alnum:]_]", None)}
+
+
+def search_regex(pattern: str) -> tuple:
+    r"""(mode, pattern_to_run, note): how a `search` pattern runs, chosen before the law judges it.
+
+    Three shapes:
+    - not a regex at all (Python's `re` refuses it): `-F`, the text as written (see below);
+    - an ERE already: `-E`, unchanged, note "";
+    - Perl syntax `re` accepts and ERE lacks: `-E` with the Perl parts rewritten, and a note
+      saying what ran. Measured on McNugget 2026-11-20 (Apple git 2.50 and BSD grep): `\d` matched
+      the letter d (81 lines of forum_replies.py, the same as `d`; digits are on 26), `\s` and `\b`
+      matched nothing, so `def\sfor` and `\bfor_beat\b` came back as ABSENCES; and `.*?`, `+?`,
+      `(?:` exited 128 ("repetition-operator operand invalid"). mcnugget-being sent 26 such
+      searches: 14 failed, 9 came back "absent" (`PR\s*#\d+` among them), 3 hit.
+
+    The rewrite keeps every answer a superset of the Perl one, never a false absence: lazy
+    quantifiers become greedy (a line matches or not either way), `(?:` becomes `(`, `\d \s \w`
+    and their negations become POSIX classes, `\A`/`\Z` become `^`/`$`, and `\b`/`\B` are
+    dropped (ERE has no portable word boundary), which can only widen the match. What has no
+    ERE meaning at all (lookaround, inline flags, named groups, possessive quantifiers, a negated
+    shorthand inside a bracket) is searched as literal text, like any other unparseable pattern."""
+    import re
+    import warnings
+    try:
+        with warnings.catch_warnings():  # `[[:digit:]]` is valid ERE; re only warns about it
+            warnings.simplefilter("ignore")
+            re.compile(pattern)
+    except re.error:
+        return "-F", pattern, ""
+    out, i, n, in_br, changed, dropped_b = [], 0, len(pattern), False, False, False
+    while i < n:
+        c = pattern[i]
+        if in_br:
+            if c == "\\" and i + 1 < n and pattern[i + 1] in _PERL_CLASS:
+                inside = _PERL_CLASS[pattern[i + 1]][1]
+                if inside is None:
+                    return "-F", pattern, ""
+                out.append(inside)
+                changed, i = True, i + 2
+                continue
+            if c == "\\" and i + 1 < n:
+                out.append(pattern[i:i + 2])
+                i += 2
+                continue
+            if c == "[" and i + 1 < n and pattern[i + 1] in ":.=":
+                end = pattern.find(pattern[i + 1] + "]", i + 2)
+                if end != -1:
+                    out.append(pattern[i:end + 2])
+                    i = end + 2
+                    continue
+            out.append(c)
+            if c == "]":
+                in_br = False
+            i += 1
+            continue
+        if c == "\\" and i + 1 < n:
+            e = pattern[i + 1]
+            if e in _PERL_CLASS:
+                out.append(_PERL_CLASS[e][0])
+                changed = True
+            elif e in "bB":
+                dropped_b = changed = True
+            elif e == "A":
+                out.append("^")
+                changed = True
+            elif e in "Zz":
+                out.append("$")
+                changed = True
+            else:
+                out.append(pattern[i:i + 2])
+            i += 2
+            continue
+        if c == "[":
+            out.append(c)
+            in_br = True
+            i += 1
+            if i < n and pattern[i] == "^":
+                out.append("^")
+                i += 1
+            if i < n and pattern[i] == "]":
+                out.append("]")
+                i += 1
+            continue
+        if c == "(" and pattern.startswith("(?", i):
+            if pattern.startswith("(?:", i):
+                out.append("(")
+                changed, i = True, i + 3
+                continue
+            return "-F", pattern, ""
+        if c in "*+?}" and i + 1 < n and pattern[i + 1] in "?+":
+            if pattern[i + 1] == "+":
+                return "-F", pattern, ""
+            out.append(c)
+            changed, i = True, i + 2
+            continue
+        out.append(c)
+        i += 1
+    if not changed:
+        return "-E", pattern, ""
+    ran = "".join(out)
+    note = (f"{pattern!r} uses Perl regex syntax that git's extended regex does not have, so it ran as "
+            f"{ran!r}" + (" (word boundaries \\b dropped, so partial words match too)" if dropped_b else "")
+            + "; a hit or an absence answers that pattern")
+    return "-E", ran, note
+
+
 def search_mode(pattern: str) -> str:
     """`-E` for a pattern that is a valid regex, `-F` (literal text) for one that is not.
 
@@ -1043,13 +1154,9 @@ def search_mode(pattern: str) -> str:
     it is searched literally and the result says so. The mode is chosen HERE, before the law
     judges the command, so judged == executed still holds: no retry with a different command.
     Python's `re` is the validity test; it rejects what git's ERE rejects for the shapes seen
-    (`(` unbalanced, `=**` nothing to repeat)."""
-    import re
-    try:
-        re.compile(pattern)
-        return "-E"
-    except re.error:
-        return "-F"
+    (`(` unbalanced, `=**` nothing to repeat). Perl syntax `re` accepts is rewritten or searched
+    literally by `search_regex`, which this reports the mode of."""
+    return search_regex(pattern)[0]
 
 
 def search_command(args: dict, ctx: Optional[dict] = None) -> str:
@@ -1106,8 +1213,9 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
     # directory names. A worktree path containing a space would split into two argv elements
     # and the law would have judged a command that is not the one executed (GPT review of
     # #83). Fleet paths are simple today; the invariant must not depend on that staying true.
-    return (f"git --no-pager -C {shlex.quote(worktree)} grep -n -I {search_mode(pattern)} --max-count={n} "
-            f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
+    mode, ran, _ = search_regex(pattern)
+    return (f"git --no-pager -C {shlex.quote(worktree)} grep -n -I {mode} --max-count={n} "
+            f"-e {shlex.quote(ran)} -- {shlex.quote(target)}")
 
 
 def reach_search_target(cmd: str) -> Optional[str]:
@@ -1154,8 +1262,9 @@ def _reach_search_command(pattern: str, n: int, path: str, ctx: dict) -> str:
     if not os.path.exists(target):
         raise ValueError(f"search 'path' {path!r} does not exist, so there is nothing there to "
                          f"search. Name a folder or file that exists, by its absolute path.")
-    return (f"grep -r -n -I {search_mode(pattern)} -s --max-count={n} --exclude-dir=.git "
-            f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
+    mode, ran, _ = search_regex(pattern)
+    return (f"grep -r -n -I {mode} -s --max-count={n} --exclude-dir=.git "
+            f"-e {shlex.quote(ran)} -- {shlex.quote(target)}")
 
 
 
