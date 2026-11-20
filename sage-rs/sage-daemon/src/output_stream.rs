@@ -41,28 +41,44 @@ pub fn read_since(instance: &Path, after: Option<u64>) -> serde_json::Value {
         None => (size.saturating_sub(TAIL_BYTES), false),
     };
     let want = (size - start).min(MAX_READ);
-    let mut buf = vec![0u8; want as usize];
-    if f.seek(SeekFrom::Start(start)).is_err() || f.read_exact(&mut buf).is_err() {
+    // One byte before a tail window too: a newline there means the window starts a line (legion on #800).
+    let from_tail = after.is_none() || reset;
+    let before = if from_tail && start > 0 { 1 } else { 0 };
+    let mut buf = vec![0u8; (want + before) as usize];
+    if f.seek(SeekFrom::Start(start - before)).is_err() || f.read_exact(&mut buf).is_err() {
         return serde_json::json!({"offset": start, "size": size, "reset": reset, "events": [],
                                   "error": "the stream file could not be read"});
     }
-    // A tail starts mid-file: its first line is cut, so it is skipped. An incremental read starts
-    // where the last whole line ended, so its first line is whole.
-    let from_tail = after.is_none() || reset;
+    let starts_a_line = before == 0 || buf[0] == b'\n';
+    let buf = &buf[before as usize..];
+    // A tail that starts mid-line skips the cut line. An incremental read starts where the last
+    // whole line ended, so its first line is whole.
     let mut lo = 0usize;
-    if from_tail && start > 0 {
+    if from_tail && start > 0 && !starts_a_line {
         lo = buf.iter().position(|&b| b == b'\n').map(|i| i + 1).unwrap_or(buf.len());
     }
     // Only whole lines: the end is the last newline; a line still being written waits.
-    let hi = buf.iter().rposition(|&b| b == b'\n').map(|i| i + 1).unwrap_or(0).max(lo);
+    let mut hi = buf.iter().rposition(|&b| b == b'\n').map(|i| i + 1).unwrap_or(0).max(lo);
+    // A FULL WINDOW WITH NO LINE END IN IT never advances by waiting: the writer (being_stream) flushes text
+    // every 0.25 s, so no real line comes near MAX_READ, but one that did would stall every later poll at the
+    // same offset (legion on #800). Step past it and say so.
+    let mut skipped = 0u64;
+    if hi == lo && want == MAX_READ {
+        hi = buf.len();
+        skipped = want - lo as u64;
+    }
     let events: Vec<serde_json::Value> = buf[lo..hi]
         .split(|&b| b == b'\n')
         .filter(|l| !l.is_empty())
         .filter_map(|l| serde_json::from_slice(l).ok())
         .collect();
-    serde_json::json!({
+    let mut out = serde_json::json!({
         "offset": start + hi as u64, "size": size, "reset": reset, "events": events,
-    })
+    });
+    if skipped > 0 {
+        out["skipped_bytes"] = serde_json::json!(skipped);
+    }
+    out
 }
 
 #[cfg(test)]
@@ -122,6 +138,34 @@ mod tests {
         let v = read_since(&d, Some(10_000));
         assert_eq!(v["reset"], true);
         assert_eq!(kinds(&v), vec!["beat"]);
+    }
+
+    #[test]
+    fn a_tail_window_that_starts_exactly_on_a_line_keeps_it() {
+        let d = home();
+        // 64-byte lines, so the 64 KiB window starts exactly on one (legion on #800)
+        let line = format!("{{\"k\":\"text\",\"s\":\"{}\"}}\n", "y".repeat(44));
+        assert_eq!(line.len(), 64);
+        for _ in 0..2000 {
+            append(&d, &line);
+        }
+        let v = read_since(&d, None);
+        assert_eq!(v["events"].as_array().unwrap().len() as u64, TAIL_BYTES / 64, "the first line is whole and kept");
+        // one byte more in the file and the window cuts a line, which is dropped
+        append(&d, "\n");
+        let v = read_since(&d, None);
+        assert_eq!(v["events"].as_array().unwrap().len() as u64, TAIL_BYTES / 64 - 1);
+    }
+
+    #[test]
+    fn a_full_window_with_no_line_end_is_stepped_past_not_polled_forever() {
+        let d = home();
+        append(&d, "{\"k\":\"beat\"}\n");
+        let off = read_since(&d, None)["offset"].as_u64().unwrap();
+        append(&d, &"q".repeat(MAX_READ as usize + 10));
+        let v = read_since(&d, Some(off));
+        assert_eq!(v["skipped_bytes"].as_u64().unwrap(), MAX_READ);
+        assert!(v["offset"].as_u64().unwrap() > off);
     }
 
     #[test]

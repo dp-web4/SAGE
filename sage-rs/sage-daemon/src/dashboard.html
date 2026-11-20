@@ -835,18 +835,20 @@ async function init() {
 // Polled once a second by byte offset (GET /being/output?after=N returns only what was appended). The live line in
 // the header shows on both views: whether output is arriving now, and in which turn.
 const OUT_LIVE_S = 5, OUT_KEEP = 4000;
-let outOffset = null, outEvents = [], outView = false;
+let outOffset = null, outEvents = [], outView = false, outBusy = false, outRefused = '';
 
 function outAgo(s) { s = Math.floor(s); return s < 120 ? s + 's' : s < 7200 ? Math.floor(s / 60) + 'm' : Math.floor(s / 3600) + 'h'; }
 function outHms(t) { return new Date(t * 1000).toISOString().slice(11, 19); }
 
 function outStatus(now) {
+  if (outRefused) return ['✗ output not readable here', false];
   if (!outEvents.length) return ['○ no output yet', false];
   const last = outEvents[outEvents.length - 1], age = Math.max(0, now - (last.t || 0));
   const call = [...outEvents].reverse().find(e => e.k === 'call');
   const turn = (call && call.turn) || '?';
   const active = { think: 'thinking', text: 'writing', tool: 'calling a tool', call: 'waiting for the model' };
   if (last.k === 'end') return ['○ resting · last beat ended ' + outAgo(age) + ' ago', false];
+  if (last.k === 'beat') return ['◐ beat starting (' + outAgo(age) + ' ago) · no model call yet', false];
   if (active[last.k] && age <= OUT_LIVE_S) return ['● live · ' + active[last.k] + ' (' + turn + ')', true];
   if (active[last.k]) return ['◐ in a beat · no output for ' + outAgo(age) + ' (' + turn + ')', false];
   return ['◐ in a beat (' + turn + ') · last call ended ' + outAgo(age) + ' ago', false];
@@ -856,6 +858,7 @@ function outRender() {
   const log = document.getElementById('output-log');
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   log.textContent = '';
+  if (outRefused) { const d = document.createElement('div'); d.className = 'out-error'; d.textContent = outRefused; log.appendChild(d); return; }
   if (!outEvents.length) { log.innerHTML = '<div class="out-empty">no output yet: the stream starts with the next beat</div>'; return; }
   let cur = null, curKind = '';
   const add = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; log.appendChild(d); return d; };
@@ -874,16 +877,25 @@ function outRender() {
 }
 
 async function refreshOutput() {
+  // ONE POLL AT A TIME (legion on #800): a slow reply must not let a second poll read from the same offset
+  if (outBusy) return;
+  outBusy = true;
   let changed = false;
   try {
     const r = await fetch(BASE + '/being/output' + (outOffset === null ? '' : '?after=' + outOffset));
     const d = await r.json();
     if (r.ok) {
+      if (outRefused) { outRefused = ''; changed = true; }
       if (d.reset) { outEvents = []; changed = true; }
       if (d.events && d.events.length) { outEvents = outEvents.concat(d.events).slice(-OUT_KEEP); changed = true; }
       outOffset = d.offset;
+    } else {
+      // A REFUSAL IS SHOWN, NOT AN EMPTY STREAM (legion on #800): off this machine the route answers 403
+      const why = (d.error || ('HTTP ' + r.status)) + (d.hint ? ' — ' + d.hint : '');
+      if (why !== outRefused) { outRefused = why; changed = true; }
     }
   } catch (e) { /* the header keeps its last word; the next poll tries again */ }
+  finally { outBusy = false; }
   const [line, live] = outStatus(Date.now() / 1000);
   const el = document.getElementById('out-live');
   el.textContent = line; el.classList.toggle('live', live);
