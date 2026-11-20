@@ -34,6 +34,53 @@ def _keep_alive():
         return '5m'
 
 
+def _read_stream(resp, on_chunk, timeout_s) -> Dict[str, Any]:
+    """A streamed /api/chat reply, joined into the shape of a non-streamed one.
+
+    Each line is a JSON chunk; its message's content and thinking are pieces to join, its tool_calls are
+    added to the list, and the last chunk (done: true) carries done_reason and the counts. A chunk with
+    "error" (ollama reports a failure after the status line was sent) raises, as the HTTP error would
+    have. The deadline is checked as each line arrives, and each read also has the socket's timeout_s, so a
+    call that stops sending ends within about twice timeout_s; one that keeps sending ends at timeout_s
+    (legion on #799)."""
+    import time as _time
+    deadline = _time.time() + float(timeout_s or 0) if timeout_s else None
+    content, thinking, tool_calls = [], [], []
+    role, final = 'assistant', {}
+    for line in resp:
+        if deadline is not None and _time.time() > deadline:
+            raise TimeoutError(f'streamed reply ran past {timeout_s}s')
+        line = line.strip()
+        if not line:
+            continue
+        chunk = json.loads(line)
+        if chunk.get('error'):
+            raise RuntimeError(f"ollama: {chunk['error']}")
+        msg = chunk.get('message') or {}
+        role = msg.get('role') or role
+        content.append(msg.get('content') or '')
+        thinking.append(msg.get('thinking') or '')
+        tool_calls.extend(msg.get('tool_calls') or [])
+        try:
+            on_chunk(msg)
+        except Exception:
+            pass
+        if chunk.get('done'):
+            final = chunk
+            break
+    if not final:
+        # the unstreamed read would have failed on a cut connection; a half reply is not a reply
+        raise RuntimeError('streamed reply ended before its last chunk')
+    message = {'role': role, 'content': ''.join(content)}
+    if any(thinking):
+        message['thinking'] = ''.join(thinking)
+    if tool_calls:
+        message['tool_calls'] = tool_calls
+    result = dict(final)
+    result['message'] = message
+    return result
+
+
 def ollama_can_think(model: str, host: str = 'http://localhost:11434', timeout: float = 5) -> Optional[bool]:
     """Whether the server lists `thinking` among this model's capabilities (/api/show); None when
     it can't say (unreachable, unknown model, an older server with no capability list).
@@ -261,9 +308,18 @@ class OllamaIRP(IRPPlugin):
         messages: List[Dict[str, str]],
         tools: Optional[List[Dict[str, Any]]] = None,
         fmt: Optional[Any] = None,
+        on_chunk: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         Generate a response using Ollama /api/chat endpoint.
+
+        on_chunk: when given, the reply is STREAMED and on_chunk(message) is called with each
+        piece's "message" ({"content", "thinking", "tool_calls"}) as it arrives (being_stream:
+        the live view of what the being is producing). The return value is the same either way:
+        the pieces are joined into one message, and 'raw' is the final chunk with that message,
+        which is the shape of a non-streamed reply. timeout_seconds still bounds the call: a reply
+        still arriving stops at it, one that goes silent within about twice it (_read_stream). on_chunk never affects the result:
+        an exception from it is swallowed.
 
         Supports structured messages and native tool calling (T1).
 
@@ -281,6 +337,8 @@ class OllamaIRP(IRPPlugin):
                 return {'content': '[OllamaIRP: Ollama not reachable]', 'tool_calls': [], 'role': 'assistant', 'raw': {}}
 
         payload = self.chat_payload(messages, tools=tools, fmt=fmt)
+        if on_chunk is not None:
+            payload['stream'] = True
 
         try:
             data = json.dumps(payload).encode('utf-8')
@@ -291,7 +349,10 @@ class OllamaIRP(IRPPlugin):
                 method='POST',
             )
             with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
-                result = json.loads(resp.read())
+                if on_chunk is None:
+                    result = json.loads(resp.read())
+                else:
+                    result = _read_stream(resp, on_chunk, self.timeout_seconds)
 
             message = result.get('message', {})
             content = message.get('content', '').strip()
