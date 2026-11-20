@@ -53,6 +53,9 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 # settled_seat_notes.jsonl is the seat's later word beside the being's settled entries (being_settled.SEAT_NOTES):
 # a being that could write it could make its seat appear to have said something, or erase that it did.
 SEAT_OWNED = ("entrustment.md", "settled_seat_notes.jsonl")
+# output_stream.jsonl (and its one older copy) is the harness's live record of what the model produced (being_stream):
+# what dp and the seat watch the being say as it says it, so it is the harness's to write, not the being's.
+STREAM_OWNED = ("output_stream.jsonl", "output_stream.jsonl.1")
 # GOVERNANCE RECORDS IN THE HOME (SAGE #544). The being's home also holds the files that say who
 # it is to the society, and no being verb may write them:
 #   identity.json         the raising record: `identity.machine` picks the seat that arbitrates its
@@ -1412,6 +1415,11 @@ class ReferenceF1aDispatcher:
                     f"{p.name} is changed only with settle, which keeps every earlier answer and "
                     "your reason in settled_log.jsonl. A direct write would leave no record of what "
                     "it replaced. Nothing was changed")
+            if _home and p.name in STREAM_OWNED:
+                raise ValueError(
+                    f"{p.name} is yours to read and not to edit: the harness writes into it what your "
+                    "model calls produce, as they produce it, and others watch it to see you working. "
+                    "Nothing was changed")
             if _home and p.name in SEAT_OWNED:
                 raise ValueError(
                     f"{p.name} is yours to read and not to edit: it is what you were entrusted "

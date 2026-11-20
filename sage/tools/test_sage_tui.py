@@ -187,3 +187,54 @@ def test_an_unsensed_body_is_said_not_drawn_as_zero():
 
 def test_body_lines_fit_the_width():
     assert all(len(l) <= 50 for l in t.body_lines(BODY, {"model": "m", "loaded_models": []}, 50))
+
+
+# ---- the output stream page (dp 2026-11-20: the agent's stream as a key feature and liveness indicator) ----
+BEAT = [
+    {"t": 100.0, "beat": "heartbeat-0123456789ab", "k": "beat", "model": "m:4b"},
+    {"t": 101.0, "beat": "b", "k": "call", "turn": "explore", "phase": "tools"},
+    {"t": 102.0, "beat": "b", "k": "think", "s": "The kettle "},
+    {"t": 102.2, "beat": "b", "k": "think", "s": "is cold."},
+    {"t": 103.0, "beat": "b", "k": "text", "s": "I will look."},
+    {"t": 104.0, "beat": "b", "k": "tool", "name": "camera", "args": '{"why": "see"}'},
+    {"t": 105.0, "beat": "b", "k": "done", "reason": "stop", "eval_count": 42, "s_elapsed": 4.0},
+]
+
+
+def test_the_stream_page_shows_each_call_its_thinking_words_tools_and_ending():
+    lines = t.stream_lines(BEAT, 80)
+    assert lines[0].startswith("── beat 0123456789ab") and len(lines[0]) == 80
+    assert lines[1].startswith("▸ explore · tools")
+    assert lines[2] == "  │ The kettle is cold.", "pieces of one kind in a row are one paragraph"
+    assert lines[3] == "    I will look."
+    assert lines[4] == '  ⚙ camera({"why": "see"})'
+    assert lines[5] == "  ✓ stop · 42 tokens · 4.0s"
+    assert all(len(l) <= 80 for l in t.stream_lines(BEAT + [{"k": "text", "s": "word " * 80}], 80))
+
+
+def test_the_status_line_says_whether_output_is_arriving_now():
+    assert t.stream_status([], 0).startswith("○ no output")
+    assert t.stream_status(BEAT[:3], 103.0) == "● live: thinking (explore)"
+    assert t.stream_status(BEAT[:5], 103.5) == "● live: writing (explore)"
+    assert t.stream_status(BEAT[:3], 160.0).startswith("◐ in a beat, no output for 58s"), "a stall is visible"
+    assert t.stream_status(BEAT, 110.0).startswith("◐ in a beat (explore), last call ended 5s ago")
+    assert t.stream_status(BEAT + [{"t": 106.0, "k": "end"}], 406.0) == "○ resting: last beat ended 5m ago"
+
+
+def test_the_stream_file_is_read_from_its_tail_and_a_missing_one_is_empty(tmp_path):
+    import json as _json
+    p = tmp_path / t.STREAM_FILE
+    p.write_text("".join(_json.dumps(e) + "\n" for e in BEAT))
+    assert t.read_stream(str(p)) == BEAT
+    assert t.read_stream(str(p), max_bytes=120)[-1] == BEAT[-1]
+    assert t.read_stream(str(tmp_path / "none.jsonl")) == []
+
+
+def test_the_page_switch_waits_while_composing():
+    st = t.TuiState()
+    st.toggle_page()
+    assert st.page == "stream"
+    st.toggle_page()
+    st.update([DP]); st.begin(DP)
+    st.toggle_page()
+    assert st.page == "conversations", "a draft keeps its destination on screen"
