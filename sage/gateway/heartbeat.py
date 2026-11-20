@@ -3408,12 +3408,13 @@ def _parse_todo(text: str, closures: Optional[list] = None) -> dict:
     return items
 
 
-def todo_view(instance: Path, now=None, scope_rows: Optional[dict] = None) -> str:
+def todo_view(instance: Path, now=None, scope_snap=None) -> str:
     """The todo section of the window: what is still open, from the whole log.
 
-    `scope_rows` (request_id -> hestia_scope_status row) puts hestia's live status beside every
-    shown item that names a scope request (todo_membot.scope_status_note). None = not measured,
-    and no note is written."""
+    `scope_snap` (todo_membot.ScopeSnapshot: this beat's one hestia_scope_status read) puts what
+    that read held beside every shown item that names a scope request (todo_membot.scope_status_note),
+    dated as an observation. None = no read this beat, and no note is written. The items themselves
+    are shown verbatim and todo.md is never written here."""
     try:
         text = (instance / "todo.md").read_text(errors="replace")
     except OSError:
@@ -3430,7 +3431,7 @@ def todo_view(instance: Path, now=None, scope_rows: Optional[dict] = None) -> st
         lines.append(f"- [ ] {t}" + (f" (since {s:%Y-%m-%d %H:%M} UTC)" if s else "")
                      # neutral: the shown item is the newest; the others are not claimed to share its state
                      + (f" — {n} open items mention {k}; this is the newest of them" if n > 1 else ""))
-        live = _tm.scope_status_note(t, scope_rows)
+        live = _tm.scope_status_note(t, scope_snap)
         if live:
             lines.append(f"  ({live})")
     if len(groups) > TODO_SHOWN:
@@ -3569,7 +3570,7 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
               body_reading: Optional[dict] = None,
               settled_turns: Optional[int] = None,
               proprioception: bool = True,
-              scope_rows: Optional[dict] = None) -> str:
+              scope_snap=None) -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     from sage.gateway import being_params as _bp
     parts = []
@@ -3713,16 +3714,17 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     acc = carried_account(instance, last_session_number(instance))
     if acc:
         check = want_check(acc, files_facts)
-        # the same live fact the todo view writes: an account carried verbatim can say "pending"
-        # about a request hestia ruled on (cbp-being 2026-11-15 21:31, WANT naming two refused asks)
+        # the same dated observation the todo view writes: an account carried verbatim can call a
+        # request pending after hestia ruled on it (cbp-being 2026-11-15, scope-8b0be4d34333 and
+        # scope-6ec4bf5583c4, refused 20:06 UTC). The account itself is shown unchanged.
         from sage.gateway import todo_membot as _tm_acc
-        live_acc = _tm_acc.scope_status_note(acc, scope_rows)
+        live_acc = _tm_acc.scope_status_note(acc, scope_snap)
         if live_acc:
             check = (check + "\n" if check else "") + f"_Beside your account, {live_acc}._"
         parts.append("## Your own account\n" + acc + (("\n" + check) if check else ""))
     # tails are short now that recall searches the whole home (window pressure: median 6157
     # of 8192 tokens per prompt, max 8013, measured 2026-09-07)
-    parts.append(todo_view(instance, scope_rows=scope_rows))
+    parts.append(todo_view(instance, scope_snap=scope_snap))
     if census_todo:
         parts.append(census_todo)
     journal = _read(instance / "journal.md", 1200)
@@ -5266,12 +5268,17 @@ def main(argv=None) -> int:
             forum_replies = {"error": f"{type(_e).__name__}: {_e}"}
     # what reach the being holds and has already asked for, so it does not re-file
     scope = "(scope status unavailable)"
-    scope_rows = None       # request_id -> row, for the todo view's live note; None = unmeasured
+    # This beat's one read, for the todo view's dated note (todo_membot.ScopeSnapshot). None = no read
+    # was made; a failed read is a snapshot WITH its error, never an empty list (Nova on #730).
+    scope_snap = None
+    from sage.gateway import todo_membot as _tm_scope
     if disp is not None and hasattr(disp, "_call"):
         try:
             st = disp._call("hestia_scope_status", {"plugin_id": args.member})
-            scope_rows = {str(r.get("request_id")).lower(): r for r in (st.get("requests") or [])
-                          if r.get("request_id")}
+            scope_snap = _tm_scope.scope_snapshot(st)
+            if scope_snap.error is not None:
+                # an error envelope read as an empty list would print "requests: none", a claim
+                raise _tm_scope.ScopeUnread(scope_snap.error)
             grants = scope_grant_lines(st)
             reqs = [(r.get("request_id"), r.get("path"), r.get("decision") or r.get("status"))
                     for r in (st.get("requests") or [])]
@@ -5314,7 +5321,10 @@ def main(argv=None) -> int:
                        "granted it, or to ask whether one path is inside it: memory_read "
                        "{\"path\": \"hestia://reach\"} or {\"path\": \"hestia://reach/<absolute path>\"})")
         except Exception as e:
-            scope = f"(scope status unavailable: {type(e).__name__})"
+            scope = (f"(scope status unavailable: {e})" if isinstance(e, _tm_scope.ScopeUnread)
+                     else f"(scope status unavailable: {type(e).__name__})")
+            if scope_snap is None:
+                scope_snap = _tm_scope.scope_snapshot(e)
     # the being's own appeals and any ruling new since the last beat (see appeals_block)
     appeals_text, appeals_record = appeals_block(disp, last)
     # what it starts oriented by: its own recent writing (searched, not just the tail) and
@@ -5508,7 +5518,7 @@ def main(argv=None) -> int:
                                         services=_services, mark_conversations=False,
                                         settled_turns=_settled_turns,
                                         proprioception=_proprioception,
-                                        scope_rows=scope_rows,
+                                        scope_snap=scope_snap,
                                         body_reading=_body_cur) + _scope_tail)
 
     # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its

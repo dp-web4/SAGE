@@ -22,6 +22,8 @@ What this does, and only this:
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 ALL = re.compile(r"^(?:all|every)\s*:\s*(.+)$", re.I)
@@ -64,37 +66,110 @@ _SCOPE = re.compile(r"scope-[0-9a-f]{12}", re.I)
 _DEVICE = re.compile(r"/dev/[A-Za-z]+\d*", re.I)
 
 
-def scope_status_note(text: str, rows: Optional[Dict[str, dict]]) -> str:
-    """What hestia holds NOW for each scope request an open item names, or "" when it names none or the beat
-    has no scope status.
+#: The response field a daemon would set to say `requests[]` is EVERY request it holds for the member,
+#: unfiltered and untruncated. Only then may an id it lacks be called "not on record for you". No daemon
+#: serves it as of hestia f0660a7 (2026-11-19): tool_scope_status returns the requests it holds in memory, but
+#: whether that is all of them (pruning, restarts, an older daemon) is not a stated contract. Until one says
+#: so, an absent id is reported as absent from this response, which is all that was observed.
+SCOPE_COMPLETE_FIELD = "requests_complete"
 
-    WHY (cbp-being, 2026-11-15). Two asks were refused at 20:06 UTC. The being's todo still held seven
-    "scope-…: pending, lapses in ~6 hours" lines, copied from earlier beats' pending block. Its 20:45 journal said
-    "all refused, none pending", but the todo view showed only its own frozen word. At 21:07 and 21:25 its
-    WANT was "renew the two scope requests that are about to lapse". It asked dp to renew them and searched its
-    inbox for the entries. The live status was in the same beat, in the scope block, but it was never next to
-    the item that contradicted it. The item is the being's and stays verbatim; the measurement now sits beside
-    it (the same move as want_check).
 
-    `rows` maps request_id -> hestia_scope_status `requests[]` row. tool_scope_status lists every request of the
-    member's, decided and expired included, so an id it lacks is not one waiting on anyone (_named_scope_fact)."""
-    if rows is None:
+class ScopeUnread(Exception):
+    """A hestia_scope_status read that returned no usable request list (error envelope, wrong shape)."""
+
+
+@dataclass(frozen=True)
+class ScopeSnapshot:
+    """One hestia_scope_status read, as observed at `observed_at`.
+
+    Three states, never conflated (Nova on #730: a failed call must not become `{}`):
+    - `error` set: the read failed. Nothing is known about any id; `rows` is None.
+    - `error` None, `complete` False: these rows were in the response; an absent id is only absent from it.
+    - `error` None, `complete` True: the daemon declared the list complete; an absent id is not on record."""
+    rows: Optional[Dict[str, dict]]
+    observed_at: datetime
+    complete: bool = False
+    error: Optional[str] = None
+
+
+def scope_snapshot(st, observed_at: Optional[datetime] = None) -> ScopeSnapshot:
+    """Wrap one hestia_scope_status response (or the exception its call raised) as a ScopeSnapshot."""
+    at = observed_at or datetime.now(timezone.utc)
+    if isinstance(st, BaseException):
+        return ScopeSnapshot(None, at, error=type(st).__name__)
+    if not isinstance(st, dict):
+        return ScopeSnapshot(None, at, error="no response")
+    err = st.get("_hestia_error")
+    if err is not None:
+        code = (err.get("code") or "hestia.error") if isinstance(err, dict) else str(err)
+        return ScopeSnapshot(None, at, error=str(code))
+    reqs = st.get("requests")
+    if not isinstance(reqs, list):
+        return ScopeSnapshot(None, at, error="no request list")
+    rows = {str(r.get("request_id")).lower(): r for r in reqs if isinstance(r, dict) and r.get("request_id")}
+    complete = st.get(SCOPE_COMPLETE_FIELD) is True and not st.get("truncated")
+    return ScopeSnapshot(rows, at, complete=complete)
+
+
+def _utc(x) -> str:
+    """An epoch-seconds stamp from hestia as `YYYY-MM-DD HH:MM UTC`, or "" when it is not one."""
+    try:
+        return f"{datetime.fromtimestamp(float(x), timezone.utc):%Y-%m-%d %H:%M} UTC"
+    except (TypeError, ValueError, OverflowError, OSError):
+        return ""
+
+
+def scope_status_note(text: str, snap: Optional[ScopeSnapshot]) -> str:
+    """What one hestia_scope_status read held for each scope request an open item names, or "" when the item
+    names none or the beat made no read (`snap` None).
+
+    WHY (cbp-being, 2026-11-15; scope-8b0be4d34333 and scope-6ec4bf5583c4). Both asks were refused at 20:06 UTC.
+    The being's todo kept several lines, copied from earlier beats' pending block, that called them pending with
+    hours left. Over the next hour and a half it treated them as pending: it asked dp about them and searched
+    its inbox for them, and its carried account still called them pending. The refusal was in the same beat's
+    scope block, never next to the item that contradicted it. The item is the being's and stays verbatim; the
+    measurement sits beside it (the same move as want_check). Nothing here closes, edits or rewrites an item.
+
+    WORDING IS AN OBSERVATION AT A TIME, NOT A STANDING FACT (Nova on #730). The note names when the read was
+    made, and a ruling's own time when hestia gives one, so a request read as pending that is ruled a minute
+    later reads as "pending at that read", not as pending forever. It states status and ruler and nothing
+    about what to do next: no advice, and nothing that says a refused or expired request can be renewed.
+
+    AN ABSENT ID IS NOT CALLED "NOT ON RECORD" UNLESS THE LIST IS DECLARED COMPLETE (SCOPE_COMPLETE_FIELD).
+    A failed read says it failed, and claims nothing about any id."""
+    if snap is None:
         return ""
     ids = []
     for m in _SCOPE.finditer(text or ""):
         rid = m.group(0).lower()
         if rid not in ids:
             ids.append(rid)
+    if not ids:
+        return ""
+    at = f"{snap.observed_at:%Y-%m-%d %H:%M} UTC"
+    if snap.error is not None:
+        return (f"hestia scope status could not be read at {at} ({snap.error}); "
+                f"status of {', '.join(ids)} unknown")
     facts = []
     for rid in ids:
-        row = rows.get(rid)
+        row = (snap.rows or {}).get(rid)
         if not row:
-            facts.append(f"{rid}: not on record for you")
+            facts.append(f"{rid}: not on record for you" if snap.complete
+                         else f"{rid}: not in this scope-status response")
             continue
-        status = row.get("status") or row.get("decision") or "unknown"
-        by = f" by {row['decided_by']}" if row.get("decided_by") and status != "pending" else ""
-        facts.append(f"{rid}: {status}{by}")
-    return ("hestia now: " + "; ".join(facts)) if facts else ""
+        status = row.get("status") or row.get("decision")
+        if not status:
+            facts.append(f"{rid}: listed, with no status stated")
+            continue
+        fact = f"{rid}: {status}"
+        if status != "pending":
+            if row.get("decided_by"):
+                fact += f" by {row['decided_by']}"
+            when = _utc(row.get("decided_at"))
+            if when:
+                fact += f" at {when}"
+        facts.append(fact)
+    return f"hestia scope status as read at {at}: " + "; ".join(facts)
 
 
 def group_key(text: str) -> Optional[str]:
