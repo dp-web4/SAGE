@@ -1488,6 +1488,17 @@ RUN_MAX_DATA = 8                      # data files copied in beside the script
 RUN_TMP_BYTES = 1 << 30               # the sandbox's /tmp
 RUN_WORK_BYTES = 1 << 30              # /work: the staged inputs (read-only) and whatever it writes
 RUN_FSIZE_BYTES = 512 << 20           # any one file the run writes, its output files included
+# SYSTEM CONFIG A /usr PACKAGE NEEDS, read-only and -try (absent on a seat = no mount). The box
+# binds /usr but not /etc, and Debian's python3-matplotlib patches matplotlib_fname() to look for
+# its default rc at /etc/matplotlibrc INSTEAD of mpl-data, so with /etc unbound `import
+# matplotlib` raised "Could not find matplotlibrc file; your Matplotlib install is broken" in
+# every run. cbp-being read that as its own fault and spent 13 days (2026-11-06..11-20) hunting
+# the file: scripts to locate it, searches of the workspace and home, then a write_note to the
+# host home's config dir (scope-b0972998b89d, refused). No file the being could write fixes a
+# mount, and the census listed matplotlib as missing from the box while the host had it.
+# Measured 2026-11-20 on cbp: the same bwrap line exits 1 with that error, and with this bind it
+# imports pyplot and saves a PNG. A default config file, not private state: nothing else in /etc.
+RUN_ETC_BINDS = " --ro-bind-try /etc/matplotlibrc /etc/matplotlibrc"
 RUN_MIN_S = 30                        # a beat with less than this left starts no run (Nova)
 
 
@@ -1542,6 +1553,95 @@ def run_budget_s(now: Optional[float] = None) -> tuple:
     if left < RUN_MIN_S:
         return 0, "the time left in this beat"
     return int(left), "the time left in this beat"
+
+
+def host_user_site(minor: Optional[int] = None) -> str:
+    """The seat user's Python user site for python3.<minor> (default: this process's minor), e.g.
+    ~/.local/lib/python3.12/site-packages, realpath'd, or "" when there is none.
+
+    THE BOX READS IT, READ-ONLY (dp, 2026-11-16, SAGE #701 option 2). `run` and `request_run`
+    imported different packages: on cbp, sklearn and torch live only in the user site, so the seat's
+    host run imported them and the box could not. The being saw the box's answer every beat and
+    spent two days filing installer scripts and scope asks for ~/.local/bin to close a gap no
+    install could close. Binding the user site read-only into the box makes the two places agree,
+    so the cheap path (run) and the correct path import the same packages.
+
+    WHAT IT ADDS TO THE BOX (Nova, #741 review): package code AND package data, read-only. A .pth
+    file there runs its `import` lines when the box's python starts, so this is a wider code
+    surface than the base image, not only more module names. It runs as the box's code does:
+    no network, no home, no write outside the box's tmpfs and the being's grants
+    (test_run_user_site_pth.py measures that from inside bubblewrap). Anything secret a package
+    keeps beside its code is readable by a run; a seat that keeps such a package in its user
+    site should set SAGE_RUN_USER_SITE=0, which turns the bind off."""
+    import os
+    import site
+    import sys
+    if os.environ.get("SAGE_RUN_USER_SITE", "1") == "0":
+        return ""
+    n = sys.version_info.minor if minor is None else minor
+    try:
+        base = site.getuserbase()
+    except Exception:
+        return ""
+    if not base:
+        return ""
+    p = os.path.realpath(os.path.join(base, "lib", f"python3.{n}", "site-packages"))
+    return p if os.path.isdir(p) else ""
+
+
+_BOX_MINOR: dict = {}
+
+
+def box_python_minor(interp: Optional[str] = None) -> Optional[int]:
+    """The minor version of the python the box runs ({interp}/bin/python3), asked of that binary
+    once per process; None when it cannot say.
+
+    WHY ASK IT (Nova, #741 review): the box runs {interp}/bin/python3, and interp comes from this
+    process's sys.executable. Those are the same python on cbp (/usr/bin/python3 -> 3.12), but a
+    gateway started as python3.11 on a host whose python3 is 3.12 would bind 3.11's user site at
+    the 3.11 path, which the box's 3.12 never reads: no error, and run and request_run disagree
+    again. Asking the binary makes the bind match the interpreter that reads it."""
+    import os
+    import subprocess
+    import sys
+    interp = interp or os.path.dirname(os.path.dirname(sys.executable))
+    if interp not in _BOX_MINOR:
+        try:
+            out = subprocess.run([f"{interp}/bin/python3", "-I", "-c",
+                                  "import sys; print(sys.version_info[0], sys.version_info[1])"],
+                                 capture_output=True, text=True, timeout=20,
+                                 stdin=subprocess.DEVNULL)
+            major, minor = (int(x) for x in out.stdout.split())
+            _BOX_MINOR[interp] = minor if major == 3 and out.returncode == 0 else None
+        except Exception:
+            _BOX_MINOR[interp] = None
+    return _BOX_MINOR[interp]
+
+
+def box_user_site(interp_minor: Optional[int] = None) -> str:
+    """Where Python inside the box looks for its user site: HOME is /tmp there, so
+    /tmp/.local/lib/python3.N/site-packages. Binding the host's user site AT THIS PATH (not at its
+    own path plus PYTHONPATH) lets site.py treat it as the user site it is, .pth files included."""
+    import sys
+    n = sys.version_info.minor if interp_minor is None else interp_minor
+    return f"/tmp/.local/lib/python3.{n}/site-packages"
+
+
+def user_site_bind(interp: Optional[str] = None) -> str:
+    """The bwrap fragment that shows the host user site to the box, or "" when there is none.
+    Both ends use the box interpreter's own minor version, so the directory bound is the one that
+    interpreter's site.py reads and its packages were built for. Must come AFTER `--tmpfs /tmp`
+    (a later mount masks an earlier one)."""
+    import shlex
+    if os.environ.get("SAGE_RUN_USER_SITE", "1") == "0":
+        return ""
+    minor = box_python_minor(interp)
+    if minor is None:
+        return ""
+    p = host_user_site(minor)
+    if not p:
+        return ""
+    return f" --ro-bind {shlex.quote(p)} {shlex.quote(box_user_site(minor))}"
 
 
 def run_mem_cap_bytes() -> int:
@@ -1713,7 +1813,8 @@ def sandbox_reach(effector: str, args: dict, ctx: Optional[dict] = None) -> List
     """What a sandboxed verb's box exposes to the program, which is the being's reach for that act.
 
     The rest of the line is the box's own plumbing, fixed by this module and not chosen by the
-    being: the wrapper (prlimit, bwrap), the system mounts (/usr, /lib, /bin, /etc/alternatives),
+    being: the wrapper (prlimit, bwrap), the system mounts (/usr, /lib, /bin, /etc/alternatives,
+    RUN_ETC_BINDS),
     the interpreter, /proc, /dev and the tmpfs. Judging those as the being's reach refused every
     run on Legion (SAGE #441 replay, 2026-10-25: 271/271 on /usr/bin/prlimit) and, before that,
     every check and game (miniforge3, 2026-10-05). What the law must still see is what a grant
@@ -1974,12 +2075,23 @@ def run_command(args: dict, ctx: Optional[dict] = None) -> str:
         # `run` read as unavailable there (legion-claude, #470)
         " --ro-bind /usr /usr --ro-bind /lib /lib --ro-bind-try /lib64 /lib64 --ro-bind /bin /bin"
         " --ro-bind /etc/alternatives /etc/alternatives"
+        f"{RUN_ETC_BINDS}"
         f" --ro-bind {interp} {interp}"
         f" --proc /proc --dev /dev --size {RUN_TMP_BYTES} --tmpfs /tmp"
+        # the host user site, read-only, where the box's python looks for it (SAGE #701)
+        f"{user_site_bind(interp)}"
         f"{wt_bind}"
         f"{grant_binds}"
         # Writable in there: these two size-limited tmpfs, and what the being's grants reach.
         f" --size {RUN_WORK_BYTES} --tmpfs /work{inputs}"
+        # THE ROOT IS READ-ONLY, LAST, AFTER EVERY MOUNT. bwrap's root is a writable tmpfs, so a write
+        # to a path nothing is mounted at landed there and succeeded. sprout-being, 2026-11-19 20:32Z: a
+        # script appended a user entry to the system user list and made a home directory; both "worked",
+        # the run printed that the user was created, and the beat took it as done and reopened a settled
+        # conclusion that said it could not be. Nothing on the machine had changed. Read-only, such a
+        # write fails as "Read-only file system" in the run itself. Remounting / changes only the root
+        # mount: /tmp, /work and the grant binds are mounts of their own and keep their mode.
+        " --remount-ro /"
         " --unshare-pid --unshare-net --unshare-ipc --unshare-uts"
         " --new-session --die-with-parent"
         " --setenv HOME /tmp --setenv PYTHONUTF8 1 --setenv PYTHONDONTWRITEBYTECODE 1"

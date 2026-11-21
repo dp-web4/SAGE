@@ -527,11 +527,13 @@ def _run(args) -> None:
 # result lines were cut. So, only when the answer would be cut:
 #   * a run of 1-3 lines repeated back to back is shown once and counted (no fact is lost: the count is
 #     the fact);
-#   * stdout lines that hold a number beside a word, and fall in the cut, are COPIED into a short
+#   * stdout lines that hold a number beside a word, and fall in the cut (or before the last OUT_CAP
+#     chars, which is all of stdout the answer posts), are COPIED into a short
 #     section placed after stdout and before stderr, newest kept when they do not all fit in the tail.
 # stdout and stderr stay in place, in order; a crash's traceback stays last.
 REPEAT_BLOCK_MAX = 3
 LIFT_LINE_MAX = 200
+LIFT_CANDIDATES_MAX = 200
 _NUMBER = re.compile(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
 _NOT_A_NUMBER = re.compile(r"\b(?:nan|inf)\b", re.I)
 
@@ -588,7 +590,7 @@ def _compose(header: str, out_block: str, lifted: list[str], dropped: int, err_b
     parts = [header, "", out_block, ""]
     if lifted:
         more = f" ({dropped} earlier one{'s' if dropped != 1 else ''} did not fit here)" if dropped else ""
-        parts += ["Lines with numbers from stdout above, copied here because your view of this answer"
+        parts += ["Lines with numbers from stdout, copied here because your view of this answer"
                   f" cuts its middle (in order{more}):", *lifted, ""]
     return "\n".join(parts + [err_block, "", answers, closing])
 
@@ -615,15 +617,19 @@ def run_answer(header: str, out: str, err: str, answers: str, cap: int | None = 
     tail_n = cap - head_n
     in_head = text[:head_n]
     cands, seen = [], set()
-    for ln in out_block.split("\n")[1:]:
+    # From ALL of stdout, not out_block: out_block keeps only the last OUT_CAP chars, and a report
+    # that prints its counts first and a long list after lost every count (cbp-being 2026-11-21,
+    # seq 16933: 24096 chars, `Archived (stale): 424` in the clipped-off head, 0 lifted, 0 reported
+    # as dropped; the being had journaled invented counts for that script's runs an hour earlier).
+    for ln in out_c.split("\n"):
         t = ln.strip()
         if t and len(t) <= LIFT_LINE_MAX and is_result_line(t) and t not in seen and t not in in_head:
             seen.add(t)
             cands.append(t)
-    keep = list(cands)
+    keep = cands[-LIFT_CANDIDATES_MAX:]  # newest kept anyway; bounds the fit loop on a long log
     while keep:
         text = _compose(header, out_block, keep, len(cands) - len(keep), err_block, answers, closing)
-        start = text.index("\nLines with numbers from stdout above, copied here") + 1
+        start = text.index("\nLines with numbers from stdout, copied here") + 1
         if start >= len(text) - tail_n:
             return text, len(keep), len(cands) - len(keep)
         keep = keep[1:]

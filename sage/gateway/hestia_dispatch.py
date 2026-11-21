@@ -47,7 +47,7 @@ from typing import Any, Callable, Dict, List, Optional
 from sage.gateway.being_gate_client import (BeingIntent, GatewayVerdict, ResultEnvelope, camera_command,
                                             copy_alternative, same_path_in_reach)
 from sage.gateway.hestia_witness import _ENDPOINT, _Mcp, _unwrap, make_hestia_witness_fn
-from sage.gateway.reference_f1a import ReferenceF1aDispatcher
+from sage.gateway.reference_f1a import ReferenceF1aDispatcher, retired_copy_note
 
 # The marker the seat's run-request reader keys on (sage/scripts/seat_run_requests.py).
 _RUN_MARKER = "[request_run]"
@@ -81,6 +81,51 @@ _SEAT_AWAY = ("(From this receipt, not from the seat.) A seat that has not writt
 _SEAT_AWAY_REQUEST = ("(From this receipt, not from the seat.) A quiet seat may be away, not stuck: there is "
                       "nothing for you to restart from this request. Your requests stay here, and it can answer "
                       "them when it is back.")
+
+
+def _file_system_fact(path: str) -> str:
+    """'' when the user the being's runs run as may write `path`, or it cannot be looked at; else what the
+    file system says about writing it. A grant is the gate's reach, not the file's permissions: on sprout-being
+    (11-20..21) scope requests for a root-owned system file, made for writes its mode refuses, lapsed or
+    waited on a ruling that could not make those writes work, and each lapse was asked again. The request is still filed: reading
+    may be what it serves, and a human decides it.
+
+    Checked as this process's euid, which is the user the being's runs run as because the bwrap run keeps
+    the gateway's uid. A sandbox that maps the run to another uid (a userns uid map) makes this text false."""
+    import os, pwd, stat as _stat
+    try:
+        rp = os.path.realpath(os.path.expanduser(path))
+        st = os.stat(rp)
+        if os.access(rp, os.W_OK):
+            return ""
+        ro_mount = bool(os.statvfs(rp).f_flag & os.ST_RDONLY)
+    except OSError:
+        return ""
+
+    def name(uid):
+        try:
+            return pwd.getpwuid(uid).pw_name
+        except KeyError:
+            return f"uid {uid}"
+
+    me, owner = name(os.geteuid()), name(st.st_uid)
+    is_dir = _stat.S_ISDIR(st.st_mode)
+    what = "directory" if is_dir else "file"
+    write = "create or remove entries in it" if is_dir else "write it"
+    head = "(From this receipt, not from whoever decides it.) "
+    if ro_mount:
+        return (head + f"This {what} is on a file system mounted read-only, so nobody can {write} there, "
+                f"whoever owns it. A grant changes what the gate lets you reach, not the mount: granted, "
+                f"a write still fails with 'Read-only file system'.")
+    if st.st_uid == os.geteuid():
+        return (head + f"This {what} belongs to {me}, the user your runs run as, and its mode does not let "
+                f"{me} {write}. Its owner may change its mode, so this is the file's own setting, not "
+                f"another user's file. A grant lets you reach it; it does not change the mode.")
+    return (head + f"This {what} belongs to {owner}, and the file system does not let {me}, the user your "
+            f"runs run as, {write}. A grant changes what the gate lets you reach, not what the file system "
+            f"allows: granted, a write still fails with 'Permission denied'. "
+            + (f"{me} can read it, so a grant would let you read it." if os.access(rp, os.R_OK)
+               else f"{me} cannot read it either."))
 
 
 def _seat_quiet(turns, member: str, seat_conv: str, truncated: bool, now=None):
@@ -3671,6 +3716,9 @@ class HestiaF1aDispatcher:
                                     "base name is only how it appears inside the sandbox")
                     except Exception:  # noqa: BLE001 — a hint must never turn a miss into a crash
                         hint = ""
+                if not hint and i == 0:
+                    gone = retired_copy_note(Path(full), Path(root))
+                    hint = f".{gone}" if gone else ""
                 return ResultEnvelope(ok=False, error=f"run: no such file in your home: {n}{hint}")
             try:
                 fd = os.open(full, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
@@ -4372,6 +4420,9 @@ class HestiaF1aDispatcher:
         if copies:
             result["copy_in_reach"] = [c for c, _ in copies]
             result["meanwhile"] = copy_alternative(path, copies)
+        fs = _file_system_fact(path)
+        if fs:
+            result["file_system"] = fs
         return ResultEnvelope(ok=True, witness_id=out.get("witnessEntryHash"), result=result)
 
     def _do_say(self, intent: BeingIntent) -> ResultEnvelope:
@@ -5644,7 +5695,9 @@ def _run_reach_note(mounts: list, skipped: list) -> str:
                               "can mount. ")
             + "Any other path, your home included, does not exist in there, so a check like "
               "os.path.exists() is False for it whatever is on disk; memory_read answers about "
-              "the disk.")
+              "the disk. Outside /tmp, /work and what is WRITABLE above, nothing in there can be "
+              "written: a write elsewhere (/etc/passwd, /home/...) fails as 'Read-only file system', "
+              "so a run cannot change those files on this machine.")
     if skipped:
         text += " Not mounted: " + "; ".join(f"{p} ({why})" for p, why in skipped) + "."
     return text
