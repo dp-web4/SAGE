@@ -130,12 +130,18 @@ def upstream_posts(repo: Path, fetch: bool = True, now: Optional[float] = None) 
             out["fetched"] = r.returncode == 0
             if r.returncode:
                 out["why"] = "fetch failed: " + r.stderr.decode(errors="replace").strip()[:200]
-        r = _git(repo, "ls-tree", "-z", "--name-only", UPSTREAM, "forum/")
+        # `forum/` with the slash lists the directory's entries, one level, like the disk scan
+        # (`forum/*.md`). Only blobs are posts: a directory named `x.md` is not one.
+        r = _git(repo, "ls-tree", "-z", UPSTREAM, "forum/")
         if r.returncode:
             out["why"] = (out["why"] + "; " if out["why"] else "") + f"no {UPSTREAM}"
             return out
-        missing = [n for n in r.stdout.decode(errors="replace").split("\0")
-                   if n.endswith(".md") and not (repo / n).exists()]
+        blobs = []
+        for entry in r.stdout.decode(errors="replace").split("\0"):
+            meta, _, n = entry.partition("\t")
+            if meta.split()[1:2] == ["blob"]:
+                blobs.append(n)
+        missing = [n for n in blobs if n.endswith(".md") and not (repo / n).exists()]
         if not missing:
             return out
         r = _git(repo, "cat-file", "--batch",
@@ -145,11 +151,12 @@ def upstream_posts(repo: Path, fetch: bool = True, now: Optional[float] = None) 
             nl = buf.index(b"\n", i)
             head = buf[i:nl].split()
             i = nl + 1
-            if len(head) < 3 or head[1] != b"blob":
+            if len(head) < 3:  # "<name> missing": no content follows
                 continue
             size = int(head[2])
-            out["posts"][n.split("/", 1)[1]] = buf[i:i + size].decode("utf-8", errors="replace")
-            i += size + 1
+            if head[1] == b"blob":
+                out["posts"][n.split("/", 1)[1]] = buf[i:i + size].decode("utf-8", errors="replace")
+            i += size + 1  # any object type carries its content; skip it either way
     except (OSError, subprocess.SubprocessError, ValueError) as e:
         out["why"] = (out["why"] + "; " if out["why"] else "") + f"{type(e).__name__}: {e}"[:200]
     return out

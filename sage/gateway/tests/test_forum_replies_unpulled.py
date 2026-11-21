@@ -150,3 +150,30 @@ def test_a_forum_that_is_not_a_git_checkout_runs_no_git(tmp_path, monkeypatch):
     monkeypatch.setattr(fr, "_git", lambda *a, **k: pytest.fail("git ran outside a checkout"))
     got = fr.for_beat(tmp_path / "ai" / "sage" / "home", str(tmp_path / "ai" / "sage"), ME)
     assert got["offered"] == [] and got["upstream"]["why"] == "not a git checkout"
+
+
+def test_upstream_lists_the_forum_directory_one_level_like_the_disk_scan(fleet):
+    """`ls-tree … forum/` (trailing slash) lists forum's entries, not the directory itself (NOVA,
+    #796 review). Replies are top-level posts: the disk scan is `forum/*.md`, and upstream matches it.
+    A post in a subdirectory is offered by neither, and a directory whose name ends in .md is no post."""
+    workspace, seat, peer, home = fleet
+    top, top_text = reply(f"pub-to-cbp-being-top-{today()}.md")
+    (peer / "forum" / "sub").mkdir(parents=True)
+    (peer / "forum" / "sub" / f"pub-to-cbp-being-nested-{today()}.md").write_text(reply("x")[1])
+    (peer / "forum" / f"dir-to-cbp-being-{today()}.md").mkdir()
+    (peer / "forum" / f"dir-to-cbp-being-{today()}.md" / "inner.txt").write_text("not a post\n")
+    commit(peer, [(top, top_text)])
+    got = beat(home, workspace)
+    assert got["offered"] == [top]
+    assert sorted(fr.upstream_posts(seat, fetch=False)["posts"]) == [top]
+
+
+def test_a_failed_fetch_still_offers_what_the_stale_ref_holds_and_says_so(fleet):
+    workspace, seat, peer, home = fleet
+    name, text = reply(f"pub-re-cbp-being-{today()}.md")
+    commit(peer, [(name, text)])
+    git(seat, "fetch", "-q", "origin")
+    git(seat, "remote", "set-url", "origin", str(seat.parent / "gone.git"))
+    got = fr.for_beat(home, str(workspace), ME, now=time.time() + fr.FETCH_EVERY_S + 1)
+    assert got["offered"] == [name], "origin/main from the last good fetch is still read"
+    assert got["upstream"]["fetched"] is False and got["upstream"]["why"].startswith("fetch failed")
