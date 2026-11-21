@@ -126,6 +126,36 @@ def test_a_stream_that_fails_or_is_cut_is_an_error_not_a_half_reply(lines, says)
     assert says in str(e.value)
 
 
+def _think(s):
+    return {"message": {"role": "assistant", "thinking": s}, "done": False}
+
+
+def test_a_run_of_reopened_thought_channels_closes_the_reply_as_a_stop():
+    """gemma4 on mcnugget, 11-20: "I should just stop." then the channel re-opened 2,354 times to
+    the 600s deadline. The run is the turn ending; nothing after it is read."""
+    from sage.irp.plugins.ollama_irp import _read_stream
+    lines = [_think("I have called them.\nI should just stop."), _think("<|channel>"), _think("thought"),
+             _think("<|channel>thought\n"), _think("<|channel>thought")]
+    lines += [_think("<|channel>thought\n")] * 1000  # never reached
+    seen = []
+    raw = _read_stream(iter([json.dumps(c).encode() for c in lines]), seen.append, 60)
+    assert raw["done_reason"] == "stop" and raw["sage_cut"] == "thought_reopen_run"
+    assert raw["message"]["thinking"] == "I have called them.\nI should just stop.\n"
+    assert len(seen) == 5, "the reader stops at the third marker"
+
+
+def test_one_reopened_marker_is_stripped_and_the_tool_call_still_lands():
+    """11 of the 15 calls with a marker carry exactly one; the model goes on and makes its tool call."""
+    from sage.irp.plugins.ollama_irp import _read_stream
+    call = {"function": {"name": "search", "arguments": {"q": "peer_ask"}}}
+    lines = [_think("I'll search for it.<|channel>thought"), _think("\nThe user wants the origin."),
+             {"message": {"role": "assistant", "tool_calls": [call]}, "done": False},
+             {"message": {"role": "assistant", "content": ""}, "done": True, "done_reason": "stop"}]
+    raw = _read_stream(iter([json.dumps(c).encode() for c in lines]), lambda m: None, 60)
+    assert "sage_cut" not in raw and raw["message"]["tool_calls"] == [call]
+    assert raw["message"]["thinking"] == "I'll search for it.\nThe user wants the origin."
+
+
 class _Ollama(BaseHTTPRequestHandler):
     """/api/chat that answers streamed or not, as the request asks, with the same reply."""
     bodies = []
