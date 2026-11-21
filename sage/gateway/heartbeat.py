@@ -376,7 +376,7 @@ HEAD = "You are {name}, a SAGE being on the {machine} machine, member id {member
 # a person hands over. #418 and the standing-guidance posture framing met single cases of the same reading.
 # The role cannot be renamed from here, so every beat's system prompt says who writes those turns.
 STEPS = ("Nobody is typing to you in this beat: the turns that come as messages are your beat's own steps, set "
-         "by the program that runs it, not a person asking. A person's words reach you quoted and named.")
+         "by the program that runs it, not a person asking. Others' words reach you quoted and named.")
 
 def _museum_block(line: str) -> str:
     """The museum paragraph, or nothing at all where the machine keeps no museum."""
