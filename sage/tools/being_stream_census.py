@@ -133,10 +133,16 @@ def render(rows: Dict[str, dict]) -> str:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("paths", nargs="+", help="instance dir(s) or stream file(s)")
-    ap.add_argument("--since", help="ISO8601; only events at or after it")
+    ap.add_argument("--since", help="ISO8601; only events at or after it. A time without an offset "
+                    "is read as UTC (seats run in different zones; sprout on #803)")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
-    since = dt.datetime.fromisoformat(a.since).timestamp() if a.since else 0.0
+    since = 0.0
+    if a.since:
+        t = dt.datetime.fromisoformat(a.since)
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=dt.timezone.utc)
+        since = t.timestamp()
     files = stream_files(a.paths)
     if not files:
         print("no output stream found", file=sys.stderr)
