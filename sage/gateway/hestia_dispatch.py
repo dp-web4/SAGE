@@ -5734,8 +5734,11 @@ def _run_note(rc: int, stderr: str, files: list, stdout: str = "", seatbelt: boo
 #: success and not-found paths). In that beat its todo recorded the account as existing and the scope as granted;
 #: at 21:24Z a note listed checks no run had made, and at 22:44Z that answer was settled. The note had said only
 #: what the sandbox is. This says what the run showed, and only that: no cause is guessed.
+#: Scoped to what was printed (legion on #809): changed_in_your_grants, when the receipt carries it, IS evidence of
+#: what the run wrote, and a note that called the whole run no evidence would contradict it.
 _SILENT_NOTE = ("It printed nothing, on stdout or on stderr. Exit 0 says only that it did not end with an error: "
-                "with nothing printed, this run is no evidence of what it did or found.")
+                "what it printed is no evidence of what it did or found (changed_in_your_grants, when present, "
+                "lists what it wrote).")
 
 
 #: A run that ended asking for its arguments: a usage line, argparse's complaint, or an IndexError
