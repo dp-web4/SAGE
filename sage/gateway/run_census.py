@@ -112,6 +112,12 @@ def site_dirs() -> List[str]:
               f"/usr/lib/{ver}/dist-packages"):
         if p not in out:
             out.append(p)
+    # the user site is in the box too now (SAGE #701), so a `pip install --user` re-measures
+    from sage.gateway import being_gate_client as bgc
+    m = bgc.box_python_minor(_interp())
+    us = bgc.host_user_site(m) if m is not None else ""
+    if us and us not in out:
+        out.append(us)
     return [p for p in out if os.path.isdir(p)]
 
 
@@ -138,12 +144,16 @@ def box_command(stage: str) -> List[str]:
         f"{bgc.RUN_ETC_BINDS}"
         f" --ro-bind {shlex.quote(interp)} {shlex.quote(interp)}"
         " --proc /proc --dev /dev --tmpfs /tmp"
+        # the host user site, as run binds it (SAGE #701)
+        f"{bgc.user_site_bind(interp)}"
         f" --ro-bind {shlex.quote(stage)} /work"
         " --unshare-pid --unshare-net --unshare-ipc --unshare-uts"
         " --new-session --die-with-parent"
         " --setenv HOME /tmp --setenv PYTHONUTF8 1 --setenv PYTHONDONTWRITEBYTECODE 1"
         f" --setenv PATH {shlex.quote(interp)}/bin:/usr/bin:/bin"
-        f" --chdir /work {shlex.quote(interp)}/bin/python3 -I /work/probe.py")
+        # No -I: it disables the user site, and run's own interpreter line has no -I, so a probe
+        # under -I measured a box `run` is not (SAGE #701). /work holds only probe.py.
+        f" --chdir /work {shlex.quote(interp)}/bin/python3 /work/probe.py")
 
 
 def measure(modules=DEFAULT_MODULES, tools=TOOLS, runner=subprocess.run) -> Dict:

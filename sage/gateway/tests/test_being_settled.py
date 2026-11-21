@@ -83,13 +83,45 @@ def test_a_refused_settle_says_why_and_changes_nothing(tmp_path, args, says):
     assert not (tmp_path / st.SETTLED_FILE).exists()
 
 
+#: Thirty questions on distinct subjects, which read close to none of the others (the ≈ the beat marks).
+DISTINCT = [f"Where does the {w} belong?" for w in (
+    "anchor", "bucket", "candle", "dagger", "easel", "funnel", "goblet", "hammock", "igloo", "jigsaw", "kettledrum",
+    "ladder", "mitten", "napkin", "oar", "pulley", "quilt", "rudder", "saddle", "trowel", "umbrella", "violin",
+    "wagon", "xylophone", "yoke", "zither", "abacus", "bellows", "compass", "doorknob")]
+
+
 def test_a_full_list_refuses_a_new_question_but_still_changes_an_old_one(tmp_path):
-    for i in range(st.MAX_ENTRIES):
-        assert _s(tmp_path, question=f"question {i}", answer="a")[0]
+    for q in DISTINCT[:st.MAX_ENTRIES]:
+        assert _s(tmp_path, question=q, answer="a")[0]
     ok, msg, _ = _s(tmp_path, question="one more", answer="a")
     assert not ok and "the most this list holds" in msg and "reopen" in msg
-    assert "(\u00abquestion 0\u00bb, " in msg, msg  # the longest held are shown copyable (cbp on #676)
-    assert _s(tmp_path, question="question 3", answer="b")[0]
+    # NOT THE LONGEST HELD (sprout-being 11-18..19 reopened the three it named, in order, to make room): with no
+    # question asked twice, no entry is named, and the way to see them all is
+    assert "\u00ab" not in msg and "s1 " not in msg and "longest" not in msg, msg
+    assert "Settle with no arguments to see every entry" in msg
+    assert _s(tmp_path, question=DISTINCT[3], answer="b")[0]
+
+
+def test_a_full_list_names_the_questions_settled_more_than_once_not_the_oldest(tmp_path):
+    for q in DISTINCT[:st.MAX_ENTRIES - 3]:
+        assert _s(tmp_path, question=q, answer="a")[0]
+    for q in ("Is the test widget connected to this machine?", "Is the test widget connected here?",
+              "Is the test widget connected and ready?"):
+        assert _s(tmp_path, question=q, answer="yes")[0]
+    ok, msg, _ = _s(tmp_path, question="What colour is the sky at dusk?", answer="b")
+    assert not ok and "settled more than once" in msg, msg
+    first = st.read(tmp_path)[0][-3]["id"]
+    assert f"{first} \u00abIs the test widget connected to this machine?\u00bb \u2248 " in msg, msg
+    assert "s1 " not in msg and "anchor" not in msg, "the oldest is not named for its age"
+    assert len(st.read(tmp_path)[0]) == st.MAX_ENTRIES
+
+
+def test_close_groups_join_through_a_shared_neighbour_and_stay_in_list_order():
+    es = [{"id": "s1", "question": "x"}, {"id": "s2", "question": "y"}, {"id": "s3", "question": "z"},
+          {"id": "s4", "question": "w"}]
+    import unittest.mock as m
+    with m.patch.object(st, "_neighbours", return_value={"s1": ["s3"], "s3": ["s1", "s4"], "s4": ["s3"]}):
+        assert [[e["id"] for e in g] for g in st._close_groups(es)] == [["s1", "s3", "s4"]]
 
 
 def test_a_full_list_names_the_entry_a_refused_question_reads_close_to(tmp_path):
@@ -292,7 +324,7 @@ def test_a_full_list_names_what_to_reopen_and_never_advises_folding(tmp_path):
         assert _s(tmp_path, question=f"question {i} about lamps", answer="a")[0]
     ok, msg, _ = _s(tmp_path, question="What colour is the sky at dusk?", answer="b")
     assert not ok and "fold" not in msg and "settling that id with a new answer" not in msg
-    assert "reopen" in msg and "s1 (" in msg and "different question" in msg, msg
+    assert "reopen" in msg and "different question" in msg, msg
 
 
 def test_a_hyphenated_name_and_its_spaced_spelling_read_close_and_the_receipt_quotes_the_earlier_answer(tmp_path):

@@ -9,8 +9,15 @@ input line that speaks as dp through the same loopback route the dp console uses
 `ssh -t <machine> python3 -m sage.tools.sage_tui`): it reads 127.0.0.1, so the daemon's loopback-only rules hold.
 
 Keys: Up/Down or j/k pick a conversation; mouse wheel or PgUp/PgDn scroll its text, End (or G) back to the newest;
-i types a message (Enter sends, Esc cancels); r refreshes; q quits. With the mouse captured, select text with
-Shift+drag (most terminals).
+i types a message (Enter sends, Esc cancels); o (or Tab) switches to the being's output stream and back; r refreshes;
+q quits. With the mouse captured, select text with Shift+drag (most terminals).
+
+THE OUTPUT STREAM PAGE (dp, 2026-11-20: "having the agent's stream in all major cli harnesses is a key feature and
+liveness indicator, which sage has left out so far"). Each beat's model calls stream into <instance>/
+output_stream.jsonl (sage.gateway.being_stream); this page shows it as it is written: per beat, each call's turn,
+its thinking, its words, the tools it called and how the call ended, and at the top whether output is arriving now.
+It reads the file directly (the instance path comes from the daemon's /conversations), so it is as local as the
+rest of this app.
 """
 from __future__ import annotations
 
@@ -149,6 +156,116 @@ def turn_lines(conv: dict, width: int) -> list[str]:
     return out
 
 
+STREAM_FILE = "output_stream.jsonl"
+STREAM_TAIL_BYTES = 256 * 1024
+LIVE_S = 5.0               # output this recent means the being is producing now
+
+
+def read_stream(path: str, max_bytes: int = STREAM_TAIL_BYTES) -> list:
+    """The last events of the output stream, oldest first. Never raises; a missing file is no events."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(0, size - max_bytes))
+            data = f.read()
+    except OSError:
+        return []
+    lines = data.split(b"\n")
+    if size > max_bytes and not _starts_a_line(path, size - max_bytes):
+        lines = lines[1:]              # cut by the window
+    out = []
+    for l in lines:
+        try:
+            out.append(json.loads(l))
+        except ValueError:
+            continue
+    return out
+
+
+def _starts_a_line(path: str, at: int) -> bool:
+    """Whether byte `at` begins a line (the byte before it is a newline), so a window starting there is not cut."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(at - 1)
+            return f.read(1) == b"\n"
+    except OSError:
+        return False
+
+
+def _hms(t) -> str:
+    try:
+        return time.strftime("%H:%M:%S", time.gmtime(float(t)))
+    except (TypeError, ValueError):
+        return "??:??:??"
+
+
+def stream_status(events: list, now: float) -> str:
+    """One line: is the being producing output right now, and what it is doing."""
+    if not events:
+        return "○ no output recorded yet (the stream starts with the next beat)"
+    last = events[-1]
+    age = max(0.0, now - float(last.get("t") or 0))
+    turn = next((e.get("turn") for e in reversed(events) if e.get("k") == "call"), "") or "?"
+    k = last.get("k")
+    if k == "end":
+        return f"○ resting: last beat ended {_ago(age)} ago"
+    if k == "beat":
+        return f"◐ beat starting ({_ago(age)} ago), no model call yet"
+    if k in ("think", "text", "tool", "call") and age <= LIVE_S:
+        doing = {"think": "thinking", "text": "writing", "tool": "calling a tool", "call": "waiting for the model"}[k]
+        return f"● live: {doing} ({turn})"
+    if k in ("think", "text", "tool", "call"):
+        return f"◐ in a beat, no output for {_ago(age)} ({turn})"
+    return f"◐ in a beat ({turn}), last call ended {_ago(age)} ago"
+
+
+def _ago(s: float) -> str:
+    s = int(s)
+    return f"{s}s" if s < 120 else f"{s // 60}m" if s < 7200 else f"{s // 3600}h"
+
+
+def stream_lines(events: list, width: int) -> list:
+    """The stream as lines: a rule per beat, a heading per call, its thinking (marked │), its words, its tool
+    calls (⚙) and how it ended. Pieces of one kind that arrived in a row are one paragraph."""
+    out = []
+    w = max(20, width)
+    blocks = []                                   # (kind, text) with consecutive think/text joined
+    for e in events:
+        k = e.get("k")
+        if k in ("think", "text"):
+            piece = str(e.get("s") or "")
+            if blocks and blocks[-1][0] == k:
+                blocks[-1] = (k, blocks[-1][1] + piece)
+            else:
+                blocks.append((k, piece))
+        else:
+            blocks.append((k, e))
+    for k, e in blocks:
+        if k == "beat":
+            head = f"── beat {str(e.get('beat', ''))[-12:]}  {_hms(e.get('t'))}Z  {e.get('model') or ''} "
+            out.append((head + "─" * max(0, w - len(head)))[:w])
+        elif k == "call":
+            out.append(f"▸ {e.get('turn') or '?'} · {e.get('phase') or ''}  {_hms(e.get('t'))}Z"[:w])
+        elif k in ("think", "text"):
+            text = e
+            mark = "  │ " if k == "think" else "    "
+            for para in text.split("\n"):
+                for piece in (textwrap.wrap(para, max(10, w - len(mark))) or ([""] if para == "" else [])):
+                    out.append((mark + piece)[:w])
+        elif k == "tool":
+            out.append(f"  ⚙ {e.get('name')}({' '.join(str(e.get('args') or '').split())})"[:w])
+        elif k == "done":
+            n = e.get("eval_count")
+            out.append(f"  ✓ {e.get('reason') or 'done'} · {n if n is not None else '?'} tokens · "
+                       f"{e.get('s_elapsed', '?')}s"[:w])
+        elif k == "error":
+            out.append(f"  ✗ {' '.join(str(e.get('s') or '').split())}"[:w])
+        elif k == "end":
+            out.append(f"── beat ended {_hms(e.get('t'))}Z"[:w])
+    return out
+
+
 def writable(meta: dict) -> bool:
     return "dp" in ((meta or {}).get("writable_by") or [])
 
@@ -167,6 +284,14 @@ class TuiState:
         self.draft = ""
         self.flash = ""
         self.scroll = 0             # lines scrolled UP from the newest; 0 = following the bottom
+        self.page = "conversations"  # or "stream": the being's output as it is produced
+
+    def toggle_page(self) -> None:
+        """Conversations <-> output stream. Not while composing: the draft's destination stays on screen."""
+        if self.typing:
+            return
+        self.page = "stream" if self.page == "conversations" else "conversations"
+        self.scroll = 0
 
     def scroll_by(self, delta: int, total: int, room: int) -> None:
         """Scroll the conversation text (dp 2026-10-08: the wheel switched conversations instead). Positive =
@@ -248,8 +373,13 @@ def run(stdscr) -> None:  # pragma: no cover - exercised by hand; TuiState and t
     nlines = 0
     last = 0.0
     health = status = listing = conv = body = {}
+    events = []
     err = None
     while True:
+        # the stream page reads its file four times a second, so output shows as it arrives
+        stdscr.timeout(250 if st.page == "stream" else int(REFRESH_S * 1000))
+        inst = os.environ.get("SAGE_TUI_INSTANCE") or (listing or {}).get("instance")
+        events = read_stream(os.path.join(inst, STREAM_FILE)) if inst else []
         if time.time() - last >= REFRESH_S:
             health, _ = fetch("/health")
             status, _ = fetch("/status")
@@ -273,9 +403,54 @@ def run(stdscr) -> None:  # pragma: no cover - exercised by hand; TuiState and t
                 return
             continue
         top = header_lines(health, status, w - 1) + body_lines(body, health, w - 1)
+        live = stream_status(events, time.time())
+        top.append(("output " + live)[:w - 1])
         for i, l in enumerate(top):
-            stdscr.addnstr(i, 0, l, w - 1, curses.A_BOLD if i == 0 else 0)
+            stdscr.addnstr(i, 0, l, w - 1, curses.A_BOLD if i in (0, len(top) - 1) and (i == 0 or "●" in l) else 0)
         y0 = len(top) + 1
+        if st.page == "stream":
+            room = h - y0 - 2
+            lines = stream_lines(events, w - 1)
+            if nlines and len(lines) > nlines:
+                st.grew(len(lines) - nlines)
+            nlines = len(lines)
+            st.scroll_by(0, len(lines), room)
+            if not lines:
+                stdscr.addnstr(y0, 0, ("no output stream at " + os.path.join(inst, STREAM_FILE) if inst else
+                                       "no instance path yet (the daemon's /conversations gives it)")[:w - 1], w - 1)
+            for i, l in enumerate(st.window(lines, room)):
+                attr = curses.A_DIM if l.startswith("  │") else curses.A_BOLD if l.startswith(("──", "▸")) else 0
+                stdscr.addnstr(y0 + i, 0, l, w - 1, attr)
+            up = f"[↑ {st.scroll} lines up — End: newest]  " if st.scroll else ""
+            stdscr.addnstr(h - 1, 0, (up + "OUTPUT STREAM  o/Tab: conversations  wheel/PgUp/PgDn: scroll  q: quit")
+                           [:w - 1], w - 1, curses.A_REVERSE)
+            stdscr.refresh()
+            k = stdscr.getch()
+            if k == -1:
+                continue
+            page = max(1, room - 1)
+            if k == curses.KEY_MOUSE:
+                try:
+                    _, _, _, _, bstate = curses.getmouse()
+                except curses.error:
+                    continue
+                if bstate & WHEEL_UP:
+                    st.scroll_by(+3, len(lines), room)
+                elif bstate & WHEEL_DOWN:
+                    st.scroll_by(-3, len(lines), room)
+            elif k == curses.KEY_PPAGE:
+                st.scroll_by(+page, len(lines), room)
+            elif k == curses.KEY_NPAGE:
+                st.scroll_by(-page, len(lines), room)
+            elif k == curses.KEY_END or k == ord("G"):
+                st.scroll = 0
+            elif k in (ord("o"), ord("O"), 9):
+                st.toggle_page(); nlines = 0
+            elif k in (ord("r"), ord("R")):
+                last = 0.0
+            elif k in (ord("q"), ord("Q")):
+                return
+            continue
         left = 22
         if err and not convs:
             stdscr.addnstr(y0, 0, f"conversations not readable: {listing.get('error') or err}", w - 1)
@@ -295,8 +470,10 @@ def run(stdscr) -> None:  # pragma: no cover - exercised by hand; TuiState and t
         meta = (conv or {}).get("meta") or {}
         up = f"[↑ {st.scroll} lines up — End: newest]  " if st.scroll else ""
         foot = (f"to {st.target}> {st.draft}" if st.typing else
-                st.flash or (up + ("i: write  ↑↓: conversation  wheel/PgUp/PgDn: scroll  q: quit" if writable(meta)
-                                   else "(read-only here)  ↑↓: conversation  wheel/PgUp/PgDn: scroll  q: quit")))
+                st.flash or (up + ("i: write  ↑↓: conversation  o: output stream  wheel/PgUp/PgDn: scroll  q: quit"
+                                   if writable(meta) else
+                                   "(read-only here)  ↑↓: conversation  o: output stream  wheel/PgUp/PgDn: scroll  "
+                                   "q: quit")))
         stdscr.addnstr(h - 1, 0, foot[-(w - 1):], w - 1, curses.A_REVERSE)
         stdscr.refresh()
         k = stdscr.getch()
@@ -341,6 +518,8 @@ def run(stdscr) -> None:  # pragma: no cover - exercised by hand; TuiState and t
             last = 0.0
         elif k in (ord("i"), ord("I")):
             st.begin(meta)
+        elif k in (ord("o"), ord("O"), 9):
+            st.toggle_page(); nlines = 0
 
 
 def main() -> None:
