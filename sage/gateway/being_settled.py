@@ -598,7 +598,6 @@ def _close_groups(entries: List[dict]) -> List[List[dict]]:
     """The entries whose questions read close to each other (the beat's ≈), joined into groups, each in list
     order and the groups by their first entry; entries close to no other are in none."""
     near = _neighbours(entries)
-    by_id = {e["id"]: e for e in entries}
     seen, groups = set(), []
     for e in entries:
         if e["id"] in seen or e["id"] not in near:
@@ -610,7 +609,7 @@ def _close_groups(entries: List[dict]) -> List[List[dict]]:
                 group.add(i)
                 todo.extend(near.get(i, []))
         seen |= group
-        groups.append([x for x in entries if x["id"] in group and x["id"] in by_id])
+        groups.append([x for x in entries if x["id"] in group])
     return groups
 
 

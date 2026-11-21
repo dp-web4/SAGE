@@ -1308,23 +1308,98 @@ def _box_sees_debian_matplotlib():
             and os.path.isfile("/etc/matplotlibrc"))
 
 
+def _user_site_matplotlib():
+    """True where the host user site that the box binds (SAGE #741) holds a matplotlib."""
+    from sage.gateway.being_gate_client import box_python_minor, host_user_site
+    minor = box_python_minor(os.path.dirname(os.path.dirname(sys.executable)))
+    site_dir = host_user_site(minor) if minor is not None else ""
+    return bool(site_dir) and os.path.isfile(os.path.join(site_dir, "matplotlib", "__init__.py"))
+
+
+_PLOT = ("import os, matplotlib\n"
+         "print('mpl', matplotlib.__version__, os.path.realpath(matplotlib.__file__))\n"
+         "matplotlib.use('Agg')\n"
+         "import matplotlib.pyplot as plt\n"
+         "fig, ax = plt.subplots(); ax.plot([0, 1], [1, 0]); fig.savefig('out.png')\n"
+         "print('saved', os.path.getsize('out.png') > 0)\n")
+
+
+def _plot_in_box(tmp_path):
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "plot.py").write_text(_PLOT)
+    r = d._do_run(BeingIntent("run", {"path": "scratch/plot.py"}))
+    assert r.ok, r.error
+    return r.result
+
+
+def _mpl_origin(result):
+    """The realpath of the matplotlib the box imported, from the script's own print."""
+    line = next((ln for ln in result["stdout"].splitlines() if ln.startswith("mpl ")), "")
+    return line.split(" ", 2)[2] if line.count(" ") >= 2 else ""
+
+
 @needs_bwrap
 @pytest.mark.skipif(not _box_sees_debian_matplotlib(),
                     reason="no Debian matplotlib on a path the run box mounts")
-def test_a_library_the_seat_python_imports_also_plots_inside_run(tmp_path):
+def test_a_library_the_seat_python_imports_also_plots_inside_run(tmp_path, monkeypatch):
     """cbp-being, 2026-11-06..11-20: every `import matplotlib.pyplot` in `run` raised "Could not
     find matplotlibrc file; your Matplotlib install is broken", because Debian's matplotlib reads
     its default rc from /etc and the box binds /usr only. The being hunted the file for 13 days.
     The assertion is on what the script printed and wrote, so a box that drops RUN_ETC_BINDS (or
-    a seat whose matplotlib needs another config file) turns this red."""
-    d, home = _run_dispatcher(tmp_path)
-    (home / "scratch" / "plot.py").write_text(
-        "import os, matplotlib\n"
-        "matplotlib.use('Agg')\n"
-        "import matplotlib.pyplot as plt\n"
-        "fig, ax = plt.subplots(); ax.plot([0, 1], [1, 0]); fig.savefig('out.png')\n"
-        "print('saved', os.path.getsize('out.png') > 0)\n")
-    r = d._do_run(BeingIntent("run", {"path": "scratch/plot.py"}))
-    assert r.ok, r.error
-    assert "Could not find matplotlibrc" not in r.result["stderr"], r.result["stderr"]
-    assert r.result["exit"] == 0 and "saved True" in r.result["stdout"], r.result
+    a seat whose matplotlib needs another config file) turns this red.
+
+    The user site is switched off here (SAGE_RUN_USER_SITE=0). With #741's bind, a seat whose user
+    site also holds a pip matplotlib (cbp: 3.10.8) imports that copy first, and it carries its own
+    rc file, so this test would pass without RUN_ETC_BINDS. The import path is asserted so that
+    cannot happen silently."""
+    monkeypatch.setenv("SAGE_RUN_USER_SITE", "0")
+    res = _plot_in_box(tmp_path)
+    assert "Could not find matplotlibrc" not in res["stderr"], res["stderr"]
+    assert res["exit"] == 0 and "saved True" in res["stdout"], res
+    assert _mpl_origin(res).startswith("/usr/"), res["stdout"]
+
+
+@needs_bwrap
+@pytest.mark.skipif(not _box_sees_debian_matplotlib(),
+                    reason="no Debian matplotlib on a path the run box mounts")
+def test_debian_matplotlib_without_the_etc_bind_fails_as_the_being_saw_it(tmp_path, monkeypatch):
+    """The control for the test above: same box, same Debian copy, RUN_ETC_BINDS removed. It must
+    fail with the being's error, or the test above proves nothing about the bind."""
+    import sage.gateway.being_gate_client as bgc
+    monkeypatch.setenv("SAGE_RUN_USER_SITE", "0")
+    monkeypatch.setattr(bgc, "RUN_ETC_BINDS", "")
+    res = _plot_in_box(tmp_path)
+    assert res["exit"] != 0 and "Could not find matplotlibrc" in res["stderr"], res
+
+
+@needs_bwrap
+@pytest.mark.skipif(not _user_site_matplotlib(), reason="no matplotlib in the host user site")
+def test_a_user_site_matplotlib_plots_in_the_box_without_the_etc_bind(tmp_path, monkeypatch):
+    """SAGE #741 x #795: the user-site copy is a pip wheel with mpl-data inside it, so it plots
+    with RUN_ETC_BINDS removed. A Debian copy may still sit in /usr (the box cannot hide it); the
+    assertion is that the import came from the bound user site, not that /usr has none."""
+    import sage.gateway.being_gate_client as bgc
+    monkeypatch.delenv("SAGE_RUN_USER_SITE", raising=False)
+    monkeypatch.setattr(bgc, "RUN_ETC_BINDS", "")
+    res = _plot_in_box(tmp_path)
+    assert res["exit"] == 0 and "saved True" in res["stdout"], res
+    assert _mpl_origin(res).startswith("/tmp/.local/"), res["stdout"]
+
+
+@needs_bwrap
+@pytest.mark.skipif(not (_user_site_matplotlib() and _box_sees_debian_matplotlib()),
+                    reason="needs matplotlib in both the user site and Debian's tree")
+def test_with_both_copies_the_box_imports_the_user_site_one_as_the_host_does(tmp_path, monkeypatch):
+    """Both binds on (the default). The box must pick the copy the seat's own python3 picks (user
+    site before dist-packages), so `run` and `request_run` import one matplotlib."""
+    monkeypatch.delenv("SAGE_RUN_USER_SITE", raising=False)
+    res = _plot_in_box(tmp_path)
+    assert res["exit"] == 0 and "saved True" in res["stdout"], res
+    origin = _mpl_origin(res)
+    assert origin.startswith("/tmp/.local/"), res["stdout"]
+    rel = origin.split("site-packages", 1)[1]
+    import subprocess
+    host = subprocess.run([sys.executable, "-c", "import os, matplotlib as m; "
+                           "print(os.path.realpath(m.__file__))"],
+                          capture_output=True, text=True, timeout=60).stdout.strip()
+    assert host.endswith(rel) and "site-packages" in host and "/dist-packages/" not in host, (host, origin)

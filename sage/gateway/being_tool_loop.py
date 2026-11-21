@@ -1592,6 +1592,15 @@ def _sent_budget(llm) -> Optional[int]:
     return int(v) if v is not None else None
 
 
+def _takes_on_chunk(llm) -> bool:
+    """Whether this adapter's get_chat_response streams (OllamaIRP does; a test fake or another backend may not)."""
+    import inspect
+    try:
+        return "on_chunk" in inspect.signature(llm.get_chat_response).parameters
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
 def generate_with_evidence(llm, messages, *, phase: str, **kwargs):
     """Return (response, attempt metadata) for ONE provider call, without changing it.
 
@@ -1603,7 +1612,16 @@ def generate_with_evidence(llm, messages, *, phase: str, **kwargs):
     attribution still requires the enclosing generate's placeholders/step record.
     """
     budget = _sent_budget(llm)
-    response = llm.get_chat_response(messages, **kwargs)
+    # THE LIVE VIEW (being_stream): during a beat, the call streams into the beat's output file. Only an
+    # adapter that takes on_chunk is asked to; the response is the same either way.
+    from sage.gateway import being_stream
+    sink = being_stream.current()
+    if sink is not None and "on_chunk" not in kwargs and _takes_on_chunk(llm):
+        sink.begin_call(phase)
+        response = llm.get_chat_response(messages, on_chunk=sink.chunk, **kwargs)
+        sink.end_call((response or {}).get("raw"), str((response or {}).get("content") or ""))
+    else:
+        response = llm.get_chat_response(messages, **kwargs)
     raw = (response or {}).get("raw") or {}
     attempt = {
         "phase": phase, "num_predict": budget,

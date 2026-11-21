@@ -5220,6 +5220,11 @@ def _phase(state: str, phase: str, beat_id: str) -> None:
     """Report the phase the beat is entering. Never raises (sage.gateway.activity)."""
     from sage.gateway import activity as _activity
     _activity.report(state, f"heartbeat:{phase}", beat_id=beat_id, ttl_secs=_activity.BEAT_TTL_S)
+    try:
+        from sage.gateway import being_stream
+        being_stream.set_turn(phase)          # the live view names the turn each call belongs to
+    except Exception:
+        pass
 
 
 def main(argv=None) -> int:
@@ -5326,6 +5331,13 @@ def main(argv=None) -> int:
     # being's own body block (SAGE #291).
     _BEAT_ID["id"] = host_session_id
     _BEAT_ID["continuing"] = False
+    # THE LIVE VIEW OF THIS BEAT'S OUTPUT (being_stream): every model call below streams into it.
+    from sage.gateway import being_stream
+    being_stream.start(instance, host_session_id, member=args.member, model=args.model or "")
+    # stop() is idempotent: the normal path calls it after the model calls; this covers any exception that leaves
+    # main() first, so the live view never shows a dead beat as still running (legion on #799)
+    import atexit
+    atexit.register(being_stream.stop)
     _phase("wake", "start", host_session_id)
     # WHAT WOKE THIS BEAT (SAGE #295): claim every pending event now, before anything is composed,
     # so an event arriving from here on is pending for the NEXT beat rather than lost in this one.
@@ -6158,8 +6170,12 @@ def main(argv=None) -> int:
 
     except BeatKilled as _k:
         killed = str(_k)
-        print(f"[heartbeat] KILLED mid-beat: {killed} — writing the record with what completed", file=sys.stderr)
-    # the phases are over; a SIGTERM from here would escape main() and lose the record (#213)
+        print(f"[heartbeat] KILLED mid-beat: {killed} — writing the record with what completed",
+              file=sys.stderr)
+    being_stream.stop()                       # the model calls are over; the live view says the beat ended
+    # THE PHASES ARE OVER; WHAT REMAINS IS WRITING THEM DOWN. A SIGTERM from here on would
+    # raise BeatKilled outside the try above and lose the record it exists to keep. Ignore it:
+    # the record takes seconds, and systemd's SIGKILL at TimeoutStopSec is still the backstop.
     _term_before_record = signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
     # WHAT THE FIT CUT FROM THIS BEAT'S SEED (SAGE #582): fit_interventions already leads with the
