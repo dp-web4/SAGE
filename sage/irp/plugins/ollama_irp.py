@@ -68,6 +68,7 @@ def _read_stream(resp, on_chunk, timeout_s) -> Dict[str, Any]:
     deadline = _time.time() + float(timeout_s or 0) if timeout_s else None
     content, thinking, tool_calls = [], [], []
     role, final = 'assistant', {}
+    think_tail = ''  # last 400 chars of thinking, kept rolling so the run check is O(chunk), not O(reply)
     for line in resp:
         if deadline is not None and _time.time() > deadline:
             raise TimeoutError(f'streamed reply ran past {timeout_s}s')
@@ -89,9 +90,10 @@ def _read_stream(resp, on_chunk, timeout_s) -> Dict[str, Any]:
         if chunk.get('done'):
             final = chunk
             break
+        if msg.get('thinking'):
+            think_tail = (think_tail + msg['thinking'])[-400:]
         if msg.get('thinking') and not tool_calls and not any(content):
-            tail = ''.join(thinking)[-400:]
-            if _THOUGHT_REOPEN_RUN.search(tail):
+            if _THOUGHT_REOPEN_RUN.search(think_tail):
                 # closing the response ends the generation server-side
                 final = {'done': True, 'done_reason': 'stop', 'sage_cut': 'thought_reopen_run'}
                 _log.info('streamed reply: thought channel re-opened %d times in a row; closed as a stop',
