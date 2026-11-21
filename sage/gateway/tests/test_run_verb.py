@@ -707,6 +707,19 @@ def test_a_run_note_states_only_what_was_observed():
     assert "traceback" in tb and "names the line" in tb
 
 
+def test_an_exit_0_run_that_printed_nothing_is_told_that_is_no_evidence():
+    """sprout-being, 2026-11-21 19:34Z: a script that exits 0 and prints nothing was read as having done its job.
+    The note says what the run showed, and no cause; a run that printed anything, or failed, gets no such line."""
+    from sage.gateway.hestia_dispatch import _run_note
+    silent = _run_note(0, "", ["make.py"], "")
+    assert "printed nothing" in silent and "no evidence of what it did" in silent, silent
+    assert not any(g in silent for g in ("because", "return", "None")), silent   # no cause guessed
+    assert "printed nothing" in _run_note(0, "  \n", ["make.py"], "\n")           # whitespace is nothing
+    for said in (_run_note(0, "", ["make.py"], "done"), _run_note(0, "warn", ["make.py"], ""),
+                 _run_note(1, "", ["make.py"], "")):
+        assert "printed nothing" not in said, said
+
+
 def test_a_run_that_names_a_hardware_device_is_told_the_sandbox_has_none():
     """sprout-being, 2026-10-21: 24 runs of a v4l2 probe printed "Cannot open device /dev/video0" on
     stdout and exited 1, and it read the failure as a permission it lacked. The note now says the
