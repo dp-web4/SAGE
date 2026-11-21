@@ -166,6 +166,20 @@ def test_mute_run_counts_back_to_the_last_beat_that_reached_the_model(tmp_path):
     assert bh.mute_run(tmp_path) == {"n": 30, "first": "m0", "last": "m29", "error": TIMEOUT, "ongoing": True}
 
 
+def test_dead_seconds_counts_only_mute_beats_since_the_turn(tmp_path):
+    w = lambda ts: beat(ts=ts, explore=phase("", [act("memory_write")]), elapsed_s=100.0)  # noqa: E731
+    m = lambda ts, s: beat(ts=ts, explore=phase(TIMEOUT), elapsed_s=s)  # noqa: E731
+    _write(tmp_path, [m("2026-11-01T00:00:00Z", 4000.0), w("2026-11-02T00:00:00Z"),
+                      m("2026-11-03T00:00:00Z", 4202.0), m("2026-11-04T00:00:00Z", 4202.0), w("2026-11-05T00:00:00Z")])
+    assert bh.dead_seconds_since(tmp_path, "2026-11-02T12:00:00Z") == 8404.0
+    assert bh.dead_seconds_since(tmp_path, "2026-11-05T00:00:00Z") == 0.0
+    assert bh.dead_seconds_since(tmp_path, "2026-10-01T00:00:00Z") == 12404.0
+
+
+def test_dead_seconds_without_a_record_is_zero(tmp_path):
+    assert bh.dead_seconds_since(tmp_path, "2026-11-01T00:00:00Z") == 0.0
+
+
 def test_the_being_is_told_its_mute_beats_never_happened(tmp_path):
     w = beat(ts="2026-11-02T10:00:00Z", explore=phase("", [act("game")]))
     mute = [beat(ts=f"2026-11-0{d}T00:00:00Z", explore=phase(TIMEOUT)) for d in range(3, 9)]

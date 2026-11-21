@@ -250,6 +250,7 @@ LEAN_KEEP = frozenset({("run", "data"), ("request_run", "rerun"), ("memory_read"
     ("tune", "name"),              # picks which parameter `value` sets or resets
     ("skill", "name"),             # the anchor for a rewrite ("writing it again replaces it") and retire
     ("retire_thread", "settled"),  # picks which settled entries leave with the thread; 'all' takes every one named
+    ("say", "answers"),            # closes the turns it names; a misfilled seq closes a question nobody answered
 })
 # Every other optional parameter was REVIEWED and its prose may go: free text the being writes in
 # its own words, or a read-only selector whose misfill costs a re-read, not a change. A parameter

@@ -283,6 +283,25 @@ def _call_text_note(verbs: List[str]) -> str:
             f"{'it' if len(verbs) == 1 else 'them'}.")
 
 
+def _answer_seqs(raw) -> tuple:
+    """(seqs, unreadable) from say's `answers`: an int, a list, or text like "12" / "12, 14" /
+    "seq 12 and 14". Order kept, repeats dropped. Absent or empty is ([], []): a turn that answers
+    nothing. What is not a positive number is returned as unreadable, never guessed at."""
+    if raw is None or raw == "" or raw == []:
+        return [], []
+    items = raw if isinstance(raw, (list, tuple)) else re.split(r"[,\s]+|\band\b", str(raw))
+    seqs, bad = [], []
+    for it in items:
+        s = str(it).strip().lower().removeprefix("seq").strip().lstrip("#")
+        if not s:
+            continue
+        if isinstance(it, bool) or not s.isdigit() or int(s) <= 0:
+            bad.append(str(it).strip())
+        elif int(s) not in seqs:
+            seqs.append(int(s))
+    return seqs, bad
+
+
 def _hestia_error(env: dict) -> Optional[str]:
     """Render a daemon error envelope as the r1 `error` string keyed by hestia's own code."""
     err = env.get("_hestia_error")
@@ -4536,6 +4555,23 @@ class HestiaF1aDispatcher:
         # Below the run routing on purpose: a run request, whichever door it came through, has
         # its repeats delivered marked "SAME AS the request at seq N" by request_run, not refused.
         # Refused before begin_action: no witness row, no line.
+        # WHICH TURN THIS ANSWERS IS SAID, NOT INFERRED (NOVA's hold on #675). The turn records
+        # `answers`, the seqs the being names, and [] when it names none: an update about something
+        # else must not close a question still waiting (conversations.unanswered). A seq that is not
+        # someone else's turn here is refused before begin_action, with the ones that are.
+        answers, bad = _answer_seqs(intent.args.get("answers"))
+        theirs = {int(t.get("seq", 0)): t for t in conv.recent(self.memory_root, to, limit=200)
+                  if isinstance(t, dict) and t.get("from") != self.member}
+        bad += [str(s) for s in answers if s not in theirs]
+        if bad:
+            open_now = [f"{t.get('seq')} ({t.get('from')})"
+                        for t in conv.unanswered(self.memory_root, to, self.member)]
+            return ResultEnvelope(ok=False, error=(
+                f"answers names {', '.join(bad)}, which is not the seq of anyone else's turn in "
+                f"{to!r}, so nothing was sent. answers takes the seq numbers shown beside the turns "
+                f"you are answering" + (f"; waiting on you there now: {', '.join(open_now)}."
+                                        if open_now else "; nothing there is waiting on you.")
+                + " Leave answers out if this turn answers none of them."))
         mine = (None if text.startswith(_RUN_MARKER)
                 else conv.repeat_of_own(self.memory_root, to, self.member, text))
         if mine is not None:
@@ -4553,9 +4589,11 @@ class HestiaF1aDispatcher:
         try:
             from sage.gateway.governed_turn import trial_name
             trial = trial_name(self.memory_root)
+            extra = {"answers": answers}
+            if trial:
+                extra["trial"] = trial
             turn = conv.append(self.memory_root, to, speaker=self.member, text=text, via="say",
-                               witness=action_id, beat=self.host_session_id,
-                               extra={"trial": trial} if trial else None)
+                               witness=action_id, beat=self.host_session_id, extra=extra)
         except ValueError as e:
             self._call("hestia_record_outcome",
                        {"action_id": action_id, "success": False, "magnitude": 0.0})
@@ -4578,7 +4616,18 @@ class HestiaF1aDispatcher:
             said = (said[:200] + f"… [your own message, shortened in this receipt only — all "
                     f"{len(turn['text'])} chars were delivered as seq {turn['seq']}]")
         result = {"conversation": to, "seq": turn["seq"],
-                  "said": said, "action_id": action_id}
+                  "said": said, "action_id": action_id, "answers": answers}
+        # WHAT IS STILL WAITING, so an answer that did not name its turn is seen the same beat.
+        try:
+            still = conv.unanswered(self.memory_root, to, self.member)
+        except Exception:
+            still = []
+        if still:
+            result["still_waiting"] = (
+                f"{', '.join(str(t.get('seq')) for t in still)} in {to!r} "
+                f"{'is' if len(still) == 1 else 'are'} still waiting on you: this turn "
+                + (f"answered {', '.join(map(str, answers))}" if answers else "named no turn it answers")
+                + ". If it was your answer to one of them, the next say can name it with answers.")
         _verbs = call_text_verbs(turn["text"])
         if _verbs:
             result["not_performed"] = _call_text_note(_verbs)
