@@ -133,3 +133,39 @@ def test_the_judged_command_is_the_one_that_runs(wt):
     cmd = search_command({"pattern": r"def .*?\("}, {"worktree": wt})
     argv = shlex.split(cmd)
     assert argv[argv.index("-e") + 1] == r"def .*\("
+
+
+ESC_SOURCE = "def\tfor_all(): pass\nbell\x07 here\nback\x08space\nx]y\na-b\ncaret^c\nslash\\s\nfoo.bar\nA hex\n"
+ESCAPES = [r"def\tfor", r"[\t]for", r"[\b]", r"bell\a", r"[\a]", r"x[\]]y", r"a[\-]b", r"caret[\^]c",
+           r"slash[\\]s", r"foo[\.]bar", r"\x41 hex", r"[\x41] hex", r"A hex", r"\0"]
+
+
+@pytest.fixture(scope="module")
+def esc_wt():
+    d = os.path.realpath(tempfile.mkdtemp(prefix="srchp-esc-"))
+    subprocess.run(["git", "init", "-q", d], check=True)
+    with open(os.path.join(d, "esc.txt"), "w") as f:
+        f.write(ESC_SOURCE)
+    subprocess.run(["git", "-C", d, "add", "."], check=True)
+    return d
+
+
+@pytest.mark.parametrize("pattern", ESCAPES)
+def test_an_escape_naming_one_character_is_never_a_false_absence(pattern, esc_wt):
+    """NOVA (#797 review): `[\\b]` is a backspace in Python, not a word boundary. The same class:
+    `\\t`, `\\a`, `\\x41` and an escaped `]` `-` `^` in a bracket were absences on BSD git grep."""
+    mode, ran, note = search_regex(pattern)
+    assert mode == "-E" and "\\" not in ran.replace("[\\]", ""), (pattern, ran)
+    want = {ln for ln in ESC_SOURCE.splitlines() if re.search(pattern, ln)}
+    got = _lines(search_command({"pattern": pattern}, {"worktree": esc_wt}))
+    assert want <= got, (pattern, ran, want, got)
+
+
+def test_a_bracket_ere_cannot_spell_runs_as_any_character_and_says_so():
+    mode, ran, note = search_regex(r"x[\]]y")
+    assert (mode, ran) == ("-E", "x.y") and "any character" in note
+
+
+def test_backspace_in_a_bracket_is_not_a_word_boundary():
+    mode, ran, note = search_regex(r"[\b]")
+    assert ran == "[[:cntrl:]]" and "word boundaries" not in note
