@@ -2833,6 +2833,30 @@ def test_request_scope_for_a_path_that_does_not_exist_is_not_there_and_files_not
     assert sent["path"] == missing and sent["create"] is True
 
 
+def test_request_scope_for_a_file_its_runs_cannot_write_says_a_grant_does_not_change_that(tmp_path):
+    """A grant is the gate's reach, not the file's mode: the receipt says so, and the request is still filed."""
+    if os.geteuid() == 0:
+        pytest.skip("root writes any file")
+    locked = tmp_path / "accounts"
+    locked.write_text("x\n")
+    locked.chmod(0o444)
+    d, _ = _mdisp()
+    env = d(BeingIntent("request_scope", {"path": str(locked), "reason": "to add a line"}), _ALLOW)
+    assert env.ok and env.result["status"] == "pending", env
+    fs = env.result["file_system"]
+    assert "does not let" in fs and "still fails with 'Permission denied'" in fs, fs
+    assert "a grant would let you read it" in fs, fs
+    assert [a for n, a in FakeMcp.calls if n == "hestia_request_scope"], "still filed: a human decides"
+    locked.chmod(0o000)
+    env = d(BeingIntent("request_scope", {"path": str(locked), "reason": "to add a line"}), _ALLOW)
+    assert "cannot read it either" in env.result["file_system"], env
+    # a file its runs can write gets no such line
+    open_ = tmp_path / "notes.md"
+    open_.write_text("x\n")
+    env = d(BeingIntent("request_scope", {"path": str(open_), "reason": "to add a line"}), _ALLOW)
+    assert "file_system" not in env.result, env
+
+
 class _ExpiringMembot(FakeMembot):
     """membot after SESSION_TIMEOUT_SEC idle: the MCP client still works, but its session has no
     cartridge, so the next store/search answers "No cartridge mounted" until something remounts."""

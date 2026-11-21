@@ -83,6 +83,36 @@ _SEAT_AWAY_REQUEST = ("(From this receipt, not from the seat.) A quiet seat may 
                       "them when it is back.")
 
 
+def _file_system_fact(path: str) -> str:
+    """'' when the user the being's runs run as may write `path`, or it cannot be looked at; else what the
+    file system says about writing it. A grant is the gate's reach, not the file's permissions: on sprout-being
+    (11-20..21) scope requests for a root-owned system file, made for writes its mode refuses, lapsed or
+    waited on a ruling that could not make those writes work, and each lapse was asked again. The request is still filed: reading
+    may be what it serves, and a human decides it."""
+    import os, pwd, stat as _stat
+    try:
+        rp = os.path.realpath(os.path.expanduser(path))
+        st = os.stat(rp)
+        if os.access(rp, os.W_OK):
+            return ""
+    except OSError:
+        return ""
+
+    def name(uid):
+        try:
+            return pwd.getpwuid(uid).pw_name
+        except KeyError:
+            return f"uid {uid}"
+
+    me, owner = name(os.geteuid()), name(st.st_uid)
+    what = "directory" if _stat.S_ISDIR(st.st_mode) else "file"
+    return (f"(From this receipt, not from whoever decides it.) This {what} belongs to {owner}, and the file "
+            f"system does not let {me}, the user your runs run as, write it. A grant changes what the gate lets "
+            f"you reach, not what the file system allows: granted, a write to it still fails with 'Permission "
+            f"denied'. " + (f"{me} can read it, so a grant would let you read it." if os.access(rp, os.R_OK)
+                            else f"{me} cannot read it either."))
+
+
 def _seat_quiet(turns, member: str, seat_conv: str, truncated: bool, now=None):
     """A fact for the receipt when the seat has been silent SEAT_QUIET_S or more through the being's own
     requests; None otherwise. A seat can go quiet for hours (its account paused, its operator away).
@@ -4375,6 +4405,9 @@ class HestiaF1aDispatcher:
         if copies:
             result["copy_in_reach"] = [c for c, _ in copies]
             result["meanwhile"] = copy_alternative(path, copies)
+        fs = _file_system_fact(path)
+        if fs:
+            result["file_system"] = fs
         return ResultEnvelope(ok=True, witness_id=out.get("witnessEntryHash"), result=result)
 
     def _do_say(self, intent: BeingIntent) -> ResultEnvelope:
