@@ -733,7 +733,7 @@ def test_a_run_that_reports_on_accounts_is_told_the_box_maps_only_its_own():
                  "-rw-r--r-- 1 nobody nogroup 2947 /etc/passwd", "useradd: cannot lock /etc/passwd"):
         note = _run_note(0, "", ["acct.py"], said)
         assert "nobody (65534)" in note and "not an account on this machine" in note, note
-    assert not any(w in note for w in ("sprout", "exists", "does not exist")), note
+        assert not any(w in note for w in ("sprout", "exists", "does not exist")), note
     assert "nobody (65534)" not in _run_note(0, "", ["plot.py"], "saved True")
     assert "nobody (65534)" not in _run_note(0, "", ["acct.py"], "groups=20(staff)", seatbelt=True)  # no userns
 
