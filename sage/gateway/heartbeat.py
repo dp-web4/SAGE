@@ -1411,10 +1411,11 @@ def ruled_line(request_id, path, decision, who, why) -> str:
     why = str(why or "").strip()
     if not why:
         return line
-    if len(why) > RULER_NOTE_MAX:
-        why = (why[:RULER_NOTE_MAX].rstrip() + f"… [{len(why) - RULER_NOTE_MAX} more characters: memory_read "
-               f"{{\"path\": \"hestia://scope/{request_id}\"}} shows the note whole]")
-    return line + f". Their note: \"{why}\""
+    if len(why) <= RULER_NOTE_MAX:
+        return line + f". Their note: \"{why}\""
+    # The mark sits outside the quote: it is the harness speaking, not the ruler.
+    return (line + f". Their note: \"{why[:RULER_NOTE_MAX].rstrip()}…\" [{len(why) - RULER_NOTE_MAX} more "
+            f"characters: memory_read {{\"path\": \"hestia://scope/{request_id}\"}} shows the note whole]")
 
 
 def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str, decided_by=None,

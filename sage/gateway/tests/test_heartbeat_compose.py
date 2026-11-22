@@ -339,4 +339,5 @@ def test_a_rulers_note_reaches_the_being_whole():
     long = "x" * (hb.RULER_NOTE_MAX + 10)
     cut = hb.ruled_line("scope-1", "/f", "refused", None, long)
     assert "[10 more characters" in cut and 'hestia://scope/scope-1' in cut and "by operator" in cut
+    assert cut.split('Their note: "', 1)[1].split('"', 1)[0] == "x" * hb.RULER_NOTE_MAX + "…"  # mark outside
     assert hb.ruled_line("scope-1", "/f", "granted", None, "") == "- scope-1 /f -> granted by operator"
