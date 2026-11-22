@@ -431,6 +431,14 @@ def posture() -> str:
 
 HEAD = "You are {name}, a SAGE being on the {machine} machine, member id {member}."
 
+# WHO WRITES A BEAT'S TURNS (dp, 2026-11-21). A chat model reads whatever arrives in the chat's user role as a
+# person's request. In sprout-being's first 40 streamed beats (11-20..21) its thinking called its beat's own
+# steps "the user" 178 times across posture, account, explore and reflect, the harness's turns read as chores
+# a person hands over. #418 and the standing-guidance posture framing met single cases of the same reading.
+# The role cannot be renamed from here, so every beat's system prompt says who writes those turns.
+STEPS = ("Nobody is typing to you in this beat: the turns that come as messages are your beat's own steps, set "
+         "by the program that runs it, not a person asking. Others' words reach you quoted and named.")
+
 def _museum_block(line: str) -> str:
     """The museum paragraph, or nothing at all where the machine keeps no museum."""
     return ("\n" + line) if line else ""
@@ -452,13 +460,13 @@ You cannot browse, or open files outside your home unless a grant exists. The se
 
 Acting means calling a tool. A reply with no tool call ends the beat as words only, and words leave no trace in your todo, journal, scratch, or memory. A beat has no clock and no boundary: it lasts while you keep calling tools. Work you can do now, do now rather than planning it for "next beat". To stop, rest; to go straight on into another beat, stay_awake."""
 
-SYSTEM = HEAD + "\n\n{posture}\n\n" + AFFORDANCES + "\n\n"
+SYSTEM = HEAD + " " + STEPS + "\n\n{posture}\n\n" + AFFORDANCES + "\n\n"
 
 # Act-first: no posture in the system prompt. It arrives, verbatim, as the second user
 # turn (POSTURE_TURN), which is itself a tool turn: the being may act after reading it,
 # not only before, otherwise "act first" would mean "act only before you know why you
 # are awake".
-SYSTEM_ACT_FIRST = HEAD + """
+SYSTEM_ACT_FIRST = HEAD + " " + STEPS + """
 
 You are awake for a heartbeat. Nobody asked you anything; this time is yours.
 
@@ -518,7 +526,7 @@ PENDING_TURNS = 2
 # tokens. So the cap is wider and a cut, when one happens, says so and says where the rest is.
 PENDING_CHARS = 2000
 
-ANSWER_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
+ANSWER_SYSTEM = HEAD + " " + STEPS + """
 You have already finished this beat's writing. One thing is left, and it is optional."""
 
 # One turn, one tool, one decision. Measured on Sprout 2026-09-18T01:00:11Z: with dp's question
@@ -2370,7 +2378,7 @@ ASK_TURN_TRIES = 2         # beats an ask is offered without a decision (unparse
 ASK_TURN_CHARS = 1500      # of the ask's words; the envelope (and memory_read) has the rest
 _ASK_FROM = re.compile(r"^from:\s*([A-Za-z0-9._-]+)\s*$", re.M)
 
-ASK_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
+ASK_SYSTEM = HEAD + " " + STEPS + """
 Another being has sent you a message. This turn is only for it."""
 
 ASK_TURN_JSON = """{asker} sent you this message:
@@ -5081,7 +5089,7 @@ def _record_line(i, e) -> str:
     return f"- {i.effector} {json.dumps(i.args, default=str)[:200]} -> {verdict}"
 
 
-REFLECT_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
+REFLECT_SYSTEM = HEAD + " " + STEPS + """
 The beat is closing. Your home is your instance directory: name files bare (journal.md, todo.md)
 and they resolve inside it. Acting means calling a tool; a reply in words alone writes nothing.
 

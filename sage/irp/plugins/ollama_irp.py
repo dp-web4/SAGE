@@ -11,6 +11,7 @@ or Qwen-family models. Any machine with Ollama can run SAGE cognition.
 
 import json
 import logging
+import re
 import time
 import urllib.request
 import urllib.error
@@ -34,6 +35,26 @@ def _keep_alive():
         return '5m'
 
 
+# GEMMA4 RE-OPENS ITS THOUGHT CHANNEL WHEN IT MEANS TO END (mcnugget, 2026-11-21). Ollama 0.33.1
+# passes the re-open through as text in `thinking`. Measured on mcnugget-being (gemma4:12b), 154
+# calls, 11-20 13:40..23:56: 15 calls carry it. In 11 of them it is a single marker, the model
+# goes on thinking and makes its tool call, so one marker is not a stop. In the other 4 (all
+# reflect, after "call these tools, then stop", with the tools already called) the model said
+# "I should just stop" and then opened the channel again and again with nothing between:
+# 172, 188, 248 and 2,354 markers. The last one ran 42,364 chars to the 600s deadline and the
+# beat ended in an error. A run of markers with nothing between them is the model's turn
+# ending; the run is cut there and the reply closes as a clean stop. Origin:
+# shared-context forum/mcnugget-reply-being-output-stream-2026-11-21.md, finding 2.
+_THOUGHT_REOPEN = re.compile(r'<\|channel>(?:\s*thought)*')
+THOUGHT_REOPEN_RUN_CUT = 3  # markers in a row with nothing between them
+_THOUGHT_REOPEN_RUN = re.compile(r'(?:<\|channel>(?:\s*thought)*\s*){%d,}$' % THOUGHT_REOPEN_RUN_CUT)
+
+
+def _strip_thought_reopens(thinking: str) -> str:
+    """The thinking text with every re-opened channel marker taken out (a control token, not words)."""
+    return _THOUGHT_REOPEN.sub('', thinking)
+
+
 def _read_stream(resp, on_chunk, timeout_s) -> Dict[str, Any]:
     """A streamed /api/chat reply, joined into the shape of a non-streamed one.
 
@@ -47,6 +68,7 @@ def _read_stream(resp, on_chunk, timeout_s) -> Dict[str, Any]:
     deadline = _time.time() + float(timeout_s or 0) if timeout_s else None
     content, thinking, tool_calls = [], [], []
     role, final = 'assistant', {}
+    think_tail = ''  # last 400 chars of thinking, kept rolling so the run check is O(chunk), not O(reply)
     for line in resp:
         if deadline is not None and _time.time() > deadline:
             raise TimeoutError(f'streamed reply ran past {timeout_s}s')
@@ -68,12 +90,22 @@ def _read_stream(resp, on_chunk, timeout_s) -> Dict[str, Any]:
         if chunk.get('done'):
             final = chunk
             break
+        if msg.get('thinking'):
+            think_tail = (think_tail + msg['thinking'])[-400:]
+        if msg.get('thinking') and not tool_calls and not any(content):
+            if _THOUGHT_REOPEN_RUN.search(think_tail):
+                # closing the response ends the generation server-side
+                final = {'done': True, 'done_reason': 'stop', 'sage_cut': 'thought_reopen_run'}
+                _log.info('streamed reply: thought channel re-opened %d times in a row; closed as a stop',
+                          THOUGHT_REOPEN_RUN_CUT)
+                break
     if not final:
         # the unstreamed read would have failed on a cut connection; a half reply is not a reply
         raise RuntimeError('streamed reply ended before its last chunk')
     message = {'role': role, 'content': ''.join(content)}
-    if any(thinking):
-        message['thinking'] = ''.join(thinking)
+    joined_thinking = _strip_thought_reopens(''.join(thinking))
+    if joined_thinking:
+        message['thinking'] = joined_thinking
     if tool_calls:
         message['tool_calls'] = tool_calls
     result = dict(final)
