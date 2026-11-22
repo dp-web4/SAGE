@@ -5697,8 +5697,9 @@ def _run_reach_note(mounts: list, skipped: list) -> str:
             + "Any other path, your home included, does not exist in there, so a check like "
               "os.path.exists() is False for it whatever is on disk; memory_read answers about "
               "the disk. Outside /tmp, /work and what is WRITABLE above, nothing in there can be "
-              "written: a write elsewhere (/etc/passwd, /home/...) fails as 'Read-only file system', "
-              "so a run cannot change those files on this machine.")
+              "written: a write elsewhere (/home/..., /opt/...) fails as 'Read-only file system', and to "
+              "a system file mounted in there (/etc/passwd) as 'Permission denied', so a run cannot "
+              "change those files on this machine.")
     if skipped:
         text += " Not mounted: " + "; ".join(f"{p} ({why})" for p, why in skipped) + "."
     return text
@@ -5727,7 +5728,22 @@ def _run_note(rc: int, stderr: str, files: list, stdout: str = "", seatbelt: boo
         note += " " + _NO_ARGV_NOTE
     if rc == 0 and not said.strip():
         note += " " + _SILENT_NOTE
+    if not seatbelt and _ACCOUNT_VIEW.search(said):
+        note += " " + _ACCOUNT_NOTE
     return note
+
+
+#: THE BOX MAPS ONE ACCOUNT. A run is in a user namespace that maps only the being's own uid, so inside it a
+#: file owned by root or by any other account shows as 65534 (nobody), and the being's other groups as 65534
+#: (nogroup). sprout-being, 2026-11-19..22: its runs printed groups=...,65534 and nobody-owned system files, and
+#: it concluded that an account it wanted existed at UID 65534, then asked, for days, to change that account.
+#: The mapping is the sandbox's design, so saying it is evidence-only; it names no account as present or absent.
+#: Not on macOS: sandbox-exec has no user namespace.
+_ACCOUNT_VIEW = re.compile(r"\b65534\b|\bnobody\b|\bnogroup\b|/etc/(?:passwd|group|shadow)\b|\buseradd\b"
+                           r"|\busermod\b|\bgetent\b|\bwhoami\b|\bgroups=", re.I)
+_ACCOUNT_NOTE = ("Inside the run you are the only account mapped: a file owned by root or any other account shows "
+                 "as nobody (65534), and your other groups as nogroup (65534). That is the box's mapping, not an "
+                 "account on this machine. The user and group lists in there are this machine's own, read-only.")
 
 
 #: EXIT 0 WITH NOTHING PRINTED IS NOT A FINDING. sprout-being, 2026-11-21 19:34Z: a 30-line script meant to create

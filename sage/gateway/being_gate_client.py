@@ -1671,8 +1671,17 @@ RUN_FSIZE_BYTES = 512 << 20           # any one file the run writes, its output 
 # host home's config dir (scope-b0972998b89d, refused). No file the being could write fixes a
 # mount, and the census listed matplotlib as missing from the box while the host had it.
 # Measured 2026-11-20 on cbp: the same bwrap line exits 1 with that error, and with this bind it
-# imports pyplot and saves a PNG. A default config file, not private state: nothing else in /etc.
-RUN_ETC_BINDS = " --ro-bind-try /etc/matplotlibrc /etc/matplotlibrc"
+# imports pyplot and saves a PNG. A default config file, not private state.
+#
+# THE USER DATABASE, so a run's answer about accounts is this machine's. With /etc unbound there was no
+# /etc/passwd or /etc/group in the box: `whoami` failed, `getent` found no one (root included), and
+# `id` printed only numbers. sprout-being, 2026-11-19..22, read that as facts about the machine: that
+# it lacked a root entry, that a user it wanted existed at 65534, then that none did, and asked for
+# write access to the account list over and over. These three are world-readable on every seat and
+# hold no secret (passwords live in /etc/shadow, which stays out). -try: a seat without one mounts none.
+RUN_ETC_BINDS = (" --ro-bind-try /etc/matplotlibrc /etc/matplotlibrc"
+                 " --ro-bind-try /etc/passwd /etc/passwd --ro-bind-try /etc/group /etc/group"
+                 " --ro-bind-try /etc/nsswitch.conf /etc/nsswitch.conf")
 RUN_MIN_S = 30                        # a beat with less than this left starts no run (Nova)
 
 
