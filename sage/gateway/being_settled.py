@@ -103,8 +103,11 @@ def _pid_entries(entries: List[dict]) -> Tuple[List[str], List[str]]:
 #: as evidence for a number that run does not contain. Nothing told it the quote was not there. The other
 #: misses are mostly paraphrases put inside quote marks. Like the PID fact above, this is evidence only:
 #: the entry is kept as written, and the receipt says what the cited turn holds.
-#: Seqs are numbered per conversation, so a quote counts as found if ANY conversation's turn with that number
-#: holds it.
+#: NOVA's HOLD on #704: each quote is checked against the one turn it cites, never against several turns joined
+#: together. A quote is bound to the seq it follows. Seqs restart at 1 in every conversation (sprout-being,
+#: 11-22: 465 of 3027 seq numbers are in more than one conversation). So a seq that more than one conversation
+#: carries, with no conversation named, is not taken as a match. The receipt names which conversation's turn
+#: holds the quote and which does not.
 _SEQ_CITED = re.compile(r"\bseqs?\b\W{0,3}(\d{1,9})", re.I)
 _QUOTED = re.compile(r"[\"“«]([^\"“”«»]{6,})[\"”»]")
 QUOTE_LINE_CHARS = 160
@@ -114,58 +117,106 @@ def _ws(s: str) -> str:
     return " ".join(s.split())
 
 
-def _turns_numbered(instance, seqs) -> Dict[int, List[str]]:
-    """seq -> the text of every conversation turn carrying that number (seqs are per conversation)."""
-    want, out = set(seqs), {}
+def _turns_numbered(instance, seqs) -> Tuple[Dict[int, Dict[str, str]], List[str]]:
+    """seq -> {conversation: the text of its turn with that number}, and the conversations that could not be read
+    whole (an unreadable file, or a line naming a wanted seq that is not valid JSON). Read a line at a time."""
+    want, out, unread = set(seqs), {}, []
     d = Path(instance) / "conversations"
     if not want or not d.is_dir():
-        return out
+        return out, unread
     for f in sorted(d.glob("*.jsonl")):
         try:
-            lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+            with f.open(encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    if not any(str(s) in line for s in want):
+                        continue
+                    try:
+                        t = json.loads(line)
+                    except ValueError:
+                        if f.stem not in unread:
+                            unread.append(f.stem)
+                        continue
+                    if isinstance(t, dict) and t.get("seq") in want:
+                        out.setdefault(t["seq"], {})[f.stem] = str(t.get("text") or "")
         except OSError:
-            continue
-        for line in lines:
-            if not any(str(s) in line for s in want):
-                continue
-            try:
-                t = json.loads(line)
-            except ValueError:
-                continue
-            if isinstance(t, dict) and t.get("seq") in want:
-                out.setdefault(t["seq"], []).append(str(t.get("text") or ""))
+            if f.stem not in unread:
+                unread.append(f.stem)
+    return out, unread
+
+
+def _cited_quotes(evidence: str) -> List[Tuple[int, str]]:
+    """(seq, quote) for each quote, bound to the seq cited before it; a quote ahead of every seq goes to the first."""
+    marks = [(m.start(), int(m.group(1))) for m in _SEQ_CITED.finditer(evidence)]
+    out = []
+    for m in _QUOTED.finditer(evidence) if marks else ():
+        q = _ws(m.group(1))
+        if q:
+            before = [s for p, s in marks if p < m.start()]
+            out.append((before[-1] if before else marks[0][1], q))
     return out
 
 
+def _named_conversations(evidence: str, names) -> set:
+    """The conversations the evidence names outright: "dp.jsonl", "conversation dp", "dp conversation", "dp seq 7"."""
+    out = set()
+    for n in names:
+        e = re.escape(n)
+        if re.search(rf"(?<![\w.-]){e}(?:\.jsonl\b|\s+(?:conversation|convo|seq)\b)|\b(?:conversation|convo)\s+{e}(?![\w.-])",
+                     evidence, re.I):
+            out.add(n)
+    return out
+
+
+def _line_like(text: str, qn: str) -> str:
+    best, best_len = "", 0
+    for line in text.splitlines():
+        ln = _ws(line)
+        n = len(os.path.commonprefix([ln, qn]))
+        if n > best_len:
+            best, best_len = ln, n
+    return best[:QUOTE_LINE_CHARS] if best_len >= 8 else ""
+
+
 def _quote_fact(instance, evidence: str) -> str:
-    """For each quote in `evidence` that no turn it cites by seq contains: one fact saying so, and the line of
-    that turn that starts most like the quote. Empty when there is no cited seq, no quote, or every quote is there."""
-    seqs = sorted({int(n) for n in _SEQ_CITED.findall(evidence or "")})
-    quotes = [q for q in _QUOTED.findall(evidence or "") if _ws(q)]
-    if not seqs or not quotes:
+    """For each quote in `evidence`, checked against the one turn of the seq it follows: one fact when that turn
+    does not hold it, or when the seq is in more than one conversation and not every such turn holds it.
+    Empty when there is no cited seq, no quote, or every quote is in its turn."""
+    pairs = _cited_quotes(evidence or "")
+    if not pairs:
         return ""
-    turns = _turns_numbered(instance, seqs)
-    named = ", ".join(str(s) for s in seqs)
-    if not turns:
-        return f"Your evidence cites seq {named}; no conversation of yours has a turn with that number."
-    texts = [t for s in seqs for t in turns.get(s, [])]
-    whole = _ws(" ".join(texts))
-    facts = []
-    for q in quotes:
-        qn = _ws(q)
-        if qn in whole:
+    turns, unread = _turns_numbered(instance, {s for s, _ in pairs})
+    named = _named_conversations(evidence, {c for convs in turns.values() for c in convs} | set(unread))
+    facts, missing = [], []
+    for s, qn in pairs:
+        convs = {c: t for c, t in turns.get(s, {}).items() if not named or c in named}
+        if not convs:
+            if s not in missing:
+                missing.append(s)
             continue
-        fact = f'Your evidence quotes "{qn}" from seq {named}; no turn with that number contains that text.'
-        best, best_len = "", 0
-        for t in texts:
-            for line in t.splitlines():
-                ln = _ws(line)
-                n = len(os.path.commonprefix([ln, qn]))
-                if n > best_len:
-                    best, best_len = ln, n
-        if best_len >= 8:
-            fact += f' Its line that starts the same reads: "{best[:QUOTE_LINE_CHARS]}".'
+        holds = sorted(c for c, t in convs.items() if qn in _ws(t))
+        if holds and len(holds) == len(convs):
+            continue
+        if holds:
+            fact = (f'Your evidence quotes "{qn}" from seq {s}, and {len(convs)} of your conversations have a turn '
+                    f'with that number. It is in the one in {", ".join(holds)}, not in '
+                    f'{", ".join(c for c in sorted(convs) if c not in holds)}.')
+        else:
+            fact = f'Your evidence quotes "{qn}" from seq {s}; no turn with that number contains that text.'
+            for c in sorted(convs):
+                line = _line_like(convs[c], qn)
+                if line:
+                    where = f" In {c}, its" if len(convs) > 1 else " Its"
+                    fact += f'{where} line that starts the same reads: "{line}".'
+            elsewhere = sorted({o for o, _ in pairs if o != s
+                                for c, t in turns.get(o, {}).items() if (not named or c in named) and qn in _ws(t)})
+            if elsewhere:
+                fact += f" It is in seq {', '.join(str(o) for o in elsewhere)}."
         facts.append(fact)
+    if missing:
+        facts.insert(0, f"Your evidence cites seq {', '.join(str(s) for s in missing)}; no conversation of yours "
+                        f"{'by that name ' if named else ''}has a turn with that number.")
+    if unread and facts:
+        facts.append(f"Could not read all of {', '.join(unread)}, so the quote may be there.")
     return " ".join(facts)
 
 

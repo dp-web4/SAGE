@@ -629,10 +629,9 @@ def test_a_quote_the_cited_seq_does_not_hold_is_named_with_the_line_that_is_ther
 
 def test_a_quote_that_is_there_or_no_quote_adds_nothing(tmp_path):
     _conv(tmp_path, "seat", [(7, "stdout:\nEpoch  [3/3],\nLoss: 0.6000")])
-    _conv(tmp_path, "dp", [(7, "unrelated")])  # seqs are per conversation: any turn 7 may hold it
     _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="no",
                    evidence='seq 7: "Epoch [3/3], Loss: 0.6000"')
-    assert "no turn with that number" not in msg
+    assert "Your evidence" not in msg, msg
     _, msg, _ = _s(tmp_path, question="Does the test gizmo script run?", answer="no", evidence="seq 7, the run")
     assert "Your evidence" not in msg
 
@@ -642,3 +641,69 @@ def test_a_cited_seq_no_conversation_has_is_named(tmp_path):
     _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
                    evidence='seq 99: "it ran fine"')
     assert "cites seq 99; no conversation of yours has a turn with that number" in msg
+
+
+# NOVA's HOLD on #704: a quote is checked against the one turn it cites, never against turns joined together.
+
+def test_s476_in_its_real_shape_seq_only_is_named_when_other_conversations_are_short(tmp_path):
+    # cbp-being cited the seat's run by seq alone; its dp conversation is far shorter, so seq 14735 is the seat's
+    _conv(tmp_path, "seat", [(14735, "exit code 1.\n\nstdout:\nEpoch [3/3], Loss: 0.6000")])
+    _conv(tmp_path, "dp", [(1, "hello"), (2, "Epoch [3/3], Loss: 0.5553")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes, loss 0.5553",
+                   evidence='seq 14735: "Epoch [3/3], Loss: 0.5553"')
+    assert '"Epoch [3/3], Loss: 0.5553" from seq 14735; no turn with that number contains that text.' in msg
+    assert 'Its line that starts the same reads: "Epoch [3/3], Loss: 0.6000".' in msg, msg
+
+
+def test_the_same_seq_in_another_conversation_does_not_count_as_a_match(tmp_path):
+    _conv(tmp_path, "seat", [(7, "stdout:\nEpoch [3/3], Loss: 0.6000")])
+    _conv(tmp_path, "dp", [(7, "Loss: 0.5553 is what I hope for")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "Loss: 0.5553 is what"')
+    assert ('quotes "Loss: 0.5553 is what" from seq 7, and 2 of your conversations have a turn with that number. '
+            "It is in the one in dp, not in seat.") in msg, msg
+
+
+def test_a_named_conversation_settles_which_turn_is_meant(tmp_path):
+    _conv(tmp_path, "seat", [(7, "stdout:\nEpoch [3/3], Loss: 0.6000")])
+    _conv(tmp_path, "dp", [(7, "Loss: 0.5553 is what I hope for")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seat seq 7: "Loss: 0.5553 is what"')
+    assert '"Loss: 0.5553 is what" from seq 7; no turn with that number contains that text.' in msg, msg
+    _, msg, _ = _s(tmp_path, question="Does the test gizmo script run?", answer="yes",
+                   evidence='conversation dp, seq 7: "Loss: 0.5553 is what"')
+    assert "Your evidence" not in msg, msg
+
+
+def test_a_quote_from_another_cited_seq_is_not_found_in_the_seq_it_follows(tmp_path):
+    _conv(tmp_path, "seat", [(7, "Epoch [3/3], Loss: 0.6000"), (8, "the plan: reach Loss: 0.5553")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "reach Loss: 0.5553"; seq 8: "the plan"')
+    assert '"reach Loss: 0.5553" from seq 7; no turn with that number contains that text.' in msg, msg
+    assert "It is in seq 8." in msg
+    assert '"the plan"' not in msg  # that one is in its turn
+
+
+def test_a_quote_split_across_two_turns_is_not_found(tmp_path):
+    _conv(tmp_path, "seat", [(7, "the run printed Epoch [3/3],"), (8, "Loss: 0.5553 was the target")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7 and seq 8: "Epoch [3/3], Loss: 0.5553"')
+    assert "no turn with that number contains that text" in msg, msg
+
+
+def test_a_malformed_transcript_is_said_and_not_read_as_absence_alone(tmp_path):
+    d = tmp_path / "conversations"
+    d.mkdir()
+    (d / "seat.jsonl").write_text('{"seq": 7, "text": "Epoch [3/3], Loss: 0.5553"\n')  # cut off mid-write
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "Epoch [3/3], Loss: 0.5553"')
+    assert "Could not read all of seat, so the quote may be there." in msg, msg
+
+
+def test_an_unreadable_transcript_is_said(tmp_path):
+    _conv(tmp_path, "dp", [(1, "hello")])
+    (tmp_path / "conversations" / "seat.jsonl").mkdir()  # a directory where a file should be: open() fails
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "Epoch [3/3], Loss: 0.5553"')
+    assert "no conversation of yours has a turn with that number" in msg
+    assert "Could not read all of seat" in msg, msg
