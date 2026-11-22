@@ -392,10 +392,13 @@ def test_a_write_outside_the_writable_places_fails_in_the_run_itself(tmp_path):
     r = d._do_run(BeingIntent("run", {"path": "scratch/w.py"}))
     assert r.ok, r.error
     out = r.result["stdout"]
-    for p in ("/etc/passwd", "/home/test-user/.profile", "/opt/x"):
+    for p in ("/home/test-user/.profile", "/opt/x"):
         assert f"{p} refused Read-only file system" in out, out
+    # The user list is mounted read-only from the host (RUN_ETC_BINDS); root owns it, so the write stops sooner.
+    assert "/etc/passwd refused Permission denied" in out or "/etc/passwd refused Read-only file system" in out, out
     assert "/tmp/t WROTE" in out and "/work/k WROTE" in out, out
     assert "fails as 'Read-only file system'" in r.result["note"], r.result["note"]
+    assert "/etc/passwd) as 'Permission denied'" in r.result["note"], r.result["note"]
 
 
 @needs_sandbox
@@ -720,6 +723,34 @@ def test_an_exit_0_run_that_printed_nothing_is_told_that_is_no_evidence():
     for said in (_run_note(0, "", ["make.py"], "done"), _run_note(0, "warn", ["make.py"], ""),
                  _run_note(1, "", ["make.py"], "")):
         assert "printed nothing" not in said, said
+
+
+def test_a_run_that_reports_on_accounts_is_told_the_box_maps_only_its_own():
+    """sprout-being, 2026-11-19..22: runs printed groups=...,65534 and nobody-owned files, and it took 65534 for an
+    account on the machine. The note names the mapping and asserts no account present or absent."""
+    from sage.gateway.hestia_dispatch import _run_note
+    for said in ("uid=2002(dp) gid=2002(dp) groups=2002(dp),65534(nogroup)",
+                 "-rw-r--r-- 1 nobody nogroup 2947 /etc/passwd", "useradd: cannot lock /etc/passwd"):
+        note = _run_note(0, "", ["acct.py"], said)
+        assert "nobody (65534)" in note and "not an account on this machine" in note, note
+        assert not any(w in note for w in ("sprout", "exists", "does not exist")), note
+    assert "nobody (65534)" not in _run_note(0, "", ["plot.py"], "saved True")
+    assert "nobody (65534)" not in _run_note(0, "", ["acct.py"], "groups=20(staff)", seatbelt=True)  # no userns
+
+
+@needs_bwrap
+def test_a_run_reads_this_machines_user_database(tmp_path):
+    """With /etc unbound, whoami failed and getent found no one, root included, and the being read that as the
+    machine's account list. The box now binds the user and group lists read-only; the answer is the host's."""
+    import pwd
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "acct.py").write_text(
+        "import os, pwd\nprint('me', pwd.getpwuid(os.getuid()).pw_name)\nprint('root', pwd.getpwnam('root').pw_uid)\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/acct.py"}))
+    assert r.ok, r.error
+    res = r.result
+    assert res["exit"] == 0, res
+    assert f"me {pwd.getpwuid(os.getuid()).pw_name}" in res["stdout"] and "root 0" in res["stdout"], res
 
 
 def test_a_run_that_names_a_hardware_device_is_told_the_sandbox_has_none():
