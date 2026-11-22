@@ -63,10 +63,15 @@ def wt():
     return d
 
 
+# A hit is `path:line:text`, except GNU grep on a single file, which prints `line:text` (BSD grep names the
+# file either way). The text itself may hold colons, so the prefix is matched, not split off.
+_HIT = re.compile(r"^(?:.*?(?:beats\.py|esc\.txt):)?\d+:(.*)$")
+
+
 def _lines(cmd):
     r = subprocess.run(shlex.split(cmd), capture_output=True, text=True)
     assert r.returncode in (0, 1), (cmd, r.returncode, r.stderr)
-    return {ln.split(":", 2)[-1] for ln in r.stdout.splitlines()}
+    return {_HIT.match(ln).group(1) for ln in r.stdout.splitlines()}
 
 
 def _python(pattern):
@@ -100,7 +105,7 @@ def test_without_the_rewrite_these_were_false_absences_or_failures(wt):
     """What the being got before, on this box: the reason for the change, measured each run."""
     raw = {p: subprocess.run(["git", "-C", wt, "grep", "-n", "-E", "-e", p, "--", "beats.py"],
                              capture_output=True, text=True) for p in (r"def\sfor", r"def .*?\(")}
-    seen = {p: (r.returncode, {ln.split(":", 2)[-1] for ln in r.stdout.splitlines()}) for p, r in raw.items()}
+    seen = {p: (r.returncode, {_HIT.match(ln).group(1) for ln in r.stdout.splitlines()}) for p, r in raw.items()}
     # Linux (glibc) ERE knows \s, BSD's does not; neither knows a lazy quantifier everywhere.
     wrong = [p for p, (rc, got) in seen.items() if rc > 1 or got != _python(p)]
     if not wrong:
