@@ -342,6 +342,24 @@ def test_the_beat_shows_a_new_ruling_verbatim_once():
     assert appeals_block(old, {}) == ("", {}), "a daemon without the tool renders nothing"
 
 
+def test_an_appeal_rulers_reason_reaches_the_being_whole():
+    from sage.gateway.heartbeat import appeals_block, RULER_NOTE_MAX
+
+    def block(rationale):
+        rows = {"appeals": [{"deny_hash": "c29e24e65f21aaaa", "status": "ruled",
+                             "ruling": {"verdict": "deny stands", "adjudicator": "claude-code",
+                                        "ruled_at": "2026-09-16T04:38:30Z", "rationale": rationale}}]}
+        return appeals_block(SimpleNamespace(_call=lambda name, args: rows), {})[0]
+
+    reason = "Deny stands. " + "The file is not on this machine. " * 30
+    assert 700 < len(reason.strip()) < RULER_NOTE_MAX
+    assert reason.strip() in block(reason), "a reason under the cap arrives whole, not cut at 700"
+    long_ = "y" * (RULER_NOTE_MAX + 7)
+    text = block(long_)
+    assert text.split('Their reason: "', 1)[1].split('"', 1)[0] == "y" * RULER_NOTE_MAX + "…"  # mark outside
+    assert '[7 more characters: memory_read {"path": "hestia://appeal/c29e24e65f21aaaa"}' in text
+
+
 def test_a_pointer_read_uses_the_exact_lookup_first():
     mine = {"appeals": [{"deny_hash": "c29e24e65f21aaaa", "appeal_entry": "e1", "status": "ruled",
                          "ruling": {"verdict": "deny stands", "adjudicator": "claude-code",
