@@ -1033,6 +1033,182 @@ SEARCH_MAX_N = 60        # matches returned at most; a search is a pointer, not 
 
 
 
+# Perl shorthands Python's `re` accepts and POSIX ERE does not have, as ERE bracket classes. Outside a
+# bracket expression each becomes a whole class; inside one, the class name joins that bracket.
+_PERL_CLASS = {"d": ("[[:digit:]]", "[:digit:]"), "s": ("[[:space:]]", "[:space:]"),
+               "w": ("[[:alnum:]_]", "[:alnum:]_"),
+               "D": ("[^[:digit:]]", None), "S": ("[^[:space:]]", None), "W": ("[^[:alnum:]_]", None)}
+
+
+_CHAR_ESC = {"t": "\t", "n": "\n", "r": "\r", "f": "\f", "v": "\v", "a": "\a"}
+_ERE_SPECIAL = set(".[]()*+?{}|^$\\")
+
+
+def _char_escape(pattern: str, i: int, in_br: bool):
+    r"""(char, length) when `pattern[i:]` is an escape that names ONE character in Python's `re`
+    (`\t`, `\x41`, `٣`, `\0`, and `\b` inside a bracket, a backspace), else None. ERE has none
+    of these: BSD's reads `\t` as `t` and `[\t]` as backslash-or-t, so they were false absences
+    (measured on McNugget 2026-11-21: `def\tfor`, `[\t]`, `\a`, `\x41` all came back absent)."""
+    e = pattern[i + 1]
+    if e in _CHAR_ESC:
+        return _CHAR_ESC[e], 2
+    if e == "b" and in_br:
+        return "\b", 2
+    width = {"x": 2, "u": 4, "U": 8}.get(e)
+    if width:
+        digits = pattern[i + 2:i + 2 + width]
+        if len(digits) == width:
+            try:
+                return chr(int(digits, 16)), 2 + width
+            except ValueError:
+                return None
+    if e == "0":
+        j = i + 2
+        while j < len(pattern) and j < i + 4 and pattern[j] in "01234567":
+            j += 1
+        return chr(int(pattern[i + 1:j], 8)), j - i
+    return None
+
+
+def search_regex(pattern: str) -> tuple:
+    r"""(mode, pattern_to_run, note): how a `search` pattern runs, chosen before the law judges it.
+
+    Three shapes:
+    - not a regex at all (Python's `re` refuses it): `-F`, the text as written (see below);
+    - an ERE already: `-E`, unchanged, note "";
+    - Perl syntax `re` accepts and ERE lacks: `-E` with the Perl parts rewritten, and a note
+      saying what ran. Measured on McNugget 2026-11-20 (Apple git 2.50 and BSD grep): `\d` matched
+      the letter d (81 lines of forum_replies.py, the same as `d`; digits are on 26), `\s` and `\b`
+      matched nothing, so `def\sfor` and `\bfor_beat\b` came back as ABSENCES; and `.*?`, `+?`,
+      `(?:` exited 128 ("repetition-operator operand invalid"). mcnugget-being sent 26 such
+      searches: 14 failed, 9 came back "absent" (`PR\s*#\d+` among them), 3 hit.
+
+    The rewrite keeps every answer a superset of the Perl one, never a false absence: lazy
+    quantifiers become greedy (a line matches or not either way), `(?:` becomes `(`, `\d \s \w`
+    and their negations become POSIX classes, `\A`/`\Z` become `^`/`$`, and `\b`/`\B` are
+    dropped (ERE has no portable word boundary), which can only widen the match. An escape naming
+    one character (`\t`, `\x41`, `[\b]` = backspace) becomes that character, or `[[:blank:]]` /
+    `[[:cntrl:]]` for control characters; a bracket holding an escaped `]`, `-` or `^`, which ERE
+    brackets cannot spell, runs as `.`. One limit is NOT closed: `\d` and `\w` are Unicode in
+    Python, and `[[:digit:]]` / `[[:alnum:]]` match non-ASCII digits and letters only under a
+    UTF-8 locale (McNugget, LC_ALL=C: `caf\w` misses `café`, `\d` misses `٣`). For ASCII text,
+    which is what the being searches, the superset holds in every locale. What has no
+    ERE meaning at all (lookaround, inline flags, named groups, possessive quantifiers, a negated
+    shorthand inside a bracket) is searched as literal text, like any other unparseable pattern."""
+    import re
+    import warnings
+    try:
+        with warnings.catch_warnings():  # `[[:digit:]]` is valid ERE; re only warns about it
+            warnings.simplefilter("ignore")
+            re.compile(pattern)
+    except re.error:
+        return "-F", pattern, ""
+    out, i, n, in_br, changed, dropped_b = [], 0, len(pattern), False, False, False
+    br_start, br_wide, widened = 0, False, False
+    while i < n:
+        c = pattern[i]
+        if in_br:
+            if c == "\\" and i + 1 < n and pattern[i + 1] in _PERL_CLASS:
+                inside = _PERL_CLASS[pattern[i + 1]][1]
+                if inside is None:
+                    return "-F", pattern, ""
+                out.append(inside)
+                changed, i = True, i + 2
+                continue
+            if c == "\\" and i + 1 < n:
+                one = _char_escape(pattern, i, True)
+                ch = one[0] if one else pattern[i + 1]
+                if one is None and ch.isalnum():  # \1-style: no single-character meaning here
+                    out.append(pattern[i:i + 2])
+                elif ch == "\\":
+                    out.append("\\")  # in an ERE bracket a backslash is itself
+                elif ch in "]^-":
+                    # ERE brackets have no escape: `]` closes, `-` ranges, a leading `^` negates.
+                    # The whole bracket runs as `.` (any character), a superset of what it meant.
+                    br_wide = True
+                elif ord(ch) < 32 or ord(ch) == 127:
+                    out.append("[:blank:]" if ch == "\t" else "[:cntrl:]")
+                else:
+                    out.append(ch)
+                changed, i = True, i + (one[1] if one else 2)
+                continue
+            if c == "[" and i + 1 < n and pattern[i + 1] in ":.=":
+                end = pattern.find(pattern[i + 1] + "]", i + 2)
+                if end != -1:
+                    out.append(pattern[i:end + 2])
+                    i = end + 2
+                    continue
+            out.append(c)
+            if c == "]":
+                in_br = False
+                if br_wide:
+                    out[br_start:] = ["."]
+                    br_wide, widened = False, True
+            i += 1
+            continue
+        if c == "\\" and i + 1 < n:
+            e = pattern[i + 1]
+            if e in _PERL_CLASS:
+                out.append(_PERL_CLASS[e][0])
+                changed = True
+            elif e in "bB":
+                dropped_b = changed = True
+            elif e == "A":
+                out.append("^")
+                changed = True
+            elif e in "Zz":
+                out.append("$")
+                changed = True
+            elif _char_escape(pattern, i, False):
+                ch, width = _char_escape(pattern, i, False)
+                if ch == "\t":
+                    out.append("[[:blank:]]")
+                elif ord(ch) < 32 or ord(ch) == 127:
+                    out.append("[[:cntrl:]]")
+                else:
+                    out.append("\\" + ch if ch in _ERE_SPECIAL else ch)
+                changed, i = True, i + width
+                continue
+            else:
+                out.append(pattern[i:i + 2])
+            i += 2
+            continue
+        if c == "[":
+            br_start = len(out)
+            out.append(c)
+            in_br = True
+            i += 1
+            if i < n and pattern[i] == "^":
+                out.append("^")
+                i += 1
+            if i < n and pattern[i] == "]":
+                out.append("]")
+                i += 1
+            continue
+        if c == "(" and pattern.startswith("(?", i):
+            if pattern.startswith("(?:", i):
+                out.append("(")
+                changed, i = True, i + 3
+                continue
+            return "-F", pattern, ""
+        if c in "*+?}" and i + 1 < n and pattern[i + 1] in "?+":
+            if pattern[i + 1] == "+":
+                return "-F", pattern, ""
+            out.append(c)
+            changed, i = True, i + 2
+            continue
+        out.append(c)
+        i += 1
+    if not changed:
+        return "-E", pattern, ""
+    ran = "".join(out)
+    note = (f"{pattern!r} uses Perl regex syntax that git's extended regex does not have, so it ran as "
+            f"{ran!r}" + (" (word boundaries \\b dropped, so partial words match too)" if dropped_b else "")
+            + (" (a bracket ERE cannot spell ran as '.', any character)" if widened else "")
+            + "; a hit or an absence answers that pattern")
+    return "-E", ran, note
+
+
 def search_mode(pattern: str) -> str:
     """`-E` for a pattern that is a valid regex, `-F` (literal text) for one that is not.
 
@@ -1043,13 +1219,9 @@ def search_mode(pattern: str) -> str:
     it is searched literally and the result says so. The mode is chosen HERE, before the law
     judges the command, so judged == executed still holds: no retry with a different command.
     Python's `re` is the validity test; it rejects what git's ERE rejects for the shapes seen
-    (`(` unbalanced, `=**` nothing to repeat)."""
-    import re
-    try:
-        re.compile(pattern)
-        return "-E"
-    except re.error:
-        return "-F"
+    (`(` unbalanced, `=**` nothing to repeat). Perl syntax `re` accepts is rewritten or searched
+    literally by `search_regex`, which this reports the mode of."""
+    return search_regex(pattern)[0]
 
 
 def search_command(args: dict, ctx: Optional[dict] = None) -> str:
@@ -1106,8 +1278,9 @@ def search_command(args: dict, ctx: Optional[dict] = None) -> str:
     # directory names. A worktree path containing a space would split into two argv elements
     # and the law would have judged a command that is not the one executed (GPT review of
     # #83). Fleet paths are simple today; the invariant must not depend on that staying true.
-    return (f"git --no-pager -C {shlex.quote(worktree)} grep -n -I {search_mode(pattern)} --max-count={n} "
-            f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
+    mode, ran, _ = search_regex(pattern)
+    return (f"git --no-pager -C {shlex.quote(worktree)} grep -n -I {mode} --max-count={n} "
+            f"-e {shlex.quote(ran)} -- {shlex.quote(target)}")
 
 
 def reach_search_target(cmd: str) -> Optional[str]:
@@ -1154,8 +1327,9 @@ def _reach_search_command(pattern: str, n: int, path: str, ctx: dict) -> str:
     if not os.path.exists(target):
         raise ValueError(f"search 'path' {path!r} does not exist, so there is nothing there to "
                          f"search. Name a folder or file that exists, by its absolute path.")
-    return (f"grep -r -n -I {search_mode(pattern)} -s --max-count={n} --exclude-dir=.git "
-            f"-e {shlex.quote(pattern)} -- {shlex.quote(target)}")
+    mode, ran, _ = search_regex(pattern)
+    return (f"grep -r -n -I {mode} -s --max-count={n} --exclude-dir=.git "
+            f"-e {shlex.quote(ran)} -- {shlex.quote(target)}")
 
 
 

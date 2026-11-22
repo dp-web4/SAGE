@@ -337,9 +337,10 @@ def _literal_key(pattern: str) -> dict:
     """The receipt's word on HOW the pattern was matched, when it was not a regex: a search
     the being sent as a regex but that ran as literal text must say so, or a hit or an absence
     would be read as an answer to a question it did not ask (see search_mode)."""
-    from sage.gateway.being_gate_client import search_mode
-    if search_mode(pattern) != "-F":
-        return {}
+    from sage.gateway.being_gate_client import search_regex
+    mode, _, note = search_regex(pattern)
+    if mode != "-F":
+        return {"translated": note} if note else {}
     return {"literal": (f"{pattern!r} is not a valid regex, so it was matched as literal text, "
                         f"exactly as written; to use regex operators, write a valid pattern")}
 
