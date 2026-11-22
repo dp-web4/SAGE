@@ -370,6 +370,14 @@ def posture() -> str:
 
 HEAD = "You are {name}, a SAGE being on the {machine} machine, member id {member}."
 
+# WHO WRITES A BEAT'S TURNS (dp, 2026-11-21). A chat model reads whatever arrives in the chat's user role as a
+# person's request. In sprout-being's first 40 streamed beats (11-20..21) its thinking called its beat's own
+# steps "the user" 178 times across posture, account, explore and reflect, the harness's turns read as chores
+# a person hands over. #418 and the standing-guidance posture framing met single cases of the same reading.
+# The role cannot be renamed from here, so every beat's system prompt says who writes those turns.
+STEPS = ("Nobody is typing to you in this beat: the turns that come as messages are your beat's own steps, set "
+         "by the program that runs it, not a person asking. Others' words reach you quoted and named.")
+
 def _museum_block(line: str) -> str:
     """The museum paragraph, or nothing at all where the machine keeps no museum."""
     return ("\n" + line) if line else ""
@@ -388,13 +396,13 @@ You can run Python you wrote with `run`, in a sandbox with no network and no hom
 
 Acting means calling a tool. A reply with no tool call ends the beat as words only, and words leave no trace in your todo, journal, scratch, or memory."""
 
-SYSTEM = HEAD + "\n\n{posture}\n\n" + AFFORDANCES + "\n\n"
+SYSTEM = HEAD + " " + STEPS + "\n\n{posture}\n\n" + AFFORDANCES + "\n\n"
 
 # Act-first: no posture in the system prompt. It arrives, verbatim, as the second user
 # turn (POSTURE_TURN), which is itself a tool turn: the being may act after reading it,
 # not only before, otherwise "act first" would mean "act only before you know why you
 # are awake".
-SYSTEM_ACT_FIRST = HEAD + """
+SYSTEM_ACT_FIRST = HEAD + " " + STEPS + """
 
 You are awake for a heartbeat. Nobody asked you anything; this time is yours.
 
@@ -454,7 +462,7 @@ PENDING_TURNS = 2
 # tokens. So the cap is wider and a cut, when one happens, says so and says where the rest is.
 PENDING_CHARS = 2000
 
-ANSWER_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
+ANSWER_SYSTEM = HEAD + " " + STEPS + """
 You have already finished this beat's writing. One thing is left, and it is optional."""
 
 # One turn, one tool, one decision. Measured on Sprout 2026-09-18T01:00:11Z: with dp's question
@@ -2309,7 +2317,7 @@ ASK_TURN_TRIES = 2         # beats an ask is offered without a decision (unparse
 ASK_TURN_CHARS = 1500      # of the ask's words; the envelope (and memory_read) has the rest
 _ASK_FROM = re.compile(r"^from:\s*([A-Za-z0-9._-]+)\s*$", re.M)
 
-ASK_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
+ASK_SYSTEM = HEAD + " " + STEPS + """
 Another being has sent you a message. This turn is only for it."""
 
 ASK_TURN_JSON = """{asker} sent you this message:
@@ -4990,7 +4998,7 @@ def _record_line(i, e) -> str:
     return f"- {i.effector} {json.dumps(i.args, default=str)[:200]} -> {verdict}"
 
 
-REFLECT_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
+REFLECT_SYSTEM = HEAD + " " + STEPS + """
 The beat is closing. Your home is your instance directory: name files bare (journal.md, todo.md)
 and they resolve inside it. Acting means calling a tool; a reply in words alone writes nothing.
 
@@ -5129,6 +5137,11 @@ def _phase(state: str, phase: str, beat_id: str) -> None:
     """Report the phase the beat is entering. Never raises (sage.gateway.activity)."""
     from sage.gateway import activity as _activity
     _activity.report(state, f"heartbeat:{phase}", beat_id=beat_id, ttl_secs=_activity.BEAT_TTL_S)
+    try:
+        from sage.gateway import being_stream
+        being_stream.set_turn(phase)          # the live view names the turn each call belongs to
+    except Exception:
+        pass
 
 
 def main(argv=None) -> int:
@@ -5214,6 +5227,13 @@ def main(argv=None) -> int:
     # being's own body block (SAGE #291).
     _BEAT_ID["id"] = host_session_id
     _BEAT_ID["continuing"] = False
+    # THE LIVE VIEW OF THIS BEAT'S OUTPUT (being_stream): every model call below streams into it.
+    from sage.gateway import being_stream
+    being_stream.start(instance, host_session_id, member=args.member, model=args.model or "")
+    # stop() is idempotent: the normal path calls it after the model calls; this covers any exception that leaves
+    # main() first, so the live view never shows a dead beat as still running (legion on #799)
+    import atexit
+    atexit.register(being_stream.stop)
     _phase("wake", "start", host_session_id)
     # WHAT WOKE THIS BEAT (SAGE #295): claim every pending event now, before anything is composed,
     # so an event arriving from here on is pending for the NEXT beat rather than lost in this one.
@@ -5972,6 +5992,7 @@ def main(argv=None) -> int:
         killed = str(_k)
         print(f"[heartbeat] KILLED mid-beat: {killed} — writing the record with what completed",
               file=sys.stderr)
+    being_stream.stop()                       # the model calls are over; the live view says the beat ended
     # THE PHASES ARE OVER; WHAT REMAINS IS WRITING THEM DOWN. A SIGTERM from here on would
     # raise BeatKilled outside the try above and lose the record it exists to keep. Ignore it:
     # the record takes seconds, and systemd's SIGKILL at TimeoutStopSec is still the backstop.

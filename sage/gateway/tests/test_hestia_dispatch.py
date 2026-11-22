@@ -2833,6 +2833,53 @@ def test_request_scope_for_a_path_that_does_not_exist_is_not_there_and_files_not
     assert sent["path"] == missing and sent["create"] is True
 
 
+def test_request_scope_for_a_file_its_runs_cannot_write_says_a_grant_does_not_change_that(tmp_path, monkeypatch):
+    """A grant is the gate's reach, not the file's mode: the receipt says so, and the request is still filed."""
+    if os.geteuid() == 0:
+        pytest.skip("root writes any file")
+    locked = tmp_path / "accounts"
+    locked.write_text("x\n")
+    locked.chmod(0o444)
+    d, _ = _mdisp()
+    # its own file, read-only: the mode is its owner's to change, so no 'still fails' claim
+    env = d(BeingIntent("request_scope", {"path": str(locked), "reason": "to add a line"}), _ALLOW)
+    assert env.ok and env.result["status"] == "pending", env
+    fs = env.result["file_system"]
+    assert "the user your runs run as" in fs and "Its owner may change its mode" in fs, fs
+    assert "still fails" not in fs, fs
+    assert [a for n, a in FakeMcp.calls if n == "hestia_request_scope"], "still filed: a human decides"
+    # another user's file (CI cannot make a root-owned one: the runs are made to run as someone else)
+    real = os.geteuid()
+    monkeypatch.setattr(os, "geteuid", lambda: real + 1)
+    env = d(BeingIntent("request_scope", {"path": str(locked), "reason": "to add a line"}), _ALLOW)
+    fs = env.result["file_system"]
+    assert "does not let" in fs and "still fails with 'Permission denied'" in fs, fs
+    assert "a grant would let you read it" in fs, fs
+    locked.chmod(0o000)
+    env = d(BeingIntent("request_scope", {"path": str(locked), "reason": "to add a line"}), _ALLOW)
+    assert "cannot read it either" in env.result["file_system"], env
+    # a directory: what fails is creating or removing entries in it
+    shut = tmp_path / "etc"
+    shut.mkdir()
+    shut.chmod(0o555)
+    env = d(BeingIntent("request_scope", {"path": str(shut), "reason": "to add a file"}), _ALLOW)
+    assert "create or remove entries in it" in env.result["file_system"], env
+    shut.chmod(0o755)
+    # a read-only mount: the error is the mount's, whoever owns the file
+    locked.chmod(0o444)
+    ro = type("vfs", (), {"f_flag": os.ST_RDONLY})()
+    monkeypatch.setattr(os, "statvfs", lambda p: ro)
+    env = d(BeingIntent("request_scope", {"path": str(locked), "reason": "to add a line"}), _ALLOW)
+    fs = env.result["file_system"]
+    assert "'Read-only file system'" in fs and "Permission denied" not in fs, fs
+    monkeypatch.undo()
+    # a file its runs can write gets no such line
+    open_ = tmp_path / "notes.md"
+    open_.write_text("x\n")
+    env = d(BeingIntent("request_scope", {"path": str(open_), "reason": "to add a line"}), _ALLOW)
+    assert "file_system" not in env.result, env
+
+
 class _ExpiringMembot(FakeMembot):
     """membot after SESSION_TIMEOUT_SEC idle: the MCP client still works, but its session has no
     cartridge, so the next store/search answers "No cartridge mounted" until something remounts."""

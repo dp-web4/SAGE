@@ -1555,6 +1555,95 @@ def run_budget_s(now: Optional[float] = None) -> tuple:
     return int(left), "the time left in this beat"
 
 
+def host_user_site(minor: Optional[int] = None) -> str:
+    """The seat user's Python user site for python3.<minor> (default: this process's minor), e.g.
+    ~/.local/lib/python3.12/site-packages, realpath'd, or "" when there is none.
+
+    THE BOX READS IT, READ-ONLY (dp, 2026-11-16, SAGE #701 option 2). `run` and `request_run`
+    imported different packages: on cbp, sklearn and torch live only in the user site, so the seat's
+    host run imported them and the box could not. The being saw the box's answer every beat and
+    spent two days filing installer scripts and scope asks for ~/.local/bin to close a gap no
+    install could close. Binding the user site read-only into the box makes the two places agree,
+    so the cheap path (run) and the correct path import the same packages.
+
+    WHAT IT ADDS TO THE BOX (Nova, #741 review): package code AND package data, read-only. A .pth
+    file there runs its `import` lines when the box's python starts, so this is a wider code
+    surface than the base image, not only more module names. It runs as the box's code does:
+    no network, no home, no write outside the box's tmpfs and the being's grants
+    (test_run_user_site_pth.py measures that from inside bubblewrap). Anything secret a package
+    keeps beside its code is readable by a run; a seat that keeps such a package in its user
+    site should set SAGE_RUN_USER_SITE=0, which turns the bind off."""
+    import os
+    import site
+    import sys
+    if os.environ.get("SAGE_RUN_USER_SITE", "1") == "0":
+        return ""
+    n = sys.version_info.minor if minor is None else minor
+    try:
+        base = site.getuserbase()
+    except Exception:
+        return ""
+    if not base:
+        return ""
+    p = os.path.realpath(os.path.join(base, "lib", f"python3.{n}", "site-packages"))
+    return p if os.path.isdir(p) else ""
+
+
+_BOX_MINOR: dict = {}
+
+
+def box_python_minor(interp: Optional[str] = None) -> Optional[int]:
+    """The minor version of the python the box runs ({interp}/bin/python3), asked of that binary
+    once per process; None when it cannot say.
+
+    WHY ASK IT (Nova, #741 review): the box runs {interp}/bin/python3, and interp comes from this
+    process's sys.executable. Those are the same python on cbp (/usr/bin/python3 -> 3.12), but a
+    gateway started as python3.11 on a host whose python3 is 3.12 would bind 3.11's user site at
+    the 3.11 path, which the box's 3.12 never reads: no error, and run and request_run disagree
+    again. Asking the binary makes the bind match the interpreter that reads it."""
+    import os
+    import subprocess
+    import sys
+    interp = interp or os.path.dirname(os.path.dirname(sys.executable))
+    if interp not in _BOX_MINOR:
+        try:
+            out = subprocess.run([f"{interp}/bin/python3", "-I", "-c",
+                                  "import sys; print(sys.version_info[0], sys.version_info[1])"],
+                                 capture_output=True, text=True, timeout=20,
+                                 stdin=subprocess.DEVNULL)
+            major, minor = (int(x) for x in out.stdout.split())
+            _BOX_MINOR[interp] = minor if major == 3 and out.returncode == 0 else None
+        except Exception:
+            _BOX_MINOR[interp] = None
+    return _BOX_MINOR[interp]
+
+
+def box_user_site(interp_minor: Optional[int] = None) -> str:
+    """Where Python inside the box looks for its user site: HOME is /tmp there, so
+    /tmp/.local/lib/python3.N/site-packages. Binding the host's user site AT THIS PATH (not at its
+    own path plus PYTHONPATH) lets site.py treat it as the user site it is, .pth files included."""
+    import sys
+    n = sys.version_info.minor if interp_minor is None else interp_minor
+    return f"/tmp/.local/lib/python3.{n}/site-packages"
+
+
+def user_site_bind(interp: Optional[str] = None) -> str:
+    """The bwrap fragment that shows the host user site to the box, or "" when there is none.
+    Both ends use the box interpreter's own minor version, so the directory bound is the one that
+    interpreter's site.py reads and its packages were built for. Must come AFTER `--tmpfs /tmp`
+    (a later mount masks an earlier one)."""
+    import shlex
+    if os.environ.get("SAGE_RUN_USER_SITE", "1") == "0":
+        return ""
+    minor = box_python_minor(interp)
+    if minor is None:
+        return ""
+    p = host_user_site(minor)
+    if not p:
+        return ""
+    return f" --ro-bind {shlex.quote(p)} {shlex.quote(box_user_site(minor))}"
+
+
 def run_mem_cap_bytes() -> int:
     import os
     try:
@@ -1989,6 +2078,8 @@ def run_command(args: dict, ctx: Optional[dict] = None) -> str:
         f"{RUN_ETC_BINDS}"
         f" --ro-bind {interp} {interp}"
         f" --proc /proc --dev /dev --size {RUN_TMP_BYTES} --tmpfs /tmp"
+        # the host user site, read-only, where the box's python looks for it (SAGE #701)
+        f"{user_site_bind(interp)}"
         f"{wt_bind}"
         f"{grant_binds}"
         # Writable in there: these two size-limited tmpfs, and what the being's grants reach.

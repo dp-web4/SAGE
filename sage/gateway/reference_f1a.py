@@ -29,6 +29,7 @@ import posixpath
 import re
 import textwrap
 import contextlib
+import glob
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Optional
@@ -53,6 +54,9 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 # settled_seat_notes.jsonl is the seat's later word beside the being's settled entries (being_settled.SEAT_NOTES):
 # a being that could write it could make its seat appear to have said something, or erase that it did.
 SEAT_OWNED = ("entrustment.md", "settled_seat_notes.jsonl")
+# output_stream.jsonl (and its one older copy) is the harness's live record of what the model produced (being_stream):
+# what dp and the seat watch the being say as it says it, so it is the harness's to write, not the being's.
+STREAM_OWNED = ("output_stream.jsonl", "output_stream.jsonl.1")
 # GOVERNANCE RECORDS IN THE HOME (SAGE #544). The being's home also holds the files that say who
 # it is to the society, and no being verb may write them:
 #   identity.json         the raising record: `identity.machine` picks the seat that arbitrates its
@@ -1214,6 +1218,74 @@ def _retired_header(stamp: datetime, reason: str, suffix: str = ".md") -> str:
             + _RETIRED_KEPT)
 
 
+# BOTH HEADER FORMS (Nova HOLD on #727): since #726 a retired .py/.sh/... copy starts with
+# `# RETIRED ...` (comments, so it still parses) and a .md or record with `> RETIRED ...`. A reader
+# that knew only `>` found the copy of a retired script but lost its time and reason.
+_RETIRED_LINE = re.compile(r"[#>] RETIRED (\S+ \S+?)Z? with retire_note\. No longer current: (.*)")
+
+
+def retired_copy_note(p: Path, home: Path) -> str:
+    """One sentence for an absence: the missing file was retired, by name, when, and why.
+
+    A MISS ON A NAME IT RETIRED ITSELF READ AS "NEVER EXISTED". Measured 2026-11-15 on
+    cbp-being, scratch/verify-xor-numpy-only.py: retired at 19:06Z with a correct reason; at
+    19:12Z `run` said "no such file", so it wrote the script again under the same name, edited
+    it for 20 minutes and retired it a second time at 19:35Z citing the seat's review; at 19:57Z
+    retire_note said "nothing to retire"; at 20:03Z memory_edit said "does not exist", and it
+    stored a memory and a journal entry saying the script had never been created and had to be
+    written or found, and told the seat the file was missing. Both retired copies sat
+    beside the name the whole time. Every absence said only "absent"; none said "you retired
+    it". This names the newest copy and the reason it was given, so the next step is the being's
+    own decision recalled, not a file rewritten from memory.
+
+    CASE 2, same day (scratch/xor-mlp-4units.py): retired whole at 21:53Z (it meant to drop lines
+    27-119); at 22:00Z memory_edit on the name said "does not exist ... memory_write creates a
+    file", and the same beat wrote a different 28-line script there from memory
+    (make_classification, not XOR; a "4-unit MLP" built as LogisticRegression, the baseline's own
+    model), then asked the seat to run it to "confirm ~96.5%". It printed 0.8800 twice. The real
+    script sat in xor-mlp-4units.retired-2026-11-15-5.py, and this fix was open but held: its
+    header reader knew only the `>` form, and that copy's header is `#`.
+
+    NO ACTOR IS CLAIMED (Nova HOLD on #727). A copy in this home says retire_note made it; it does
+    not say which caller did. The sentence names the verb and the copy, not "you".
+
+    Existence only, inside the same directory the being named: reads one header line of a
+    regular file in its own home and nothing else. A symlinked copy is not evidence (it could
+    name any file), so it is skipped and never opened; an unreadable copy is named without a
+    time or reason. Empty string when there is no retired copy."""
+    try:
+        copies = [c for c in p.parent.glob(f"{glob.escape(p.stem)}.retired-*{glob.escape(p.suffix)}")
+                  if not c.is_symlink() and c.is_file()]
+        copies.sort(key=lambda c: c.lstat().st_mtime)
+    except OSError:
+        return ""
+    if not copies:
+        return ""
+    newest = copies[-1]
+    try:
+        rel = str(newest.relative_to(home))
+    except ValueError:
+        rel = newest.name
+    when, why = "", ""
+    try:
+        fd = os.open(newest, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(fd, errors="replace") as f:
+            m = _RETIRED_LINE.match(f.readline().rstrip("\n"))
+        if m:
+            when, why = m.group(1), m.group(2).strip()
+    except OSError:
+        pass
+    if len(why) > 240:
+        why = why[:240].rstrip() + "..."
+    count = (f" ({len(copies)} retired copies of this name are here; this is the newest)"
+             if len(copies) > 1 else "")
+    said = f" The reason in its header: \"{why}\"." if why else ""
+    at = f" at {when} UTC" if when else ""
+    return (f" This name was retired{at} with retire_note, which moves the whole file: it is now "
+            f"'{rel}'{count}.{said} Nothing was lost. To look at it, memory_read '{rel}'. "
+            f"Writing this name again starts a new file; it does not bring the retired one back.")
+
+
 def _write_atomic(p: Path, text: str) -> None:
     """Write text to p whole or not at all: a tmp beside it, synced, then os.replace."""
     tmp = p.with_name(f".{p.name}.tmp")
@@ -1412,6 +1484,11 @@ class ReferenceF1aDispatcher:
                     f"{p.name} is changed only with settle, which keeps every earlier answer and "
                     "your reason in settled_log.jsonl. A direct write would leave no record of what "
                     "it replaced. Nothing was changed")
+            if _home and p.name in STREAM_OWNED:
+                raise ValueError(
+                    f"{p.name} is yours to read and not to edit: the harness writes into it what your "
+                    "model calls produce, as they produce it, and others watch it to see you working. "
+                    "Nothing was changed")
             if _home and p.name in SEAT_OWNED:
                 raise ValueError(
                     f"{p.name} is yours to read and not to edit: it is what you were entrusted "
@@ -1795,8 +1872,9 @@ class ReferenceF1aDispatcher:
             return ResultEnvelope(
                 ok=True,
                 result=(f"[no such path: '{shown}' does not exist. This is not an empty file: there is "
-                        f"nothing here to read, so it is no evidence about anything else. "
-                        f"memory_write creates a file inside your home.]"),
+                        f"nothing here to read, so it is no evidence about anything else."
+                        + (retired_copy_note(p, self.memory_root)
+                           or " memory_write creates a file inside your home.") + "]"),
                 witness_id=self._witness(f"memory_read {p.name} (does not exist)"))
         if p.is_dir():
             names = sorted(x.name + ("/" if x.is_dir() else "") for x in p.iterdir())
@@ -2150,7 +2228,8 @@ class ReferenceF1aDispatcher:
         if not p.exists():
             return ResultEnvelope(ok=False, error=(
                 f"nothing to edit: '{path}' does not exist. This is an absence, not a "
-                f"refusal." + (self._same_name_note(p, created=False) or
+                f"refusal." + ((retired_copy_note(p, self.memory_root)
+                                + self._same_name_note(p, created=False)) or
                                " memory_write creates a file; memory_edit changes one that is "
                                "there.")))
         if p.is_dir():
@@ -2539,7 +2618,13 @@ class ReferenceF1aDispatcher:
                 return ResultEnvelope(ok=False, error=f"no such note: '{raw}' does not exist, so there is nothing to retire")
             return ResultEnvelope(ok=True, result=f"{p.name} is already retired; nothing changed")
         if not p.exists():
-            return ResultEnvelope(ok=False, error=f"no such note: '{raw}' does not exist, so there is nothing to retire")
+            # A BARE "NOTHING TO RETIRE" READ AS "NEVER CREATED" (cbp-being 2026-11-15 19:57Z: a third
+            # retire of a name retired twice got this, and it concluded the file had never been
+            # made). Still not ok (Nova HOLD on #727: a matching name is not proof that THIS
+            # retire's intent was carried out), but the miss names the copy that is there.
+            return ResultEnvelope(ok=False, error=(
+                f"no such note: '{raw}' does not exist, so there is nothing to retire."
+                + retired_copy_note(p, self.memory_root)))
         return self._retire_locked(p, reason, record)
 
     def _top_level_retire_refusal(self, raw: str, p: Path) -> str:
@@ -2726,8 +2811,15 @@ class ReferenceF1aDispatcher:
         with open(p, "a") as f:     # under the home lock (see __call__)
             f.write(content + ("\n" if not content.endswith("\n") else ""))
         if not existed:
-            result = (f"created {p.name} with {len(content)} chars"
-                      + self._same_name_note(p, created=True))
+            result = f"created {p.name} with {len(content)} chars"
+            gone = retired_copy_note(p, self.memory_root)
+            if gone:
+                # A WRITE UNDER A RETIRED NAME IS A NEW FILE (case 2 above: the 28-line rewrite's
+                # receipt said only "created", so nothing marked it as a different script).
+                result += (". This is a NEW file under a name that was retired, not the retired "
+                           "one brought back." + gone.split(" Nothing was lost.", 1)[0])
+            # ...and a same-name file one directory away is a separate fact (#739)
+            result += self._same_name_note(p, created=True)
         else:
             result = (f"appended {len(content)} chars to the END of {p.name}, below the {before} "
                       f"lines already there. memory_write only adds; it never replaces or edits a line. "

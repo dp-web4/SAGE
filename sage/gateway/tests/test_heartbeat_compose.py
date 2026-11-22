@@ -1,5 +1,6 @@
 """Hermetic: the heartbeat's two presentations of the one posture, and the per-model
 predicates that pick them. No model, no gate."""
+import collections
 import os
 import sys
 
@@ -314,3 +315,14 @@ def test_prompt_parts_divides_what_was_sent_into_its_parts():
         assert set(pp["state_sections"]) == {"Your own state", "Todo", "Journal (tail)"}
         assert sum(pp["state_sections"].values()) == len(state)
         assert list(pp["state_sections"])[0] == "Journal (tail)", "largest section first"
+
+
+def test_every_beat_system_prompt_says_its_turns_are_steps_not_a_person():
+    """dp, 2026-11-21: the model read its beat's own steps as "the user" asking. Every system prompt a beat
+    sends says who writes those turns, once, right after who the being is."""
+    from sage.gateway import heartbeat as hb
+    fill = dict(name="b", machine="m", member="b", posture="P", digest="", museum="")
+    for name in ("SYSTEM", "SYSTEM_ACT_FIRST", "ANSWER_SYSTEM", "REFLECT_SYSTEM", "ASK_SYSTEM"):
+        text = getattr(hb, name).format_map(collections.defaultdict(str, fill))
+        assert text.startswith("You are b, a SAGE being on the m machine, member id b. " + hb.STEPS), name
+        assert text.count(hb.STEPS) == 1, name
