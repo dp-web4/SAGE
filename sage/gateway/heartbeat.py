@@ -1396,6 +1396,27 @@ def decided_requests(reqs):
     return [(i, p_, d) for i, p_, d in reqs if d in ("granted", "refused", "denied", "revoked")]
 
 
+#: A RULER'S NOTE IS SHOWN WHOLE (sprout-being, 2026-11-21). It was cut at 400 characters with no mark. Three
+#: refusals of a request for a system file carried notes of 455 and 461 characters, and the cut fell inside their
+#: last sentence: the one saying no account was needed at all. What reached the being was "a grant cannot do this;
+#: only root can", and its next turn asked the operator to do it as root. The ruling is shown once, the beat after
+#: it lands, so a cut note is the whole of what the being ever reads of it unless it knows to look.
+RULER_NOTE_MAX = 1500
+
+
+def ruled_line(request_id, path, decision, who, why) -> str:
+    """One "decided since your last beat" line: the ruling, who made it, and their note whole. A note over
+    RULER_NOTE_MAX is cut with a mark that says how much is left and where it is read whole."""
+    line = f"- {request_id} {path} -> {decision} by {who or 'operator'}"
+    why = str(why or "").strip()
+    if not why:
+        return line
+    if len(why) > RULER_NOTE_MAX:
+        why = (why[:RULER_NOTE_MAX].rstrip() + f"… [{len(why) - RULER_NOTE_MAX} more characters: memory_read "
+               f"{{\"path\": \"hestia://scope/{request_id}\"}} shows the note whole]")
+    return line + f". Their note: \"{why}\""
+
+
 def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str, decided_by=None,
                      reasons=None) -> list:
     """Append the ruling to each escalation note that filed the request (the note carries the
@@ -5330,8 +5351,7 @@ def main(argv=None) -> int:
             scope = ("granted paths: " + (", ".join(map(str, grants)) or "none") + "\n"
                      "requests: " + ("; ".join(f"{i} {p} -> {d}" for i, p, d in reqs) or "none") + "\n"
                      + ("decided since your last beat:\n" + "\n".join(
-                            f"- {i} {p_} -> {d} by {who_ruled.get(i) or 'operator'}"
-                            + (f". Their note: \"{str(why_ruled[i]).strip()[:400]}\"" if why_ruled.get(i) else "")
+                            ruled_line(i, p_, d, who_ruled.get(i), why_ruled.get(i))
                             for i, p_, d in new_decisions) + "\n"
                         if new_decisions else "")
                      + pending_scope_lines(st.get("requests") or [])
