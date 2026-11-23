@@ -73,6 +73,12 @@ def test_the_act_that_drops_a_note_quotes_it_once(tmp_path):
     ok, msg, _ = st.settle(tmp_path / "b", {"id": "s1", "question": FALSE_WORLD["question"],
                                             "answer": "the operator's account"}, now=60)
     assert ok and "now reads" in msg and SAYS in msg, "settled again, the note it answered is quoted too"
+    seq3 = _home(tmp_path / "c")
+    for i in range(st.SEAT_NOTES_SHOWN + 2):
+        st.seat_note(tmp_path / "c", "s1", SEAT, seq3, f"note {i}")
+    ok, msg, _ = st.settle(tmp_path / "c", {"id": "s1", "reopen": "true"}, now=60)
+    assert "note 0" not in msg and f"note {st.SEAT_NOTES_SHOWN + 1}" in msg, msg     # the newest are quoted
+    assert "(2 earlier not quoted)" in msg, msg                                       # and the rest are counted
 
 
 def test_without_a_note_nothing_is_added(tmp_path):

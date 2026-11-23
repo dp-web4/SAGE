@@ -212,7 +212,9 @@ def _dropped_notes(instance, target: dict) -> str:
         return ""
     said = "; ".join(f"{n['by']} at seq {n['seq']} ({_said_day(n)}): {_flat(n['says'])}"
                      for n in notes[-SEAT_NOTES_SHOWN:])
-    return (f" Your seat's note{'s' if len(notes) > 1 else ''} on {target['id']}, not shown from now on: {said}")
+    # the newest are quoted; the rest are counted, so the quoted ones are not read as all (legion on #817)
+    more = (f" ({len(notes) - SEAT_NOTES_SHOWN} earlier not quoted)" if len(notes) > SEAT_NOTES_SHOWN else "")
+    return (f" Your seat's note{'s' if len(notes) > 1 else ''} on {target['id']}, not shown from now on: {said}{more}")
 
 
 def seat_note(instance, entry_id: str, by: str, seq: int, says: str, conv_id: Optional[str] = None,
