@@ -655,3 +655,31 @@ def test_the_plural_is_a_process_number_too(tmp_path):
     ok, msg, _ = _s(tmp_path, question="Is the test daemon alive?", answer="Yes, PIDs 1 and 2 confirmed.")
     assert "This answer names a process number." in msg, msg
     assert "(s1 names a process number." in st.render(tmp_path)
+
+
+def test_a_replace_quotes_the_sentences_the_new_answer_no_longer_says(tmp_path):
+    q = "How should a failed test be reported?"
+    _s(tmp_path, question=q, answer="Say which step failed and what it printed. Never write that something "
+                                    "worked when nobody watched it work.")
+    ok, msg, _ = _s(tmp_path, id="s1", question=q, answer="Say which step failed and what it printed, plainly.")
+    assert ok and 'No longer in the answer: "Never write that something worked when nobody watched it work."' in msg, msg
+    assert msg.index("No longer") < msg.index("earlier answer is kept")
+    assert '."."' not in msg and '.".' not in msg, msg                          # one period, inside the quote
+
+
+def test_other_forms_of_the_same_words_are_a_rewording_not_a_loss(tmp_path):
+    q = "How should a failed test be reported?"
+    _s(tmp_path, question=q, answer="Reports must name the failing step.")
+    ok, msg, _ = _s(tmp_path, id="s1", question=q, answer="Report the failed step by name.")
+    assert ok and "No longer in the answer" not in msg, msg               # legion's probe on #821
+
+
+def test_a_rewording_that_keeps_every_sentence_quotes_nothing(tmp_path):
+    q = "How should a failed test be reported?"
+    _s(tmp_path, question=q, answer="Say which step failed and what it printed. Never claim untested work worked.")
+    ok, msg, _ = _s(tmp_path, id="s1", question=q,
+                    answer="Name the step that failed and what it printed; never claim untested work worked.")
+    assert ok and "No longer in the answer" not in msg, msg
+    ok, msg, _ = _s(tmp_path, id="s1", question=q, answer="It failed. Name the step that failed and what it "
+                    "printed; never claim untested work worked. Fixed now.")
+    assert "No longer in the answer" not in msg, msg     # short sentences are not judged, added ones are not losses
