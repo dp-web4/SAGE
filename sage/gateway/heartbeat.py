@@ -1404,18 +1404,23 @@ def decided_requests(reqs):
 RULER_NOTE_MAX = 1500
 
 
+def quoted_whole(words, pointer: str) -> str:
+    """A ruler's words, quoted whole. Over RULER_NOTE_MAX they are cut with a mark that says how much is
+    left and which pointer reads them whole. The mark sits outside the quote: it is the harness speaking,
+    not the ruler."""
+    words = str(words or "").strip()
+    if len(words) <= RULER_NOTE_MAX:
+        return f"\"{words}\""
+    return (f"\"{words[:RULER_NOTE_MAX].rstrip()}…\" [{len(words) - RULER_NOTE_MAX} more characters: "
+            f"memory_read {{\"path\": \"{pointer}\"}} shows them whole]")
+
+
 def ruled_line(request_id, path, decision, who, why) -> str:
-    """One "decided since your last beat" line: the ruling, who made it, and their note whole. A note over
-    RULER_NOTE_MAX is cut with a mark that says how much is left and where it is read whole."""
+    """One "decided since your last beat" line: the ruling, who made it, and their note whole."""
     line = f"- {request_id} {path} -> {decision} by {who or 'operator'}"
-    why = str(why or "").strip()
-    if not why:
+    if not str(why or "").strip():
         return line
-    if len(why) <= RULER_NOTE_MAX:
-        return line + f". Their note: \"{why}\""
-    # The mark sits outside the quote: it is the harness speaking, not the ruler.
-    return (line + f". Their note: \"{why[:RULER_NOTE_MAX].rstrip()}…\" [{len(why) - RULER_NOTE_MAX} more "
-            f"characters: memory_read {{\"path\": \"hestia://scope/{request_id}\"}} shows the note whole]")
+    return line + ". Their note: " + quoted_whole(why, f"hestia://scope/{request_id}")
 
 
 def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str, decided_by=None,
@@ -2109,9 +2114,10 @@ def appeals_block(disp, last: dict) -> tuple:
     parts = [f"{len(ruled)} ruled, {len(open_)} open (newest {len(rows)} shown)."]
     for a in fresh:
         r = a.get("ruling") or {}
+        reason = quoted_whole(r.get("rationale"), f"hestia://appeal/{a.get('deny_hash')}")
         parts.append(f"- RULED since your last beat — appeal about deny {str(a.get('deny_hash'))[:12]}…: "
                      f"{r.get('verdict')}, by {r.get('adjudicator')} at {str(r.get('ruled_at'))[:16]}. "
-                     f"Their reason: \"{str(r.get('rationale') or '').strip()[:700]}\"")
+                     f"Their reason: {reason}")
     if ruled and not fresh:
         parts.append("No new rulings since your last beat; your earlier rulings still stand "
                      "(memory_read hestia://appeal/<deny hash> shows any one of them in full).")
