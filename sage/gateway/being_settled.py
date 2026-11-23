@@ -199,6 +199,30 @@ def seat_notes(instance, entries: List[dict]) -> Dict[str, List[dict]]:
     return out
 
 
+#: A sentence of the old answer counts as gone from the new one when fewer than half its words of four letters or more
+#: are still there; sentences with fewer than three such words are not judged.
+_GONE_SHARE = 0.5
+_WORD = re.compile(r"[^\W_]+(?:'[^\W_]+)*")
+
+
+def _words(s: str) -> set:
+    return {w for w in _WORD.findall(s.casefold()) if len(w) > 3}
+
+
+def _dropped_sentences(old: str, new: str) -> str:
+    """A REPLACE SAYS WHAT IT TOOK OUT (sprout-being, 2026-11-23). An answer about reporting honestly was reworded
+    twice in five minutes; the second rewording, with no reason given, left out the sentence naming the one thing to
+    avoid. The receipt said only what the entry now read, so the loss went by unseen. Measured over its 52 replaces
+    since 10-27: 29 gave no reason and 36 left out a whole sentence, some of them false facts rightly dropped. This
+    judges none of them; it quotes what the new answer no longer says, once, where the change is made."""
+    kept = _words(new)
+    gone = [s for s in re.split(r"(?<=[.!?])\s+", str(old or "").strip())
+            if len(_words(s)) >= 3 and len(_words(s) & kept) / len(_words(s)) < _GONE_SHARE]
+    if not gone:
+        return ""
+    return (" No longer in the answer: " + " ".join(f'"{_flat(s)}"' for s in gone) + ".")
+
+
 def _dropped_notes(instance, target: dict) -> str:
     """The seat's notes on an entry that is being reopened or settled again, which stop being shown from now.
 
@@ -400,7 +424,8 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
         entries = [e for e in entries if e is not target] + [new]
         return _commit(instance, entries, nxt, {"op": "replace", "id": new["id"], "from": target, "to": new,
                                                 "why": why}, now,
-                       f"{new['id']} now reads: {_copyable(question)} -> {answer[:200]!r}. The earlier answer is "
+                       f"{new['id']} now reads: {_copyable(question)} -> {answer[:200]!r}."
+                       + _dropped_sentences(target.get("answer"), answer) + " The earlier answer is "
                        "kept in settled_log.jsonl. It is shown to you at the start of every beat." + dropped)
     close = _close_to(entries, question)
     if len(entries) >= MAX_ENTRIES:
