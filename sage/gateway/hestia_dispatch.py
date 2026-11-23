@@ -647,6 +647,8 @@ class HestiaF1aDispatcher:
     # `hestia_open_appeals` does not help: by construction it lists only UNRULED appeals, so a
     # ruling is the one thing it cannot show. So the pointer is resolved here, at read time.
     _POINTER = re.compile(r"^hestia://(appeal|scope|egress|escalation)/([^#\s]+)(?:#(.*))?$")
+    # hestia's tool_my_appeals clamps `limit` to 1..=100 (core/src/server/handler.rs).
+    _MY_APPEALS_LIMIT = 100
 
     def _resolve_pointer(self, raw: str) -> Optional[str]:
         """What a `hestia://` pointer from a disposition notice actually says, or None if this
@@ -659,11 +661,14 @@ class HestiaF1aDispatcher:
         # `hestia://appeal/<hash>/ruling`, and the suffix made the hash match nothing.
         ident = ident.split("/", 1)[0]
         if kind == "appeal":
-            # The exact, windowless lookup first (hestia #164). The 500-row scan below is only a
-            # fallback for a daemon that predates hestia_my_appeals.
-            mine = self._call("hestia_my_appeals", {"limit": 100})
+            # The exact lookup first (hestia #164). It has no recency window, but the daemon clamps
+            # `limit` to 100 and takes no hash filter or offset, so a member with more appeals
+            # than that sees only its newest 100 (#814). The 500-row scan below is the fallback
+            # for a daemon that predates hestia_my_appeals, and for a capped list with no match.
+            mine = self._call("hestia_my_appeals", {"limit": self._MY_APPEALS_LIMIT})
             if isinstance(mine, dict) and "_hestia_error" not in mine and "appeals" in mine:
-                for a in mine.get("appeals") or []:
+                rows = mine.get("appeals") or []
+                for a in rows:
                     if str(a.get("deny_hash", "")).startswith(ident) or str(a.get("appeal_entry", "")).startswith(ident):
                         r = a.get("ruling")
                         if not r:
@@ -679,10 +684,14 @@ class HestiaF1aDispatcher:
                                 f"What follows: a ruling is the end of that appeal. If you still need the "
                                 f"thing, the way forward is a scope request for it with a reason, or asking "
                                 f"in a conversation — not another appeal on the same deny.")
-                return (f"[you have no appeal about deny {ident[:12]}… on record. The lookup has no "
-                        f"recency window, so this is not an old appeal gone missing: none was filed "
-                        f"against that hash under your name.]")
-            hist = self._call("hestia_query_history", {"filter": {"limit": 500}})
+                if len(rows) < self._MY_APPEALS_LIMIT:
+                    return (f"[you have no appeal about deny {ident[:12]}… on record. The lookup "
+                            f"returned all {len(rows)} of your appeals, so this is not an old appeal "
+                            f"gone missing: none was filed against that hash under your name.]")
+                # A full page is the newest 100 only: an older appeal may still exist, so "none was
+                # filed" would be untrue. Fall through to the history scan, whose own miss text
+                # says its window is bounded.
+            hist =self._call("hestia_query_history", {"filter": {"limit": 500}})
             entries = hist.get("entries") or []
             for e in entries:
                 d = e.get("eventData") or e.get("event_data") or {}
