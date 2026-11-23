@@ -1472,10 +1472,30 @@ CPT = 2.9
 ANSWER_RESERVE_CAP = 6144
 
 
-def window_budget_chars(num_ctx: int, num_predict: int, slack: int = 512) -> int:
-    """How many prompt chars fit beside a p99 answer. One producer for both fitters."""
+def window_budget_chars(num_ctx: int, num_predict: int, slack: int = 512, cpt: float = None) -> int:
+    """How many prompt chars fit beside a p99 answer. One producer for both fitters.
+
+    `cpt` is the chars-per-token to budget with: the being's own measured ratio when the beat has one
+    (fit_cpt), else CPT. Measured on pub-being (SAGE #582, 2026-11-19): at the fixed 2.9 the budget was
+    ~37.3k chars against ~51.5k at its measured 3.999, so 112 of 112 beats showed conversations at the
+    sparsest rung while the server counted the seed ~4k tokens under the window."""
     reserve = min(num_predict, ANSWER_RESERVE_CAP)
-    return int(max(0, (num_ctx - reserve - slack)) * CPT)
+    return int(max(0, (num_ctx - reserve - slack)) * (cpt or CPT))
+
+
+def fit_cpt(cal) -> float:
+    """The ratio the part-wise fitters budget with this beat: the measured step-1 ratio only once it is
+    `measured` (MEASURED_CPT_MIN_SAMPLES of this being's own counts, margin applied); a declared prior, a
+    provisional ratio or a probe keeps CPT. Whatever the fitters admit, fit_seed_to_preflight still measures
+    the composed seed with the loop's own count and trims a seed the loop would refuse."""
+    try:
+        if cal.get("source") == "measured":
+            v = float(cal.get("used"))
+            if 1.5 <= v <= 8.0:
+                return v
+    except Exception:
+        pass
+    return CPT
 
 
 # What the beat shows of the conversations, from full to sparse: (turns per conversation,
@@ -1549,7 +1569,7 @@ def _schema_chars_fallback(offered) -> int:
     return max(_SCHEMA_CHARS_FLOOR, n * _SCHEMA_CHARS_PER_VERB)
 
 
-def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512):
+def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512, cpt: float = None):
     """`build(per_conv, turn_chars) -> state text`. Returns (text, rung, intervention).
 
     Steps down CONV_LADDER until other_chars + len(text) fits the window budget. The
@@ -1559,7 +1579,7 @@ def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512
     the beat then runs overcommitted and says so (config.context_overcommitted)."""
     if not isinstance(num_ctx, int) or not isinstance(num_predict, int):
         return build(*CONV_LADDER[0]), CONV_LADDER[0], None
-    budget = window_budget_chars(num_ctx, num_predict, slack)
+    budget = window_budget_chars(num_ctx, num_predict, slack, cpt)
     first = None
     for i, rung in enumerate(CONV_LADDER):
         text = build(*rung)
@@ -1580,7 +1600,8 @@ def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512
             }
 
 
-def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack: int = 512):
+def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack: int = 512,
+                  cpt: float = None):
     """Trim the seat-supplied blocks until prompt + num_predict fits inside num_ctx.
 
     WHY THIS EXISTS. A generate needs prompt + num_predict to fit in the window; when it
@@ -1617,7 +1638,7 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
     # leaving the digest something to say; reserving the full num_predict would floor the
     # digest every beat to buy room the model has never used.
     reserve = min(num_predict, ANSWER_RESERVE_CAP)
-    budget_chars = window_budget_chars(num_ctx, num_predict, slack)
+    budget_chars = window_budget_chars(num_ctx, num_predict, slack, cpt)
     order = ("digest", "recall")
     floors = FIT_FLOORS
     out, interventions = dict(blocks), []
@@ -5566,11 +5587,33 @@ def main(argv=None) -> int:
     # token cost is converted and charged here. Measured 2,042 tokens for two frames, about a
     # third of the working room at a 24k window — un-budgeted it pushes the beat over the wall
     # and the conversation block takes the blame.
-    _frame_chars = sum(int(FRAME_TOKENS * CPT) for _ in _frame_b64s)
+    from sage.gateway.being_tool_loop import uncounted_chars, preflight_tokens, preflight_cpt
+    from sage.gateway.being_tool_loop import _convo_chars as btl_convo_chars, WINDOW_SEND_MARGIN as _WSM
+    # the step-1 ratio, measured on this being's own recent beats when there are enough (#582 part 2)
+    try:
+        llm.preflight_cpt_measured = None      # the prior is the declared/default ratio, never last beat's
+    except Exception:
+        pass
+    _cpt_prior = preflight_cpt(llm)
+    _cpt_cal = measured_preflight_cpt(instance, args.model, prior=_cpt_prior)
+    try:
+        # set every beat, None included: a process that outlives a model switch must not keep the old ratio
+        llm.preflight_cpt_measured = _cpt_cal.get("value")
+    except Exception:
+        _cpt_cal["value"] = None
+    _cpt_cal["prior"] = _cpt_prior
+    _cpt_cal["used"] = preflight_cpt(llm)
+    _cpt_cal["source"] = "measured" if _cpt_cal.get("value") else "declared_or_default"
+    # THE PART-WISE FITTERS BUDGET AT THE SAME MEASURED RATIO (SAGE #582, pub-claude 2026-11-19): at the
+    # fixed CPT they stepped every beat to the sparsest conversation rung on a seed the server counted
+    # well under the window. Recorded as preflight_cpt.fit_cpt.
+    _fit_cpt = fit_cpt(_cpt_cal)
+    _cpt_cal["fit_cpt"] = _fit_cpt
+    _frame_chars = sum(int(FRAME_TOKENS * _fit_cpt) for _ in _frame_b64s)
     _other = (len(posture()) + len(inbox) + _schema_chars + 1200 + _frame_chars
               + 1200 + 400 + LOOP_GROWTH_CHARS)
     state_block, conv_rung, conv_intervention = fit_state(
-        _build_state, num_ctx=_num_ctx, num_predict=_num_predict, other_chars=_other)
+        _build_state, num_ctx=_num_ctx, num_predict=_num_predict, other_chars=_other, cpt=_fit_cpt)
     # entrustment_mode "daily": the showing is recorded from the state that is SENT, never from a
     # render (_build_state composes with mark_conversations=False, so nothing inside it records)
     try:
@@ -5583,7 +5626,7 @@ def main(argv=None) -> int:
     _fixed = len(posture()) + len(state_block) + len(inbox) + _schema_chars + 1200
     _blocks, _fit_iv = fit_to_window(num_ctx=_num_ctx, num_predict=_num_predict,
                                      fixed_chars=_fixed,
-                                     blocks={"digest": digest, "recall": recall})
+                                     blocks={"digest": digest, "recall": recall}, cpt=_fit_cpt)
     digest, recall = _blocks["digest"], _blocks["recall"]
 
     _harness = harness_revision(workspace)
@@ -5626,23 +5669,6 @@ def main(argv=None) -> int:
     # THE SEED IS FITTED AGAIN, WHOLE, ON THE TOOL LOOP'S OWN STEP-1 COUNT (SAGE #582): the fitters
     # above budget from parts; this measures what will be sent and trims only if the loop would
     # refuse it. A beat whose seed the loop accepts is unchanged.
-    from sage.gateway.being_tool_loop import uncounted_chars, preflight_tokens, preflight_cpt
-    from sage.gateway.being_tool_loop import _convo_chars as btl_convo_chars, WINDOW_SEND_MARGIN as _WSM
-    # the step-1 ratio, measured on this being's own recent beats when there are enough (#582 part 2)
-    try:
-        llm.preflight_cpt_measured = None      # the prior is the declared/default ratio, never last beat's
-    except Exception:
-        pass
-    _cpt_prior = preflight_cpt(llm)
-    _cpt_cal = measured_preflight_cpt(instance, args.model, prior=_cpt_prior)
-    try:
-        # set every beat, None included: a process that outlives a model switch must not keep the old ratio
-        llm.preflight_cpt_measured = _cpt_cal.get("value")
-    except Exception:
-        _cpt_cal["value"] = None
-    _cpt_cal["prior"] = _cpt_prior
-    _cpt_cal["used"] = preflight_cpt(llm)
-    _cpt_cal["source"] = "measured" if _cpt_cal.get("value") else "declared_or_default"
     _seed_uncounted = uncounted_chars(_explore_specs, explore_turn_mode(instance))
     _states = {conv_rung: state_block}
 
