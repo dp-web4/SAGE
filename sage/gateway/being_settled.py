@@ -199,6 +199,24 @@ def seat_notes(instance, entries: List[dict]) -> Dict[str, List[dict]]:
     return out
 
 
+def _dropped_notes(instance, target: dict) -> str:
+    """The seat's notes on an entry that is being reopened or settled again, which stop being shown from now.
+
+    A NOTE THAT VANISHES AS IT IS ACTED AGAINST. sprout-being, 2026-11-22 21:08Z: s185 said an account it wanted
+    "should be ready by now"; its seat noted that no such account existed and nothing was creating one. The beat
+    reopened s185 with the reason that the seat had "confirmed the account is running", and the receipt said only
+    "reopened". The note was dropped there without a word. It is quoted here once, in the receipt for the act that
+    drops it; which answer holds stays the being's."""
+    notes = seat_notes(instance, [target]).get(target["id"]) or []
+    if not notes:
+        return ""
+    said = "; ".join(f"{n['by']} at seq {n['seq']} ({_said_day(n)}): {_flat(n['says'])}"
+                     for n in notes[-SEAT_NOTES_SHOWN:])
+    # the newest are quoted; the rest are counted, so the quoted ones are not read as all (legion on #817)
+    more = (f" ({len(notes) - SEAT_NOTES_SHOWN} earlier not quoted)" if len(notes) > SEAT_NOTES_SHOWN else "")
+    return (f" Your seat's note{'s' if len(notes) > 1 else ''} on {target['id']}, not shown from now on: {said}{more}")
+
+
 def seat_note(instance, entry_id: str, by: str, seq: int, says: str, conv_id: Optional[str] = None,
               now: Optional[float] = None) -> dict:
     """Attach to a settled entry a pointer to the seat's own later turn that disagrees with it. The entry is not
@@ -329,10 +347,11 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
     if _truthy(a.get("reopen", "")):
         if target is None:
             return False, "to reopen one, give its id (settle with no arguments lists them). Nothing was changed."
+        dropped = _dropped_notes(instance, target)
         entries = [e for e in entries if e is not target]
         return _commit(instance, entries, nxt, {"op": "reopen", "id": target["id"], "from": target, "why": why},
                        now, f"reopened {target['id']} ({target['question'][:120]!r}); it is no longer shown as "
-                            "settled. The earlier answer is kept in settled_log.jsonl.")
+                            "settled. The earlier answer is kept in settled_log.jsonl." + dropped)
 
     question = a.get("question") or (target or {}).get("question", "")
     other = next((e for e in entries if e is not target and _norm(e["question"]) == _norm(question)), None)
@@ -377,11 +396,12 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
         if (target.get("answer"), target.get("evidence", ""), target["question"]) == (answer, new["evidence"], question):
             return True, f"{_UNCHANGED}{target['id']} already says exactly that; nothing changed."
         # A re-settled entry moves to the end: newest first is the order the beat shows.
+        dropped = _dropped_notes(instance, target)
         entries = [e for e in entries if e is not target] + [new]
         return _commit(instance, entries, nxt, {"op": "replace", "id": new["id"], "from": target, "to": new,
                                                 "why": why}, now,
                        f"{new['id']} now reads: {_copyable(question)} -> {answer[:200]!r}. The earlier answer is "
-                       "kept in settled_log.jsonl. It is shown to you at the start of every beat.")
+                       "kept in settled_log.jsonl. It is shown to you at the start of every beat." + dropped)
     close = _close_to(entries, question)
     if len(entries) >= MAX_ENTRIES:
         # sprout-being, 2026-10-30: four refusals here in its first hour at the cap, and no reopen or fold. Two of
