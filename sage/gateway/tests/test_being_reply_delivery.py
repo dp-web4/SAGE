@@ -354,6 +354,26 @@ def test_a_pointer_read_uses_the_exact_lookup_first():
     assert "no appeal about deny" in d._resolve_pointer("hestia://appeal/ffffffffffff")
 
 
+def test_a_capped_appeal_list_never_says_none_was_filed():
+    """#814: hestia_my_appeals clamps to 100 rows with no offset or hash filter. A miss on a full
+    page is not evidence that no appeal was filed; it falls through to the history scan."""
+    page = {"appeals": [{"deny_hash": f"{i:016x}", "appeal_entry": f"e{i}", "status": "ruled",
+                         "ruling": {"verdict": "deny stands"}} for i in range(100)]}
+    old = "abcdef0123456789"
+    ruling = {"entries": [{"eventType": "adjudication", "timestamp": "2026-09-16T01:20:00Z",
+                           "eventData": {"about_deny_hash": old, "upheld": False,
+                                         "adjudicator": "codex", "rationale": "an older ruling"}}]}
+    found = _disp_with({"hestia_my_appeals": page, "hestia_query_history": ruling})
+    out = found._resolve_pointer(f"hestia://appeal/{old}#ruled")
+    assert "DENY STANDS" in out and "an older ruling" in out, out
+    missing = _disp_with({"hestia_my_appeals": page, "hestia_query_history": {"entries": []}})
+    out = missing._resolve_pointer(f"hestia://appeal/{old}")
+    assert "none was filed" not in out and "does NOT mean" in out, out
+    # one short of the cap is the whole list, so the definite answer stays
+    short = _disp_with({"hestia_my_appeals": {"appeals": page["appeals"][:99]}})
+    assert "none was filed" in short._resolve_pointer(f"hestia://appeal/{old}")
+
+
 def _disp_with_resource(body, member="cbp-being"):
     """A dispatcher whose daemon client answers `resources/read` with `body`."""
     from sage.gateway.hestia_dispatch import HestiaF1aDispatcher
