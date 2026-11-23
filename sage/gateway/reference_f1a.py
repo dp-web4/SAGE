@@ -901,6 +901,23 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
         import difflib
         import re
         bare = [line.strip() for line in have]
+        # THE TODO VIEW'S SUFFIX IS NOT FILE TEXT (#282). todo_view shows each open item as
+        # `- [ ] <text> (since <date> UTC)`; the file holds `- [ ] <text>`. A being that edits
+        # the line it was shown sends the suffix too. Measured on mcnugget-being 2026-09-28 to
+        # 2026-11-22: 24 of its 124 memory_edits carried it, 16 were refused, none changed the
+        # file. The closest-line hint showed both strings, but the difference was ~27 chars at
+        # the end of a long line, and the refusal never said where they came from. Say it.
+        since = re.compile(r"\s*\(since 20\d\d-\d\d-\d\d[ T]\d\d:\d\d(?: ?UTC|Z)?\)\s*$")
+        if since.search(want[0]):
+            plain = since.sub("", want[0])
+            hits = [i for i, line in enumerate(have) if line == plain] or \
+                   [i for i, b in enumerate(bare) if b and b == plain.strip()]
+            if hits:
+                n = hits[0] + 1
+                return (f" Your first line ends in {since.search(want[0]).group(0).strip()!r}. "
+                        f"Your todo window adds that when it shows an item; it is not in the file. "
+                        f"Without it, your first line is line {n}: {cut(have[n - 1])!r}. Send old "
+                        f"without the '(since ...)' ending on any of its lines.")
         # A def/class line is anchored by its NAME, which is the few characters difflib weighs
         # least. Measured 2026-10-08 on cbp-being: it sent 'def main(latent_dim: int = 100):',
         # the closest line was 'def create_decoder(latent_dim: int = 100):' (line 28), and its
