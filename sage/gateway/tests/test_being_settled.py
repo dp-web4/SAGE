@@ -664,6 +664,14 @@ def test_a_replace_quotes_the_sentences_the_new_answer_no_longer_says(tmp_path):
     ok, msg, _ = _s(tmp_path, id="s1", question=q, answer="Say which step failed and what it printed, plainly.")
     assert ok and 'No longer in the answer: "Never write that something worked when nobody watched it work."' in msg, msg
     assert msg.index("No longer") < msg.index("earlier answer is kept")
+    assert '."."' not in msg and '.".' not in msg, msg                          # one period, inside the quote
+
+
+def test_other_forms_of_the_same_words_are_a_rewording_not_a_loss(tmp_path):
+    q = "How should a failed test be reported?"
+    _s(tmp_path, question=q, answer="Reports must name the failing step.")
+    ok, msg, _ = _s(tmp_path, id="s1", question=q, answer="Report the failed step by name.")
+    assert ok and "No longer in the answer" not in msg, msg               # legion's probe on #821
 
 
 def test_a_rewording_that_keeps_every_sentence_quotes_nothing(tmp_path):

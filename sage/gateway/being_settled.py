@@ -200,13 +200,17 @@ def seat_notes(instance, entries: List[dict]) -> Dict[str, List[dict]]:
 
 
 #: A sentence of the old answer counts as gone from the new one when fewer than half its words of four letters or more
-#: are still there; sentences with fewer than three such words are not judged.
+#: are still there; sentences with fewer than three such words are not judged. Words match on their first
+#: _STEM letters, so "reports"/"report" and "failing"/"failed" are one word (legion on #821: a rewording in other
+#: forms of the same words was quoted as lost). Replayed over the 52 replaces: 67 quoted sentences became 65, and both
+#: that fell away were restatements.
 _GONE_SHARE = 0.5
+_STEM = 5
 _WORD = re.compile(r"[^\W_]+(?:'[^\W_]+)*")
 
 
 def _words(s: str) -> set:
-    return {w for w in _WORD.findall(s.casefold()) if len(w) > 3}
+    return {w[:_STEM] for w in _WORD.findall(s.casefold()) if len(w) > 3}
 
 
 def _dropped_sentences(old: str, new: str) -> str:
@@ -220,7 +224,7 @@ def _dropped_sentences(old: str, new: str) -> str:
             if len(_words(s)) >= 3 and len(_words(s) & kept) / len(_words(s)) < _GONE_SHARE]
     if not gone:
         return ""
-    return (" No longer in the answer: " + " ".join(f'"{_flat(s)}"' for s in gone) + ".")
+    return " No longer in the answer: " + " ".join(f'"{_flat(s)}"' for s in gone)
 
 
 def _dropped_notes(instance, target: dict) -> str:
