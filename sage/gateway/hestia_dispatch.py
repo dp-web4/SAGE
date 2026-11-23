@@ -4435,6 +4435,13 @@ class HestiaF1aDispatcher:
         rid = out.get("request_id")
         result = {"request_id": rid, "status": out.get("status"), "path": path,
                   "next": _scope_next(rid, out.get("next")), "on_timeout": out.get("on_timeout")}
+        # A STANDING REFUSAL IS ANSWERED, NOT FILED (hestia #1417): who closed the path, when, and why
+        # are the whole answer. Copying only the fields of a filed ask dropped them, and the being saw
+        # a bare status with no ruler and no reason.
+        if out.get("status") == "refused_standing":
+            for k in ("refused_by", "refused_at", "reason", "note"):
+                if out.get(k):
+                    result[k] = out[k]
         if copies:
             result["copy_in_reach"] = [c for c, _ in copies]
             result["meanwhile"] = copy_alternative(path, copies)
@@ -4444,8 +4451,10 @@ class HestiaF1aDispatcher:
         # ASKED BEFORE, AND REFUSED (sprout-being, 2026-11-23): the same write to a system file was asked
         # for an hour after a refusal whose note said why no grant could help, and hestia's list no longer
         # held that refusal. The new ask is filed all the same; the earlier ruling and its note ride with it.
+        # Only when hestia filed it (a request_id came back): it also answers without filing (a standing
+        # refusal, already granted, not filed), and "this request was filed" would then be false.
         from sage.gateway import scope_rulings as _sr
-        before = [r for r in _sr.refused_before(self.memory_root, path) if r["id"] != rid]
+        before = [r for r in _sr.refused_before(self.memory_root, path) if r["id"] != rid] if rid else []
         if before:
             shown = before[-2:]
             result["refused_before"] = (

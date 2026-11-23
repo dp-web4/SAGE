@@ -121,3 +121,31 @@ def test_the_beat_keeps_what_hestia_lists():
     src = (Path(sr.__file__).parent / "heartbeat.py").read_text()
     at = src.index("grants = scope_grant_lines(st)")
     assert "_sr.keep(instance, st.get(\"requests\")" in src[at:at + 400]
+
+
+class _RefusedStanding(_WithScopeQueue):
+    def call(self, name, args):
+        if name == "hestia_request_scope":
+            FakeMcp.calls.append((name, args))
+            return {"result": {"structuredContent": {
+                "status": "refused_standing", "path": args["path"], "refused_by": "operator",
+                "refused_at": "2026-11-23T12:00:00Z", "reason": NOTE,
+                "note": "a standing refusal covers this path: nothing was filed"}}}
+        return super().call(name, args)
+
+
+def test_an_ask_hestia_did_not_file_is_not_told_it_was_filed():
+    d, home = _d(_RefusedStanding)
+    _refused(home)
+    env = d(BeingIntent("request_scope", {"path": _ELSEWHERE, "reason": "r"}), _ALLOW)
+    assert env.ok and env.result["request_id"] is None, env
+    assert "refused_before" not in env.result, env.result                  # nothing was filed
+    assert env.result["status"] == "refused_standing"
+    assert env.result["refused_by"] == "operator" and env.result["reason"] == NOTE, env.result
+    assert "nothing was filed" in env.result["note"]
+
+
+def test_a_kept_row_with_no_path_matches_nothing(tmp_path, monkeypatch):
+    sr.keep(tmp_path, [{"request_id": GONE, "status": "refused"}], "t")
+    monkeypatch.chdir(tmp_path)
+    assert sr.refused_before(tmp_path, str(tmp_path)) == []                # not the CWD by accident

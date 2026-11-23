@@ -11,6 +11,9 @@ later cannot hold a conclusion for a week.
 The seat writes this file at beat time from what hestia lists (heartbeat), one line per request the first
 time it is seen ended, and again if how it ended changes (a grant later revoked). The being reads it and
 cannot write it (reference_f1a.SEAT_OWNED): it is the ruler's word, not the being's.
+
+The file only grows, one line per ending, deliberately: an ending is rare (a few a day at most), and a
+ruling dropped to keep the file short is the defect this file exists to fix.
 """
 import json
 import os
@@ -84,8 +87,8 @@ def refused_before(instance, path: str) -> List[dict]:
     last: Dict[str, dict] = {}
     for r in _rows(instance):
         last[r["id"]] = r
-    return [r for r in last.values() if r.get("decision") in REFUSALS
-            and os.path.realpath(os.path.expanduser(str(r.get("path") or ""))) == want]
+    return [r for r in last.values() if r.get("decision") in REFUSALS and r.get("path")
+            and os.path.realpath(os.path.expanduser(str(r["path"]))) == want]
 
 
 def said(r: dict) -> str:
