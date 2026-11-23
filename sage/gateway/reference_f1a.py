@@ -53,7 +53,9 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 # record. Refusing is not distrust: it may disagree anywhere else, and that record is wanted.
 # settled_seat_notes.jsonl is the seat's later word beside the being's settled entries (being_settled.SEAT_NOTES):
 # a being that could write it could make its seat appear to have said something, or erase that it did.
-SEAT_OWNED = ("entrustment.md", "settled_seat_notes.jsonl")
+# scope_rulings.jsonl is how its scope requests were ruled, kept after hestia's list drops them (scope_rulings): the
+# ruler's word, which a being that could edit it could rewrite.
+SEAT_OWNED = ("entrustment.md", "settled_seat_notes.jsonl", "scope_rulings.jsonl")
 # output_stream.jsonl (and its one older copy) is the harness's live record of what the model produced (being_stream):
 # what dp and the seat watch the being say as it says it, so it is the harness's to write, not the being's.
 STREAM_OWNED = ("output_stream.jsonl", "output_stream.jsonl.1")
@@ -1506,6 +1508,12 @@ class ReferenceF1aDispatcher:
                     f"{p.name} is yours to read and not to edit: the harness writes into it what your "
                     "model calls produce, as they produce it, and others watch it to see you working. "
                     "Nothing was changed")
+            if _home and p.name == "scope_rulings.jsonl":
+                raise ValueError(
+                    "scope_rulings.jsonl is yours to read and not to edit: it is how your scope "
+                    "requests were ruled, kept by your seat in the ruler's own words. Nothing was "
+                    "changed. If you disagree with a ruling, say so in your journal, in a "
+                    "conversation, or in a new request with your reason")
             if _home and p.name in SEAT_OWNED:
                 raise ValueError(
                     f"{p.name} is yours to read and not to edit: it is what you were entrusted "

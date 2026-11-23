@@ -593,7 +593,8 @@ class HestiaF1aDispatcher:
             facts = [f"{i}: could not read your scope queue ({err})" for i in ids]
         else:
             rows = {str(r.get("request_id")): r for r in st["requests"]}
-            facts = [_named_scope_fact(i, rows.get(i)) for i in ids]
+            from sage.gateway import scope_rulings as _sr
+            facts = [_named_scope_fact(i, rows.get(i) or _kept_row(_sr.ruling(self.memory_root, i))) for i in ids]
         if isinstance(env.result, dict):
             env.result["scope_requests_you_named"] = facts
         else:
@@ -728,6 +729,13 @@ class HestiaF1aDispatcher:
                     return (f"[your scope request {ident} for {r.get('path')}]\n"
                             f"status: {r.get('status')} ; decided by: {r.get('decided_by') or '—'}\n"
                             f"their note: {why}")
+            from sage.gateway import scope_rulings as _sr
+            kept = _sr.ruling(self.memory_root, ident)
+            if kept:
+                return (f"[your scope request {ident} for {kept.get('path')}, as your seat saw it end; "
+                        f"hestia's list no longer shows it]\n"
+                        f"status: {kept.get('decision')} ; decided by: {kept.get('by') or '—'}\n"
+                        f"their note: {kept.get('why') or '(no note recorded)'}")
             # SAY WHAT IS KNOWN, NOT A GUESS (cbp-being, 2026-10-24). This line said "it may have
             # aged out". The being's notes turned the hedge into a fact, then into "dp replied that
             # it aged out and needs re-issuing", and it asked dp to re-issue a REFUSED request for a
@@ -4427,12 +4435,33 @@ class HestiaF1aDispatcher:
         rid = out.get("request_id")
         result = {"request_id": rid, "status": out.get("status"), "path": path,
                   "next": _scope_next(rid, out.get("next")), "on_timeout": out.get("on_timeout")}
+        # A STANDING REFUSAL IS ANSWERED, NOT FILED (hestia #1417): who closed the path, when, and why
+        # are the whole answer. Copying only the fields of a filed ask dropped them, and the being saw
+        # a bare status with no ruler and no reason.
+        if out.get("status") == "refused_standing":
+            for k in ("refused_by", "refused_at", "reason", "note"):
+                if out.get(k):
+                    result[k] = out[k]
         if copies:
             result["copy_in_reach"] = [c for c, _ in copies]
             result["meanwhile"] = copy_alternative(path, copies)
         fs = _file_system_fact(path)
         if fs:
             result["file_system"] = fs
+        # ASKED BEFORE, AND REFUSED (sprout-being, 2026-11-23): the same write to a system file was asked
+        # for an hour after a refusal whose note said why no grant could help, and hestia's list no longer
+        # held that refusal. The new ask is filed all the same; the earlier ruling and its note ride with it.
+        # Only when hestia filed it (a request_id came back): it also answers without filing (a standing
+        # refusal, already granted, not filed), and "this request was filed" would then be false.
+        from sage.gateway import scope_rulings as _sr
+        before = [r for r in _sr.refused_before(self.memory_root, path) if r["id"] != rid] if rid else []
+        if before:
+            shown = before[-2:]
+            result["refused_before"] = (
+                [_sr.said(r) for r in shown]
+                + ([f"{len(before) - len(shown)} earlier refusals of this path are in {_sr.SCOPE_RULINGS}"]
+                   if len(before) > len(shown) else [])
+                + ["This request was filed and is ruled on its own; the earlier refusal stands as it was ruled."])
         return ResultEnvelope(ok=True, witness_id=out.get("witnessEntryHash"), result=result)
 
     def _do_say(self, intent: BeingIntent) -> ResultEnvelope:
@@ -5628,6 +5657,14 @@ def _scope_next(request_id, daemon_next) -> str:
             f'{{"path": "hestia://scope/{request_id}"}}. There is no file or script to find for '
             f"this; do not search for one.")
 _SCOPE_ID = re.compile(r"\bscope-[0-9a-f]{12}\b")
+
+
+def _kept_row(kept):
+    """A kept ruling (scope_rulings) in the shape of a hestia_scope_status row, or None."""
+    if not kept:
+        return None
+    return {"status": f"{kept.get('decision')} (kept by your seat; hestia's list no longer shows it)",
+            "decided_by": kept.get("by") or None, "path": kept.get("path")}
 
 
 def _named_scope_fact(rid: str, row) -> str:

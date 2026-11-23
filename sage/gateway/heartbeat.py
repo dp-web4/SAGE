@@ -5349,6 +5349,9 @@ def main(argv=None) -> int:
                 # an error envelope read as an empty list would print "requests: none", a claim
                 raise _tm_scope.ScopeUnread(scope_snap.error)
             grants = scope_grant_lines(st)
+            # hestia's list lets old requests go; the ruling and its note are kept here (scope_rulings)
+            from sage.gateway import scope_rulings as _sr
+            _sr.keep(instance, st.get("requests") or [], f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC")
             reqs = [(r.get("request_id"), r.get("path"), r.get("decision") or r.get("status"))
                     for r in (st.get("requests") or [])]
             who_ruled = {r.get("request_id"): r.get("decided_by") for r in (st.get("requests") or [])
