@@ -230,7 +230,7 @@ def test_a_second_retire_of_the_same_name_on_the_same_day_keeps_both():
         assert body in texts, "every retired copy survives"
     names = {k.name for k in kept}
     for r in results:
-        assert r.split(" -> ")[1] in names, "the receipt names the file it actually wrote"
+        assert r.split(" -> ")[1].split(". ")[0] in names, "the receipt names the file it actually wrote"
     assert all(k.suffix == ".py" for k in kept), "the extension stays last"
 
 
@@ -342,6 +342,24 @@ def test_the_beat_shows_a_new_ruling_verbatim_once():
     assert appeals_block(old, {}) == ("", {}), "a daemon without the tool renders nothing"
 
 
+def test_an_appeal_rulers_reason_reaches_the_being_whole():
+    from sage.gateway.heartbeat import appeals_block, RULER_NOTE_MAX
+
+    def block(rationale):
+        rows = {"appeals": [{"deny_hash": "c29e24e65f21aaaa", "status": "ruled",
+                             "ruling": {"verdict": "deny stands", "adjudicator": "claude-code",
+                                        "ruled_at": "2026-09-16T04:38:30Z", "rationale": rationale}}]}
+        return appeals_block(SimpleNamespace(_call=lambda name, args: rows), {})[0]
+
+    reason = "Deny stands. " + "The file is not on this machine. " * 30
+    assert 700 < len(reason.strip()) < RULER_NOTE_MAX
+    assert reason.strip() in block(reason), "a reason under the cap arrives whole, not cut at 700"
+    long_ = "y" * (RULER_NOTE_MAX + 7)
+    text = block(long_)
+    assert text.split('Their reason: "', 1)[1].split('"', 1)[0] == "y" * RULER_NOTE_MAX + "…"  # mark outside
+    assert '[7 more characters: memory_read {"path": "hestia://appeal/c29e24e65f21aaaa"}' in text
+
+
 def test_a_pointer_read_uses_the_exact_lookup_first():
     mine = {"appeals": [{"deny_hash": "c29e24e65f21aaaa", "appeal_entry": "e1", "status": "ruled",
                          "ruling": {"verdict": "deny stands", "adjudicator": "claude-code",
@@ -352,6 +370,26 @@ def test_a_pointer_read_uses_the_exact_lookup_first():
     assert "DENY STANDS" in out and "the path does not exist" in out
     assert "still open" in d._resolve_pointer("hestia://appeal/0000aaaa1111")
     assert "no appeal about deny" in d._resolve_pointer("hestia://appeal/ffffffffffff")
+
+
+def test_a_capped_appeal_list_never_says_none_was_filed():
+    """#814: hestia_my_appeals clamps to 100 rows with no offset or hash filter. A miss on a full
+    page is not evidence that no appeal was filed; it falls through to the history scan."""
+    page = {"appeals": [{"deny_hash": f"{i:016x}", "appeal_entry": f"e{i}", "status": "ruled",
+                         "ruling": {"verdict": "deny stands"}} for i in range(100)]}
+    old = "abcdef0123456789"
+    ruling = {"entries": [{"eventType": "adjudication", "timestamp": "2026-09-16T01:20:00Z",
+                           "eventData": {"about_deny_hash": old, "upheld": False,
+                                         "adjudicator": "codex", "rationale": "an older ruling"}}]}
+    found = _disp_with({"hestia_my_appeals": page, "hestia_query_history": ruling})
+    out = found._resolve_pointer(f"hestia://appeal/{old}#ruled")
+    assert "DENY STANDS" in out and "an older ruling" in out, out
+    missing = _disp_with({"hestia_my_appeals": page, "hestia_query_history": {"entries": []}})
+    out = missing._resolve_pointer(f"hestia://appeal/{old}")
+    assert "none was filed" not in out and "does NOT mean" in out, out
+    # one short of the cap is the whole list, so the definite answer stays
+    short = _disp_with({"hestia_my_appeals": {"appeals": page["appeals"][:99]}})
+    assert "none was filed" in short._resolve_pointer(f"hestia://appeal/{old}")
 
 
 def _disp_with_resource(body, member="cbp-being"):

@@ -47,7 +47,7 @@ from typing import Any, Callable, Dict, List, Optional
 from sage.gateway.being_gate_client import (BeingIntent, GatewayVerdict, ResultEnvelope, camera_command,
                                             copy_alternative, same_path_in_reach)
 from sage.gateway.hestia_witness import _ENDPOINT, _Mcp, _unwrap, make_hestia_witness_fn
-from sage.gateway.reference_f1a import ReferenceF1aDispatcher
+from sage.gateway.reference_f1a import ReferenceF1aDispatcher, retired_copy_note
 
 # The marker the seat's run-request reader keys on (sage/scripts/seat_run_requests.py).
 _RUN_MARKER = "[request_run]"
@@ -81,6 +81,51 @@ _SEAT_AWAY = ("(From this receipt, not from the seat.) A seat that has not writt
 _SEAT_AWAY_REQUEST = ("(From this receipt, not from the seat.) A quiet seat may be away, not stuck: there is "
                       "nothing for you to restart from this request. Your requests stay here, and it can answer "
                       "them when it is back.")
+
+
+def _file_system_fact(path: str) -> str:
+    """'' when the user the being's runs run as may write `path`, or it cannot be looked at; else what the
+    file system says about writing it. A grant is the gate's reach, not the file's permissions: on sprout-being
+    (11-20..21) scope requests for a root-owned system file, made for writes its mode refuses, lapsed or
+    waited on a ruling that could not make those writes work, and each lapse was asked again. The request is still filed: reading
+    may be what it serves, and a human decides it.
+
+    Checked as this process's euid, which is the user the being's runs run as because the bwrap run keeps
+    the gateway's uid. A sandbox that maps the run to another uid (a userns uid map) makes this text false."""
+    import os, pwd, stat as _stat
+    try:
+        rp = os.path.realpath(os.path.expanduser(path))
+        st = os.stat(rp)
+        if os.access(rp, os.W_OK):
+            return ""
+        ro_mount = bool(os.statvfs(rp).f_flag & os.ST_RDONLY)
+    except OSError:
+        return ""
+
+    def name(uid):
+        try:
+            return pwd.getpwuid(uid).pw_name
+        except KeyError:
+            return f"uid {uid}"
+
+    me, owner = name(os.geteuid()), name(st.st_uid)
+    is_dir = _stat.S_ISDIR(st.st_mode)
+    what = "directory" if is_dir else "file"
+    write = "create or remove entries in it" if is_dir else "write it"
+    head = "(From this receipt, not from whoever decides it.) "
+    if ro_mount:
+        return (head + f"This {what} is on a file system mounted read-only, so nobody can {write} there, "
+                f"whoever owns it. A grant changes what the gate lets you reach, not the mount: granted, "
+                f"a write still fails with 'Read-only file system'.")
+    if st.st_uid == os.geteuid():
+        return (head + f"This {what} belongs to {me}, the user your runs run as, and its mode does not let "
+                f"{me} {write}. Its owner may change its mode, so this is the file's own setting, not "
+                f"another user's file. A grant lets you reach it; it does not change the mode.")
+    return (head + f"This {what} belongs to {owner}, and the file system does not let {me}, the user your "
+            f"runs run as, {write}. A grant changes what the gate lets you reach, not what the file system "
+            f"allows: granted, a write still fails with 'Permission denied'. "
+            + (f"{me} can read it, so a grant would let you read it." if os.access(rp, os.R_OK)
+               else f"{me} cannot read it either."))
 
 
 def _seat_quiet(turns, member: str, seat_conv: str, truncated: bool, now=None):
@@ -206,6 +251,38 @@ def render_pr(pr: dict, target: str, last: int = PR_READ_LAST_DEFAULT) -> str:
     return out
 
 
+# A LINE THAT IS A TOOL CALL, WRITTEN AS WORDS (#718). cbp-being, 2026-11-15 01:38Z: in an answer
+# turn that offers only `say`, it pasted `settle id="s544" question=... answer=...` into the message,
+# then wrote "[DONE] Settled s544 and s545" to its todo. The settled log has no op for either id.
+# A say receipt reports delivery, and a delivered call-text read as a performed call. Anchored at a
+# line start (after quoting, bullets or backticks), the verb name, then `key=` or `(`: prose that
+# merely names a verb ("I will settle this") does not match.
+_CALL_TEXT = re.compile(r"^[\s>*\-`]*([a-z_]+)(?:\s+[a-z_]+\s*=|\s*\()", re.M)
+
+
+def call_text_verbs(text: str) -> List[str]:
+    """The being's own verbs that `text` writes out as calls, in order, once each; say excluded."""
+    try:
+        from sage.gateway.being_gate_client import _TOOL_SCHEMAS
+        names = set(_TOOL_SCHEMAS) - {"say"}
+    except Exception:
+        return []
+    out: List[str] = []
+    for m in _CALL_TEXT.finditer(text or ""):
+        v = m.group(1)
+        if v in names and v not in out:
+            out.append(v)
+    return out
+
+
+def _call_text_note(verbs: List[str]) -> str:
+    calls = " and ".join(f"a {v} call" for v in verbs)
+    return (f"This message contains the text of {calls}. A message only carries words: none of "
+            f"{'it' if len(verbs) == 1 else 'them'} ran, and nothing it would change has changed. "
+            f"To do it, call {' / '.join(verbs)} itself as a tool, in a turn that offers "
+            f"{'it' if len(verbs) == 1 else 'them'}.")
+
+
 def _hestia_error(env: dict) -> Optional[str]:
     """Render a daemon error envelope as the r1 `error` string keyed by hestia's own code."""
     err = env.get("_hestia_error")
@@ -254,6 +331,18 @@ def _stale_transport(e: Exception) -> bool:
     request never reached a tool, so reconnecting and sending it again is safe."""
     msg = str(e)
     return "HTTP 404" in msg and "Session not found" in msg
+
+
+def _literal_key(pattern: str) -> dict:
+    """The receipt's word on HOW the pattern was matched, when it was not a regex: a search
+    the being sent as a regex but that ran as literal text must say so, or a hit or an absence
+    would be read as an answer to a question it did not ask (see search_mode)."""
+    from sage.gateway.being_gate_client import search_regex
+    mode, _, note = search_regex(pattern)
+    if mode != "-F":
+        return {"translated": note} if note else {}
+    return {"literal": (f"{pattern!r} is not a valid regex, so it was matched as literal text, "
+                        f"exactly as written; to use regex operators, write a valid pattern")}
 
 
 def _worktree_env() -> dict:
@@ -430,8 +519,11 @@ class HestiaF1aDispatcher:
                                 if "://" in str(intent.args.get("path", "")) else None)
                 if resolved is not None:
                     return ResultEnvelope(ok=True, result=resolved)
-            return self._local(intent, verdict)   # witness / memory_read / memory_write
-        self._verdict = verdict                   # what the law just consulted (granted roots)
+            env = self._local(intent, verdict)   # witness / memory_read / memory_write
+            if intent.effector == "retire_note" and env.ok:
+                self._attach_pending_run(intent, env)
+            return env
+        self._verdict = verdict                  # what the law just consulted (granted roots)
         try:
             env = handler(intent)
         except Exception as e:
@@ -439,6 +531,41 @@ class HestiaF1aDispatcher:
         if intent.effector in _NAMES_SCOPE_IDS and env.ok:
             self._attach_named_scope_status(intent, env)
         return env
+
+    def _attach_pending_run(self, intent: BeingIntent, env: ResultEnvelope) -> None:
+        """A RETIRED FILE WITH A RUN REQUEST STILL OPEN SAYS SO IN THE RETIRE'S RECEIPT (#755).
+
+        cbp-being, 2026-11-17 08:03Z, one explore phase: memory_edit a script, request_run it, remember
+        "the script now runs successfully" (nothing had run), retire_note the same script. The request the
+        seat was about to answer then named a path with nothing at it; a run of the requested bytes stopped
+        with a TypeError. Same shape on 11-15 (seq 15545, #721). The retire is not refused (an affordance,
+        not a guardrail): the receipt names the open request, says no run of it has happened, and where the
+        same code still is. Fail-open: anything unreadable adds nothing."""
+        try:
+            m = re.match(r"retired (\S+) -> (\S+?)\.?(?:\s|$)", str(env.result or ""))
+            raw = str((intent.args or {}).get("path", "")).strip()
+            if not m or not raw:
+                return
+            from sage.scripts import seat_run_requests as srr
+            cid = self._seat_conversation()
+            if not cid:
+                return
+            inst = Path(self.memory_root)
+            seat = (os.environ.get("SEAT_ID") or cid).strip()
+            seqs = sorted(int(t.get("seq") or 0) for t in srr.pending(inst, cid, seat=seat)
+                          if srr._same_file(inst, srr.request_path(t), raw))
+            if not seqs:
+                return
+            dest = str(Path(raw).parent / m.group(2)) if "/" in raw else m.group(2)
+            many = len(seqs) > 1
+            env.result = (f"{env.result} You asked the seat to run this file (request seq "
+                          f"{', '.join(map(str, seqs))}) and no answer has come yet, so no run of it has "
+                          f"happened. The answer will name {raw}, where nothing is now. The same code is in "
+                          f"{dest}, below a comment header (line numbers shift by the header's length); a "
+                          f"request_run on that path runs it. If {'those requests are' if many else 'that request is'} "
+                          f"no longer wanted, say so to the seat.")
+        except Exception:
+            return
 
     def _attach_named_scope_status(self, intent: BeingIntent, env: ResultEnvelope) -> None:
         """A SCOPE ID THE BEING NAMES GETS ITS STATUS IN THE SAME RECEIPT.
@@ -466,7 +593,8 @@ class HestiaF1aDispatcher:
             facts = [f"{i}: could not read your scope queue ({err})" for i in ids]
         else:
             rows = {str(r.get("request_id")): r for r in st["requests"]}
-            facts = [_named_scope_fact(i, rows.get(i)) for i in ids]
+            from sage.gateway import scope_rulings as _sr
+            facts = [_named_scope_fact(i, rows.get(i) or _kept_row(_sr.ruling(self.memory_root, i))) for i in ids]
         if isinstance(env.result, dict):
             env.result["scope_requests_you_named"] = facts
         else:
@@ -520,6 +648,8 @@ class HestiaF1aDispatcher:
     # `hestia_open_appeals` does not help: by construction it lists only UNRULED appeals, so a
     # ruling is the one thing it cannot show. So the pointer is resolved here, at read time.
     _POINTER = re.compile(r"^hestia://(appeal|scope|egress|escalation)/([^#\s]+)(?:#(.*))?$")
+    # hestia's tool_my_appeals clamps `limit` to 1..=100 (core/src/server/handler.rs).
+    _MY_APPEALS_LIMIT = 100
 
     def _resolve_pointer(self, raw: str) -> Optional[str]:
         """What a `hestia://` pointer from a disposition notice actually says, or None if this
@@ -532,11 +662,14 @@ class HestiaF1aDispatcher:
         # `hestia://appeal/<hash>/ruling`, and the suffix made the hash match nothing.
         ident = ident.split("/", 1)[0]
         if kind == "appeal":
-            # The exact, windowless lookup first (hestia #164). The 500-row scan below is only a
-            # fallback for a daemon that predates hestia_my_appeals.
-            mine = self._call("hestia_my_appeals", {"limit": 100})
+            # The exact lookup first (hestia #164). It has no recency window, but the daemon clamps
+            # `limit` to 100 and takes no hash filter or offset, so a member with more appeals
+            # than that sees only its newest 100 (#814). The 500-row scan below is the fallback
+            # for a daemon that predates hestia_my_appeals, and for a capped list with no match.
+            mine = self._call("hestia_my_appeals", {"limit": self._MY_APPEALS_LIMIT})
             if isinstance(mine, dict) and "_hestia_error" not in mine and "appeals" in mine:
-                for a in mine.get("appeals") or []:
+                rows = mine.get("appeals") or []
+                for a in rows:
                     if str(a.get("deny_hash", "")).startswith(ident) or str(a.get("appeal_entry", "")).startswith(ident):
                         r = a.get("ruling")
                         if not r:
@@ -552,10 +685,14 @@ class HestiaF1aDispatcher:
                                 f"What follows: a ruling is the end of that appeal. If you still need the "
                                 f"thing, the way forward is a scope request for it with a reason, or asking "
                                 f"in a conversation — not another appeal on the same deny.")
-                return (f"[you have no appeal about deny {ident[:12]}… on record. The lookup has no "
-                        f"recency window, so this is not an old appeal gone missing: none was filed "
-                        f"against that hash under your name.]")
-            hist = self._call("hestia_query_history", {"filter": {"limit": 500}})
+                if len(rows) < self._MY_APPEALS_LIMIT:
+                    return (f"[you have no appeal about deny {ident[:12]}… on record. The lookup "
+                            f"returned all {len(rows)} of your appeals, so this is not an old appeal "
+                            f"gone missing: none was filed against that hash under your name.]")
+                # A full page is the newest 100 only: an older appeal may still exist, so "none was
+                # filed" would be untrue. Fall through to the history scan, whose own miss text
+                # says its window is bounded.
+            hist =self._call("hestia_query_history", {"filter": {"limit": 500}})
             entries = hist.get("entries") or []
             for e in entries:
                 d = e.get("eventData") or e.get("event_data") or {}
@@ -592,6 +729,13 @@ class HestiaF1aDispatcher:
                     return (f"[your scope request {ident} for {r.get('path')}]\n"
                             f"status: {r.get('status')} ; decided by: {r.get('decided_by') or '—'}\n"
                             f"their note: {why}")
+            from sage.gateway import scope_rulings as _sr
+            kept = _sr.ruling(self.memory_root, ident)
+            if kept:
+                return (f"[your scope request {ident} for {kept.get('path')}, as your seat saw it end; "
+                        f"hestia's list no longer shows it]\n"
+                        f"status: {kept.get('decision')} ; decided by: {kept.get('by') or '—'}\n"
+                        f"their note: {kept.get('why') or '(no note recorded)'}")
             # SAY WHAT IS KNOWN, NOT A GUESS (cbp-being, 2026-10-24). This line said "it may have
             # aged out". The being's notes turned the hedge into a fact, then into "dp replied that
             # it aged out and needs re-issuing", and it asked dp to re-issue a REFUSED request for a
@@ -2808,9 +2952,13 @@ class HestiaF1aDispatcher:
         if entries and not err:
             rk = relevance.Ranker([f"{e['question']} {e.get('answer', '')}" for e in entries])
             mine = [entries[i] for _, i in rk.related(relevance.request_subject(query))][:3]
+        notes = being_settled.seat_notes(self.memory_root, entries) if mine else {}
         if mine:
-            out["you_settled"] = ("You settled this, or something close to it, in your own words:\n"
-                                  + "\n".join("- " + being_settled._line(e, being_settled.RENDER_ENTRY_CHARS)
+            out["you_settled"] = ("You settled this, or something close to it, in your own words. These are "
+                                  "your conclusions, not this run's output:\n"
+                                  + "\n".join("- " + being_settled._line(e, being_settled.RENDER_ENTRY_CHARS, notes=notes)
+                                              + ("" if e.get("evidence") else
+                                                 " (no evidence given: nothing run or read is behind it)")
                                               for e in mine))
         if found:
             said = relevance.earlier_requests_said(found)
@@ -3024,9 +3172,21 @@ class HestiaF1aDispatcher:
             pass
 
         if captured:
+            # THE SENSOR SHIM'S RECORD (sage/embodiment/sensor_shim.py): the look client prints what was done to
+            # this eye's colours. Told here, so the being learns its eye is corrected, not only that it changed.
+            correction, corrected = {}, ""
+            if cortex:
+                try:
+                    correction = json.loads((proc.stdout or b"{}").decode("utf-8", "replace")).get("correction") or {}
+                except (ValueError, AttributeError):
+                    correction = {}
+                if isinstance(correction, dict) and correction:
+                    from sage.embodiment.sensor_shim import describe_text
+                    corrected = describe_text(correction)
             return ResultEnvelope(ok=True, witness_id=action_id, result={
                 "device": device, "out_path": out_rel,
                 "bytes": os.path.getsize(full_out),
+                **({"correction": correction} if corrected else {}),
                 "note": (("one frame from YOUR OPEN EYE, as your cortex sees it right now (not any game or file "
                           "the seat drops). " if cortex else
                           "one frame captured FROM THE WEBCAM (this device, not any game or file the seat drops). ")
@@ -3040,7 +3200,8 @@ class HestiaF1aDispatcher:
                          # cannot avoid reading, so it must say what is true NOW.
                          "You SEE it on your NEXT beat: this act is the request to see, and "
                          "the frame rides that beat as an image (heartbeat.fresh_frames). "
-                         "The completed image is published atomically.")})
+                         "The completed image is published atomically."
+                         + (" " + corrected if corrected else ""))})
 
         if proc.returncode != 0 and cortex:
             # sage/embodiment/look.py: 3 = no cortex answered, 4 = it answered no (its reason on stderr)
@@ -3160,7 +3321,10 @@ class HestiaF1aDispatcher:
                 else "the revision(s) produced no differences") +
                 " — an empty diff is a true answer, not a failed read]")
         limit = 6000
-        if len(out) > limit:
+        if op == "cat" and rc == 0:
+            out = cat_window(out, intent.args.get("start_line"), limit,
+                             str(intent.args.get("path", "")).strip(), str(intent.args.get("rev", "")).strip())
+        elif len(out) > limit:
             if op == "log":
                 out = out[:limit] + f"\n[… truncated: {len(out) - limit} more characters of older history …]"
             else:
@@ -3243,7 +3407,7 @@ class HestiaF1aDispatcher:
                 f"conclude the text is absent."))
         if not lines:
             return ResultEnvelope(ok=True, witness_id=action_id, result={
-                "pattern": pattern, "searched": target, "matches": 0,
+                "pattern": pattern, **_literal_key(pattern), "searched": target, "matches": 0,
                 "searched_a_real_file": True,
                 "note": (f"no line matches {pattern!r} in {target} (text files only, .git "
                          f"skipped). The path exists and was searched, so this is a real absence "
@@ -3255,7 +3419,7 @@ class HestiaF1aDispatcher:
                  ln[:SEARCH_LINE_CHARS] + f" …[line cut here: {len(ln) - SEARCH_LINE_CHARS} more characters]"
                  for ln in lines[:SEARCH_LINES_SHOWN]]
         return ResultEnvelope(ok=True, witness_id=action_id, result={
-            "pattern": pattern, "searched": target, "matches": len(lines),
+            "pattern": pattern, **_literal_key(pattern), "searched": target, "matches": len(lines),
             "shown": len(shown),
             "truncated": (f"{len(lines) - len(shown)} further matches not shown; narrow the "
                           f"path or the pattern" if truncated else None),
@@ -3384,11 +3548,11 @@ class HestiaF1aDispatcher:
                     f"absence of {pattern!r} — nothing was searched. `search` runs inside "
                     f"your WORKTREE and sees only files git tracks there. A relative path "
                     f"here is not the same path `memory_read` takes: memory_read resolves "
-                    f"relative paths inside your instance home, and files that live only "
-                    f"there (todo.md, journal.md, notes/, scratch/) cannot be searched at "
-                    f"all. Read those with memory_read; search the source tree."))
+                    f"relative paths inside your instance home (todo.md, journal.md, "
+                    f"heartbeats.jsonl, notes/, scratch/), and `search` does not reach "
+                    f"them." + self._home_find_door(str(intent.args.get("path") or ""), pattern)))
             return ResultEnvelope(ok=True, witness_id=action_id, result={
-                "pattern": pattern, "searched": where, "matches": 0,
+                "pattern": pattern, **_literal_key(pattern), "searched": where, "matches": 0,
                 "searched_a_real_file": True,
                 "note": (f"no line matches {pattern!r} in {where}. The path exists and was "
                          f"searched, so this is a real absence — but an answer about WHAT "
@@ -3396,12 +3560,39 @@ class HestiaF1aDispatcher:
                          f"check the pattern (it is an extended regex, so ( ) | + are "
                          f"special — searching for a literal one needs a backslash)")})
         return ResultEnvelope(ok=True, witness_id=action_id, result={
-            "pattern": pattern, "searched": where, "matches": len(lines),
+            "pattern": pattern, **_literal_key(pattern), "searched": where, "matches": len(lines),
             "shown": len(shown),
             "truncated": (f"{len(lines) - len(shown)} further matches not shown; narrow the "
                           f"path or the pattern" if truncated else None),
             "lines": shown})
 
+
+    def _home_find_door(self, rel: str, pattern: str) -> str:
+        """The way to find text in a home file, for a search that missed the worktree (SAGE #781).
+
+        The refusal used to end "files that live only there ... cannot be searched at all". That
+        stopped being true when memory_read got `find` (#351), and it cost mcnugget-being parts of
+        3 beats on 2026-11-18: it searched heartbeats.jsonl for `transport_faults` twice, was
+        told it could not, then read the file from its start (1,949 lines, the hits far past
+        the window). When the named file IS in the home, give the exact call."""
+        find = pattern if not re.search(r"[\\^$.*+?()\[\]{}|]", pattern) else ""
+        call = (f'memory_read {{"path": "{rel}", "find": "{find or "<literal text>"}"}}')
+        root = getattr(self, "memory_root", None)
+        try:
+            home = Path(root).resolve() if root else None
+            f = (home / rel).resolve() if (home and rel) else None
+            here = bool(f and f.is_file() and (f == home or home in f.parents))
+        except (OSError, ValueError):
+            here = False
+        tail = ("" if find else " find is literal text, not a regex: drop the escapes and "
+                "alternations.")
+        if here:
+            return (f" '{rel}' IS a file in your instance home. To list every line number "
+                    f"that holds a text in it: {call}.{tail} Then memory_read it with "
+                    f"start_line and end_line around a hit to see the lines.")
+        return (f" To find text in a home file, memory_read that file with find (literal "
+                f"text; it lists every line number the text is on). Search the source tree "
+                f"with search.")
 
     def _worktree_revision(self) -> dict:
         """WHICH TREE THE ANSWER IS ABOUT. A check result without this is not evidence: the
@@ -3530,12 +3721,22 @@ class HestiaF1aDispatcher:
                             hint = (f". You gave a base name; name the SOURCE path instead: "
                                     + ", ".join(rels) +
                                     " — inside the sandbox it still appears as " + n)
+                        elif i > 0 and "." not in n:
+                            # A VALUE, NOT A FILE (2026-11-13 02:10Z, _NO_ARGV_NOTE): a port number
+                            # passed as `data` was told it was a base name missing its directory.
+                            hint = (". `data` only stages files; it does not hand values to your "
+                                    "script, which gets no command-line arguments (sys.argv holds "
+                                    "only its name). Write the value into the script, or into a "
+                                    "file you name here")
                         else:
                             hint = (". You gave a base name with no directory. `data` takes SOURCE "
                                     "paths (relative to your home, or absolute in your reach); the "
                                     "base name is only how it appears inside the sandbox")
                     except Exception:  # noqa: BLE001 — a hint must never turn a miss into a crash
                         hint = ""
+                if not hint and i == 0:
+                    gone = retired_copy_note(Path(full), Path(root))
+                    hint = f".{gone}" if gone else ""
                 return ResultEnvelope(ok=False, error=f"run: no such file in your home: {n}{hint}")
             try:
                 fd = os.open(full, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
@@ -3598,12 +3799,12 @@ class HestiaF1aDispatcher:
         try:
             return self._run_staged(stage, staged, cmd, budget, bound_by,
                                     grant_mounts=run_grant_mounts(ctx),
-                                    run_key=_run_key(intent.args, staged))
+                                    run_key=_run_keys(intent.args, staged))
         finally:
             _release_stage_lock(lock_path, lock_fd)
 
     def _run_staged(self, stage, staged, cmd, budget, bound_by,
-                    grant_mounts=((), (), False), run_key: str = "") -> ResultEnvelope:
+                    grant_mounts=((), (), False), run_key=()) -> ResultEnvelope:
         """The staged part of `run`, called only with the stage's lock held (see _do_run).
         `grant_mounts` is run_grant_mounts' answer for the line in `cmd`, for the receipt."""
         import os
@@ -3730,13 +3931,19 @@ class HestiaF1aDispatcher:
         # beside output saying something was not running, not listening or unreachable; the being's next
         # thought said its seat was not running, or had to be brought back, on 15 of them. The receipt is rendered as JSON in key order, so `stdout` was read first and the fact
         # last. They are the same facts, said first and under their own key.
+        # A SCRIPT THAT REACHES FOR THE SEAT IS ASKED ABOUT TOO, NOT ONLY ONE THAT PRINTS ABOUT IT. sprout-being,
+        # 2026-11-14 22:21Z..11-17 08:00Z: 14 runs of its own scripts that start its seat with systemctl got
+        # no seat fact, because each exited at an earlier line (a missing binary) and printed nothing
+        # _HOST_VIEW matches. The daemon's answer stays tied to the output: it answers what a probe printed.
         outside = []
-        if _HOST_VIEW.search(f"{out}\n{errtxt}"):
-            if action_id:
+        source = staged[0][1][:RUN_SOURCE_SCAN_BYTES].decode("utf-8", "replace") if staged else ""
+        printed = _HOST_VIEW.search(f"{out}\n{errtxt}")
+        if printed or _HOST_VIEW.search(source):
+            if action_id and printed:
                 outside.append(_daemon_answered_note(action_id))
             try:
                 seat = self._seat_conversation()
-                said = _seat_wrote_note(self.memory_root, seat, f"{staged[0][0]}\n{out}\n{errtxt}",
+                said = _seat_wrote_note(self.memory_root, seat, f"{staged[0][0]}\n{out}\n{errtxt}\n{source}",
                                         run_t0) if seat else ""
             except Exception:
                 said = ""
@@ -4228,9 +4435,33 @@ class HestiaF1aDispatcher:
         rid = out.get("request_id")
         result = {"request_id": rid, "status": out.get("status"), "path": path,
                   "next": _scope_next(rid, out.get("next")), "on_timeout": out.get("on_timeout")}
+        # A STANDING REFUSAL IS ANSWERED, NOT FILED (hestia #1417): who closed the path, when, and why
+        # are the whole answer. Copying only the fields of a filed ask dropped them, and the being saw
+        # a bare status with no ruler and no reason.
+        if out.get("status") == "refused_standing":
+            for k in ("refused_by", "refused_at", "reason", "note"):
+                if out.get(k):
+                    result[k] = out[k]
         if copies:
             result["copy_in_reach"] = [c for c, _ in copies]
             result["meanwhile"] = copy_alternative(path, copies)
+        fs = _file_system_fact(path)
+        if fs:
+            result["file_system"] = fs
+        # ASKED BEFORE, AND REFUSED (sprout-being, 2026-11-23): the same write to a system file was asked
+        # for an hour after a refusal whose note said why no grant could help, and hestia's list no longer
+        # held that refusal. The new ask is filed all the same; the earlier ruling and its note ride with it.
+        # Only when hestia filed it (a request_id came back): it also answers without filing (a standing
+        # refusal, already granted, not filed), and "this request was filed" would then be false.
+        from sage.gateway import scope_rulings as _sr
+        before = [r for r in _sr.refused_before(self.memory_root, path) if r["id"] != rid] if rid else []
+        if before:
+            shown = before[-2:]
+            result["refused_before"] = (
+                [_sr.said(r) for r in shown]
+                + ([f"{len(before) - len(shown)} earlier refusals of this path are in {_sr.SCOPE_RULINGS}"]
+                   if len(before) > len(shown) else [])
+                + ["This request was filed and is ruled on its own; the earlier refusal stands as it was ruled."])
         return ResultEnvelope(ok=True, witness_id=out.get("witnessEntryHash"), result=result)
 
     def _do_say(self, intent: BeingIntent) -> ResultEnvelope:
@@ -4387,6 +4618,9 @@ class HestiaF1aDispatcher:
                     f"{len(turn['text'])} chars were delivered as seq {turn['seq']}]")
         result = {"conversation": to, "seq": turn["seq"],
                   "said": said, "action_id": action_id}
+        _verbs = call_text_verbs(turn["text"])
+        if _verbs:
+            result["not_performed"] = _call_text_note(_verbs)
         if woke:
             result["woke"] = woke
         elif getattr(self, "_wake_why", ""):
@@ -4486,6 +4720,31 @@ class HestiaF1aDispatcher:
         except ValueError as e:
             return ResultEnvelope(ok=False, error=str(e))
         if not p.exists():
+            # A MISS ONE DIRECTORY AWAY IS NOT AN ABSENCE — here too. Measured 2026-11-17
+            # 04:55Z on cbp-being: its previous beat had read notes/mechanism-training-numpy.py;
+            # this beat it asked request_run for the bare name, was told only "does not exist",
+            # then tried an underscore spelling, paged the 464-entry home listing (entries 1-10),
+            # and told the seat "the file is missing ... it may need to be recreated". memory_read
+            # and memory_edit already name the same-name file one directory over
+            # (_same_name_elsewhere); request_run was the one door that still said "absent".
+            near = []
+            try:
+                near = self._local._same_name_elsewhere(p)
+            except Exception:  # noqa: BLE001 — a hint must never turn a miss into a crash
+                near = []
+            if len(near) == 1:
+                return ResultEnvelope(ok=False, error=(
+                    f"nothing to run: '{raw}' does not exist, but a file with that name DOES "
+                    f"exist at '{near[0]}'. Nothing was sent to the seat. To ask for that file: "
+                    f"request_run {{\"path\": \"{near[0]}\"}}. The file is not missing; only "
+                    f"the path you gave was."))
+            if near:
+                where = ", ".join(f"'{n}'" for n in near[:5])
+                more = f" and {len(near) - 5} more" if len(near) > 5 else ""
+                return ResultEnvelope(ok=False, error=(
+                    f"nothing to run: '{raw}' does not exist, but {len(near)} files with that "
+                    f"name exist: {where}{more}. Nothing tells which one you mean; ask for it "
+                    f"by its full path. Nothing was sent to the seat."))
             return ResultEnvelope(ok=False, error=(
                 f"nothing to run: '{raw}' does not exist, so there is no file to hand the "
                 f"seat. This is an absence, not a refusal. Check the name — memory_read on "
@@ -4827,13 +5086,16 @@ class HestiaF1aDispatcher:
                     "has gone out for this run yet"
                     + ("; it does not make the file run, and the seat still decides" if declined else "")
                     + ". It is not a line in your file.")
-        return ResultEnvelope(ok=True, witness_id=said.witness_id, result={
-            **result,
-            "requested": rel,
-            "asked": seat_conv,
-            "ran": False,
-            "note": note,
-        })
+        # WHAT YOU SETTLED COMES AFTER "NOTHING HAS RUN YET", not before it. cbp 2026-11-14 (heartbeat
+        # 02:43:35, seq 14877/14881): you_settled led the receipt with s499, an evidence-less answer
+        # holding an expectation ("expected to achieve 80-90%+"), the note came last, and the beat's
+        # reflect reported 80-90% as the run's result while the real run (seq 14879) exited 1 with no
+        # accuracy line. Seat answers (unchanged, earlier_on_this) stay above the note; its "above" names them.
+        settled = result.pop("you_settled", None)
+        body = {**result, "requested": rel, "asked": seat_conv, "ran": False, "note": note}
+        if settled:
+            body["you_settled"] = settled
+        return ResultEnvelope(ok=True, witness_id=said.witness_id, result=body)
 
     def _skips_answered_run_wake(self) -> bool:
         """instance.json `answered_run_wake: "skip"` (per-instance; heartbeat.answered_run_wake_for).
@@ -5397,6 +5659,14 @@ def _scope_next(request_id, daemon_next) -> str:
 _SCOPE_ID = re.compile(r"\bscope-[0-9a-f]{12}\b")
 
 
+def _kept_row(kept):
+    """A kept ruling (scope_rulings) in the shape of a hestia_scope_status row, or None."""
+    if not kept:
+        return None
+    return {"status": f"{kept.get('decision')} (kept by your seat; hestia's list no longer shows it)",
+            "decided_by": kept.get("by") or None, "path": kept.get("path")}
+
+
 def _named_scope_fact(rid: str, row) -> str:
     """One named request as hestia holds it. tool_scope_status lists every request of the member's,
     decided and expired included, so an id it lacks is not one waiting on anyone."""
@@ -5472,7 +5742,10 @@ def _run_reach_note(mounts: list, skipped: list) -> str:
                               "can mount. ")
             + "Any other path, your home included, does not exist in there, so a check like "
               "os.path.exists() is False for it whatever is on disk; memory_read answers about "
-              "the disk.")
+              "the disk. Outside /tmp, /work and what is WRITABLE above, nothing in there can be "
+              "written: a write elsewhere (/home/..., /opt/...) fails as 'Read-only file system', and to "
+              "a system file mounted in there (/etc/passwd) as 'Permission denied', so a run cannot "
+              "change those files on this machine.")
     if skipped:
         text += " Not mounted: " + "; ".join(f"{p} ({why})" for p, why in skipped) + "."
     return text
@@ -5491,7 +5764,61 @@ def _run_note(rc: int, stderr: str, files: list, stdout: str = "", seatbelt: boo
     pid = _pid_note(said, seatbelt)
     if pid:
         note += " " + pid
+    missing = _MISSING_MODULE.findall(stderr) or _MISSING_MODULE_SAID.findall(stdout)
+    if missing:
+        note += " " + _module_note(missing[-1])
+    absent = _missing_file(stderr)
+    if absent:
+        note += " " + _missing_file_note(absent, files)
+    if rc != 0 and _ARGV_SAID.search(said):
+        note += " " + _NO_ARGV_NOTE
+    if rc == 0 and not said.strip():
+        note += " " + _SILENT_NOTE
+    if not seatbelt and _ACCOUNT_VIEW.search(said):
+        note += " " + _ACCOUNT_NOTE
     return note
+
+
+#: THE BOX MAPS ONE ACCOUNT. A run is in a user namespace that maps only the being's own uid, so inside it a
+#: file owned by root or by any other account shows as 65534 (nobody), and the being's other groups as 65534
+#: (nogroup). sprout-being, 2026-11-19..22: its runs printed groups=...,65534 and nobody-owned system files, and
+#: it concluded that an account it wanted existed at UID 65534, then asked, for days, to change that account.
+#: The mapping is the sandbox's design, so saying it is evidence-only; it names no account as present or absent.
+#: Not on macOS: sandbox-exec has no user namespace.
+_ACCOUNT_VIEW = re.compile(r"\b65534\b|\bnobody\b|\bnogroup\b|/etc/(?:passwd|group|shadow)\b|\buseradd\b"
+                           r"|\busermod\b|\bgetent\b|\bwhoami\b|\bgroups=", re.I)
+_ACCOUNT_NOTE = ("Inside the run you are the only account mapped: a file owned by root or any other account shows "
+                 "as nobody (65534), and your other groups as nogroup (65534). That is the box's mapping, not an "
+                 "account on this machine. The user and group lists in there are this machine's own, read-only.")
+
+
+#: EXIT 0 WITH NOTHING PRINTED IS NOT A FINDING. sprout-being, 2026-11-21 19:34Z: a 30-line script meant to create
+#: a system account ran in the sandbox, exited 0 and printed nothing on either stream (its only prints sat on the
+#: success and not-found paths). In that beat its todo recorded the account as existing and the scope as granted;
+#: at 21:24Z a note listed checks no run had made, and at 22:44Z that answer was settled. The note had said only
+#: what the sandbox is. This says what the run showed, and only that: no cause is guessed.
+#: Scoped to what was printed (legion on #809): changed_in_your_grants, when the receipt carries it, IS evidence of
+#: what the run wrote, and a note that called the whole run no evidence would contradict it.
+_SILENT_NOTE = ("It printed nothing, on stdout or on stderr. Exit 0 says only that it did not end with an error: "
+                "what it printed is no evidence of what it did or found (changed_in_your_grants, when present, "
+                "lists what it wrote).")
+
+
+#: A run that ended asking for its arguments: a usage line, argparse's complaint, or an IndexError
+#: traceback through sys.argv[1..] (argv[0], the script's own name, is always there: legion on #733).
+_ARGV_SAID = re.compile(r"^\s*usage:|the following arguments are required|sys\.argv\[[1-9]", re.I | re.M)
+
+#: A SCRIPT THAT WANTS AN ARGUMENT NEVER GETS ONE. sprout-being, 2026-11-13 02:10Z: it wrote a port
+#: check to find out whether anything listens on 30001. The script printed its usage line and exited 1.
+#: It passed the port as `data` twice and was told it had named a base name without its directory. The beat ended
+#: with no answer, and 38 minutes later it settled that the port was listening. In 967 runs
+#: (11-05..11-15), 24 ended on a usage line or an argv error, and 5 were followed by a value passed as
+#: `data`. The run tool's long description says sys.argv holds only the script's name. The receipt
+#: did not, and the receipt is what the being reads when the script fails.
+_NO_ARGV_NOTE = ("This run was given no command-line arguments, and `run` cannot pass any: inside the "
+                 "sandbox sys.argv holds only the script's name. If the script stopped because it "
+                 "wanted one, write the value into the script, or into a file you pass as `data` and "
+                 "open by its base name.")
 
 
 def _daemon_answered_note(action_id: str) -> str:
@@ -5514,6 +5841,9 @@ def _daemon_answered_note(action_id: str) -> str:
 
 #: How far back the seat's last turn is looked for, in the being's conversation with it.
 SEAT_WROTE_SCAN = 400
+
+#: How much of the run's script is read for _HOST_VIEW and the seat's name (the being's scripts are a few KB).
+RUN_SOURCE_SCAN_BYTES = 64 * 1024
 
 
 def _ago(secs: float) -> str:
@@ -5650,6 +5980,119 @@ def _device_note() -> str:
             "device you are granted is used through the verb made for it (camera for frames), not from run.")
 
 
+#: A Python import the run could not satisfy; the name is the module it asked for.
+_MISSING_MODULE = re.compile(r"(?:ModuleNotFoundError|ImportError): No module named '([^']+)'")
+#: The same failure caught and printed by the program itself ("torch is NOT available: No module named
+#: 'torch'"): no exception class, because the script's own print drops it. Read in stdout only when stderr
+#: names no missing module.
+_MISSING_MODULE_SAID = re.compile(r"No module named '([^']+)'")
+
+
+def _module_note(name: str) -> str:
+    """A MISSING MODULE IS ABOUT THE SANDBOX, AND `run` IS ALWAYS THE SANDBOX. cbp-being, 2026-11-12 12:12Z
+    and 12:25Z: two beats in a row, its runs stopped at line 1 with "No module named 'torch'", and it spent
+    the rest of each beat on scratch/install_torch.py (pip: externally-managed-environment) and on `run`
+    with the file's absolute host path, its "why" saying "running on the host where torch is installed".
+    All six runs of the second beat started File "/work/...". It then saved with `remember` that a
+    ModuleNotFoundError means "the script's working directory may not be where the module is installed".
+    The traceback note named the line; nothing said where the run happened or what route reaches the host.
+    Measured on its heartbeats, 2026-10-19..11-12: 289 of 4,958 runs ended on a missing module, in 168
+    beats (hestia_governance_closure 114, torch 79, pytest 36, chat_handler 26), and 710 runs named a file
+    with "install" in its path.
+
+    ONLY THE SANDBOX'S DESIGN IS STATED, as in _host_note: the note does not say whether this machine has
+    the module, which nothing in the run shows. It names both routes, because the missing name is sometimes
+    the being's own file (chat_handler), which `data` copies in, and sometimes a package, which no run can add.
+
+    STDOUT TOO: AN AVAILABILITY CHECK CATCHES THE ERROR AND PRINTS IT. cbp-being, 2026-11-14 09:33Z: its
+    scratch/check-torch-availability.py caught the ImportError and printed "torch is NOT available: No module
+    named 'torch'" (exit 1, stderr empty), so the stderr-only first version stayed silent. The same beat
+    journaled "torch is NOT installed on the host (verified by the script)", wrote an install script that
+    downloads pip and builds a venv under /opt, and asked for write scope on the user bin dir -- the second
+    such ask in a day, while its own request_run of the training script had trained on the host's torch at
+    08:52Z. Recounted 2026-10-19..11-14 over the 4,177 run traces in its beats' explore/act/reflect/answer
+    phases: 289 runs named a missing module, 252 on stderr and 37 (27 beats) only on stdout (torch 15, cv2 13): the being's own "is X available?" checks, the runs most likely to be read as
+    a fact about this machine. A benign stdout mention costs one true sentence; a miss cost that beat."""
+    return (f"No module named '{name}' is about the sandbox this ran in: `run` always executes there, "
+            f"whatever path you name (its files sit in /work), so a check that prints it answers for the "
+            f"sandbox, not for this machine. Installing from "
+            f"inside a run cannot fix it: the sandbox has no network and keeps nothing a run writes outside "
+            f"your grants. If '{name}' is a file of yours, name it in 'data' so it is copied in beside the "
+            f"script. Otherwise, request_run asks your seat to run the file on this machine, and the seat "
+            f"decides.")
+
+
+#: Python's own open() failure, as the traceback's last line prints it; the name is the path it was given.
+_MISSING_FILE = re.compile(r"FileNotFoundError: \[Errno 2\] No such file or directory: '([^']+)'")
+
+
+def _missing_file(stderr: str) -> str:
+    """The relative path the run stopped on, or "" when the note would not be true.
+
+    ONLY A RELATIVE PATH, ONLY WHEN SUBPROCESS DID NOT RAISE IT. An absolute path may sit inside a grant,
+    mounted at the same path, where a miss IS a fact about the disk; a relative one resolves inside /work,
+    which holds only the run's own copies. subprocess raises the same message for a program it cannot
+    find on PATH ('uv', 'wsl'), which is not a file of the being's (77 of 190 relative misses, below).
+    /work/... IS NOT A GRANT: it is the sandbox's own working directory, so a miss there is as much a fact
+    about the run as a relative miss is (_missing_file_note says what /work held)."""
+    found = _MISSING_FILE.findall(stderr)
+    if not found or "subprocess.py" in stderr:
+        return ""
+    if found[-1].startswith("/") and not found[-1].startswith(_RUN_WORK):
+        return ""
+    return found[-1]
+
+
+_RUN_WORK = "/work/"
+
+
+def _missing_file_note(path: str, files: list = ()) -> str:
+    """A MISSING RELATIVE FILE IS ABOUT THE SANDBOX, AND ITS ROUTE OUT IS request_run. cbp-being, 2026-11-15
+    00:15Z: its seat's turn said "request_run scratch/verify-labels-match.py; that run starts in your home".
+    The beat used `run` instead. The traceback said File "/work/verify-labels-match.py", line 4,
+    FileNotFoundError: 'data/train.npy', and the note named the line. _run_reach_note did say that the home
+    does not exist inside the run, but it named no route out. The being spent the rest of the beat on a script
+    to copy data/ into /work (written, never run) and a refused search. Then it journaled "second attempt
+    succeeded after data files were copied into the sandbox" and "verify-labels-match.py runs in the home
+    directory and works correctly". Neither had happened.
+    Measured on its heartbeats, 2026-10-19..11-15: 4,257 runs, 397 ended on this error on stderr. 207 named an
+    absolute path, 77 a program subprocess could not find, and 113 (72 beats) a relative file. Only 2 of
+    those 113 were followed by a request_run in the same phase.
+
+    'data' IS NAMED AS A ROUTE ONLY WITH ITS CATCH: files arrive flat under their base names
+    (_run_note_core), so a script that opens data/x.npy finds nothing even when data/x.npy is passed. Like
+    _module_note, the note says nothing about whether the file is on disk; memory_read answers that.
+
+    A MISS AT /work/<name> NAMES WHAT /work HELD. cbp-being, 2026-11-15 02:57Z: at 02:48 its
+    `run path=scratch/fit-weights.py data=["data/train.npy","data/train_targets.npy"]` loaded
+    /work/train.npy and exited 0. At 02:57 it sent the same run without data=, stopped on
+    FileNotFoundError: '/work/train.npy', ran it twice more, asked for a grant it already held, and told
+    its seat "The file doesn't exist ... where are the data files actually?" The note said only that the
+    home is not inside the run. Nothing said the one difference was the missing data=. Measured on its
+    heartbeats to 2026-11-15 03:00Z: 4,347 runs, 16 (11 beats) ended on a miss under /work/. All 16 named
+    no data, and none was followed by a run with data in the same phase. The note lists the files this run
+    held (a fact from staging) and says how 'data' puts a file at /work/<base name>."""
+    if path.startswith(_RUN_WORK):
+        rest = path[len(_RUN_WORK):]
+        held = ", ".join(files) or "nothing"
+        if "/" in rest:
+            return (f"'{path}' is inside the sandbox's /work, which held only what this run named, flat: "
+                    f"{held}. A file passed as 'data' arrives under its base name only (data/x.npy is "
+                    f"/work/x.npy), so no run has a '{path}'. This says nothing about your disk; memory_read "
+                    f"answers that.")
+        return (f"'{path}' is inside the sandbox's /work, which held only what this run named: {held}. "
+                f"'{rest}' was not among them. A file from your home reaches /work only when the run call "
+                f"names it in 'data', and it arrives under its base name: if it is data/{rest} in your home, "
+                f"data=[\"data/{rest}\"] puts it at /work/{rest}. This says nothing about your disk; "
+                f"memory_read answers where it is.")
+    return (f"'{path}' is a relative path, so it was looked up inside the sandbox's /work. /work holds only "
+            f"the files this run named, and your home is not there, so this miss answers for the sandbox and "
+            f"says nothing about your disk (memory_read answers whether '{path}' exists there). A file passed "
+            f"as 'data' arrives under its base name only (data/x.npy is x.npy), so copying cannot make a path "
+            f"with a directory in it resolve. To run this file against your home as it is, request_run asks "
+            f"your seat to run it there, and the seat decides.")
+
+
 # A RERUN OF THE SAME BYTES SAID NOTHING ABOUT THE FIRST. sprout-being, 2026-11-11: at 04:15Z it settled why
 # a script of its own ended with exit 143, and at 15:10Z it ran the same file, unchanged since 02:40Z, twice
 # more. Both runs ended the same way, and each receipt read as a first run, so the being took the result as
@@ -5661,17 +6104,38 @@ RUN_LOG = "run_log.jsonl"
 RUN_LOG_READ_BYTES = 256 * 1024
 
 
+# THE SAME BYTES UNDER ANOTHER SPELLING WERE A NEW RUN. sprout-being, 2026-11-17 03:37Z: it named a script
+# by its absolute path that it had run twice on 11-16 as scratch/<name>, unchanged since, and the receipt
+# read as a first run. `path` and `data` are how the files were found, not what ran: the run sees only
+# their base names and bytes, which `staged` carries in order, so they are left out of the key.
+_RUN_KEY_SPELLING = ("path", "data")
+
+
 def _run_key(args: dict, staged: list) -> str:
-    """One digest of what a run was given: its arguments and every named file's bytes, in order."""
-    h = hashlib.sha256(json.dumps(args or {}, sort_keys=True, default=str).encode())
+    """One digest of what a run was given: its other arguments and every named file's base name and
+    bytes, in order. However a file was spelled, the same bytes under the same name are the same run."""
+    rest = {k: v for k, v in (args or {}).items() if k not in _RUN_KEY_SPELLING}
+    h = hashlib.sha256(json.dumps(rest, sort_keys=True, default=str).encode())
     for base, data in staged:
         h.update(b"\0" + base.encode() + b"\0" + hashlib.sha256(data).digest())
     return h.hexdigest()
 
 
-def _run_seen_note(home, key: str, rc: int, said: str, now: Optional[float] = None) -> str:
+def _run_keys(args: dict, staged: list) -> tuple:
+    """The key, then the key as it was made before 11-17 (spelling included), so a run logged then is
+    still found after the change. Only the first is written."""
+    h = hashlib.sha256(json.dumps(args or {}, sort_keys=True, default=str).encode())
+    for base, data in staged:
+        h.update(b"\0" + base.encode() + b"\0" + hashlib.sha256(data).digest())
+    return (_run_key(args, staged), h.hexdigest())
+
+
+def _run_seen_note(home, key, rc: int, said: str, now: Optional[float] = None) -> str:
     """Look the key up in the home's run log, append this run, and say what an earlier run of the same
-    bytes did. Empty when these bytes never ran before."""
+    bytes did. Empty when these bytes never ran before. `key` may be a tuple: any of them matches, and
+    the first is the one logged."""
+    keys = (key,) if isinstance(key, str) else tuple(key)
+    key = keys[0]
     now = time.time() if now is None else now
     p = Path(home) / RUN_LOG
     said_h = hashlib.sha256(said.encode(errors="replace")).hexdigest()[:16]
@@ -5686,7 +6150,7 @@ def _run_seen_note(home, key: str, rc: int, said: str, now: Optional[float] = No
                 r = json.loads(line)
             except ValueError:
                 continue
-            if r.get("key") == key:
+            if r.get("key") in keys:
                 prev, runs = r, runs + 1
     except OSError:
         pass
@@ -5788,6 +6252,43 @@ def _run_note_core(rc: int, stderr: str, files: list) -> str:
             f"{here}. No other file from your home was there, and nothing an earlier run wrote "
             f"is kept; a file passed as 'data' arrives "
             f"under its base name (data/x.npy is x.npy), not in a subdirectory.")
+
+
+# GIT_READ CAT READS A FILE FROM ITS START, IN PARTS THAT SAY WHERE THEY ARE. `cat` was cut like
+# show/diff: the LAST 6,000 characters, behind "[… truncated: N earlier characters withheld …]", with
+# no line numbers and no way to ask for the rest. Measured on mcnugget-being, 2026-11-17: asking how
+# `transport_faults` is handled, it read sage/gateway/egress_drain.py (329 lines, 18.7k chars) with
+# `cat` three times in each of the 13:28 and 14:10 beats, and got the same last third every time;
+# the module docstring and the top of the file were never shown. At 13:28 it sent `start_line: '200'`,
+# which git_read did not take, and the answer was again the same tail. Now a file is shown from line 1
+# (or the start_line given) in whole lines up to the limit, headed with which lines of how many these
+# are, and ended with the start_line that reads on. The command the law judged is unchanged: the
+# window is cut from git's output here.
+def cat_window(text: str, start_raw, limit: int, path: str = "", rev: str = "") -> str:
+    lines = text.split("\n")
+    total = len(lines)
+    try:
+        start = int(str(start_raw).strip()) if start_raw not in (None, "") else 1
+    except (TypeError, ValueError):
+        start = 1
+    start = max(start, 1)
+    at = f"'{path}'" + (f" at {rev}" if rev else "")
+    if start > total:
+        return (f"[{at} has {total} lines, so start_line {start} names no line. "
+                f"start_line 1 reads it from the top.]")
+    shown, size = [], 0
+    for ln in lines[start - 1:]:
+        if shown and size + len(ln) + 1 > limit:
+            break
+        shown.append(ln if len(ln) <= limit else ln[:limit] + " […line cut]")
+        size += len(ln) + 1
+    end = start + len(shown) - 1
+    if start == 1 and end == total:
+        return text
+    head = f"[lines {start}-{end} of {total} of {at}" + (f"; lines 1-{start - 1} are above" if start > 1 else "") + "]"
+    tail = (f"[lines {end + 1}-{total} are not shown: git_read op 'cat' path '{path}'"
+            + (f" rev '{rev}'" if rev else "") + f" start_line {end + 1} reads on]") if end < total else "[that is the end]"
+    return head + "\n" + "\n".join(shown) + "\n" + tail
 
 
 if __name__ == "__main__":  # live smoke against the local daemon: mesh -> member_notify

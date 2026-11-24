@@ -210,3 +210,16 @@ def test_envelopes_complete_at_relay_time_or_pre_424_get_no_completion_notice(tm
     assert len(told) == 1                                    # the first notice only
     out = d.drain_once(home, "unused", workspace=ws, fetch=lambda: [], notify=rec)
     assert out["completion_notified"] == 0 and len(told) == 1
+
+
+def test_a_forum_pointer_in_the_fleet_spelling_is_delivered_too(tmp_path):
+    """hub-notify addresses forum posts as `forum/<file>.md`. Only `shared-context/...` was copied, so every
+    forum reply reached the being as an envelope with nothing in it (nomad-being, 2026-11-14)."""
+    root, ws, _ = _ws(tmp_path)
+    (root / "shared-context/forum/answer.md").write_text("Run the check before and after the patch.")
+    got = d.delivered_content("forum/answer.md", ws)
+    assert got["text"].startswith("Run the check")
+    (root / "private-context/secret.md").write_text("private")
+    for ptr in ("forum/../../private-context/secret.md", "forum/../forum/../../private-context/secret.md"):
+        assert "text" not in d.delivered_content(ptr, ws), ptr
+    assert "not in this machine's copy" in d.delivered_content("forum/absent.md", ws)["why"]

@@ -169,6 +169,31 @@
   .chat-msg.sage .sender { color: var(--state-color); }
   .chat-msg .time { font-size: 9px; color: var(--text-dim); float: right; margin-left: 8px; }
 
+  /* THE BEING'S OUTPUT STREAM (GET /being/output; Python sage.gateway.being_stream). dp, 2026-11-20:
+     the agent's stream is a key feature and liveness indicator in every major CLI harness. */
+  .view-tabs { display: inline-flex; gap: 4px; margin-left: 10px; }
+  .view-tab {
+    background: transparent; color: var(--text-dim); border: 1px solid var(--border); border-radius: 3px;
+    font: inherit; font-size: 10px; padding: 1px 8px; cursor: pointer; text-transform: uppercase;
+  }
+  .view-tab.on { color: var(--accent); border-color: var(--accent); }
+  .out-live { margin-left: 10px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-dim); }
+  .out-live.live { color: var(--accent); }
+  .output-log {
+    flex: 1; overflow-y: auto; padding: 12px 16px; display: none;
+    white-space: pre-wrap; word-wrap: break-word; font-size: 12px;
+  }
+  .output-log.on { display: block; }
+  .out-beat { color: var(--text-dim); border-top: 1px solid var(--border); margin-top: 10px; padding-top: 4px; }
+  .out-call { color: var(--state-color); font-weight: 700; margin-top: 6px; }
+  .out-think { color: var(--text-dim); font-style: italic; border-left: 2px solid var(--border); padding-left: 8px; }
+  .out-text { color: var(--text); padding-left: 10px; }
+  .out-tool { color: #e8c060; padding-left: 10px; }
+  .out-done { color: var(--text-dim); font-size: 10px; padding-left: 10px; }
+  .out-error { color: #ff6666; padding-left: 10px; }
+  .out-end { color: var(--text-dim); font-size: 10px; }
+  .out-empty { color: var(--text-dim); }
+
   .chat-form {
     display: flex; gap: 8px; padding: 10px 16px;
     border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0;
@@ -195,6 +220,8 @@
     border-radius: 4px; font-size: 11px; padding: 2px 6px; margin-left: 8px; }
   .conv-state { font-size: 10px; color: var(--text-dim); margin-left: 8px; }
   .conv-state.readonly { color: var(--warn, #d29922); }
+  .conv-state.busy { color: var(--warn, #d29922); }
+  .conv-state.thinking { color: var(--accent, #58a6ff); }
   .conv-note { padding: 6px 10px; font-size: 10px; color: var(--text-dim);
     border-top: 1px solid var(--border); }
   /* a REFUSAL is not an empty list: shown at reading size, in the warning colour (dp 2026-10-08:
@@ -296,8 +323,14 @@
         <span id="chat-sage-name">SAGE</span>
         <select id="conv-select" title="conversation"></select>
         <span id="conv-state" class="conv-state"></span>
+        <span class="view-tabs">
+          <button type="button" class="view-tab on" id="tab-conv" title="the conversations">conversation</button>
+          <button type="button" class="view-tab" id="tab-output" title="what the being is producing, as it produces it">output</button>
+        </span>
+        <span class="out-live" id="out-live" title="is the being producing output right now?">○ --</span>
       </div>
       <div class="chat-log" id="chat-log"></div>
+      <div class="output-log" id="output-log"><div class="out-empty">no output yet</div></div>
       <form class="chat-form" id="chat-form">
         <textarea id="chat-input" placeholder="Say something..." autocomplete="off" rows="1"></textarea>
         <button type="submit" id="chat-send">Send</button>
@@ -426,6 +459,8 @@ async function refreshStatus() {
     document.getElementById('beats-value').textContent = (beats.completed || 0).toLocaleString();
     document.getElementById('beats-display').textContent = 'Beats: ' + (beats.completed || 0).toLocaleString();
     document.getElementById('beat-now').textContent = describeBeat(beats);
+    lastBeats = beats;
+    if (convId && convs.length) renderConvState();
     document.getElementById('sys-fleet-size').textContent = 'Fleet: ' + (d.fleet_size || 0) + ' machines';
     // The SNARC the being last felt. updateSnarc() was defined and never called from the day
     // the conversations rewrite landed, so these bars read 0.00 on every machine (SAGE #111).
@@ -548,6 +583,79 @@ const convNote = document.getElementById('conv-note');
 
 function convWritable(c) { return c && (c.writable_by || []).indexOf('dp') >= 0; }
 
+// --- Waiting for the being (SAGE #788) -------------------------------------
+// dp, 2026-11-18, after a demo: a model that answers fast and shows it is working FEELS more
+// capable. The being cannot answer in a second, but the page can stop being silent about why.
+// Two things were wrong here: the page looked for the being's reply every 20 s, so a reply written
+// in 10 s could take 30 s to appear, and while a turn waited it said only "1 awaiting the being".
+// Now, while a turn is waiting, the page polls every 2 s and says what the beat is actually doing,
+// from the heartbeat's own phase reports (/status beats.current). "Writing its answer" is shown
+// only when the beat has reported its answer phase; nothing here is a decorative spinner.
+const POLL_IDLE_MS = 20000;
+const POLL_WAITING_MS = 2000;
+let lastBeats = null;     // /status beats, kept by refreshStatus
+let shownCount = null;    // turn count of the log on screen; a poll reloads it only when this changes
+let beingName = null;
+
+function pollDelay(awaiting) { return awaiting > 0 ? POLL_WAITING_MS : POLL_IDLE_MS; }
+
+// What the being is doing while a turn waits (SAGE #788). dp, 2026-11-19: no cancelling an in-flight
+// model call; let it complete, then switch attention, and say 'busy' (not 'thinking') meanwhile.
+// 'thinking' is said ONLY when the heartbeat has reported its answer phase.
+function waitingState(beats, awaiting) {
+  if (!awaiting) return null;
+  const cur = beats && beats.current;
+  if (cur && cur.phase === 'answer') return 'thinking';
+  if (cur) return 'busy';
+  return 'waiting';
+}
+
+function waitingLine(being, beats, awaiting) {
+  const state = waitingState(beats, awaiting);
+  if (!state) return null;
+  const who = being || 'the being';
+  const turns = awaiting === 1 ? '1 turn waiting' : awaiting + ' turns waiting';
+  const cur = beats && beats.current;
+  if (state === 'thinking') {
+    return 'thinking \u00b7 ' + turns + ': ' + who + ' is writing its answer now.';
+  }
+  if (state === 'busy') {
+    return 'busy \u00b7 ' + turns + ': ' + who + ' is mid-beat (' + cur.phase + ', running ' +
+           fmtAge(cur.age_secs) + '); the step it is on runs to completion before it answers.';
+  }
+  if (beats && beats.since_last_beat_end_secs != null) {
+    return 'waiting \u00b7 ' + turns + ': no beat is running (the last ended ' +
+           fmtAge(beats.since_last_beat_end_secs) + ' ago); waiting for one to start.';
+  }
+  return 'waiting \u00b7 ' + turns + ': waiting for a beat to start.';
+}
+
+function renderConvState() {
+  const c = convs.find(x => x.id === convId);
+  const writable = convWritable(c);
+  convState.textContent = writable
+    ? (waitingLine(beingName, lastBeats, (c && c.awaiting_being) || 0) || 'up to date')
+    : 'read-only';
+  const state = writable ? waitingState(lastBeats, (c && c.awaiting_being) || 0) : null;
+  convState.className = 'conv-state' + (writable ? '' : ' readonly') + (state ? ' ' + state : '');
+}
+
+function convAwaiting() {
+  const c = convs.find(x => x.id === convId);
+  return (c && c.awaiting_being) || 0;
+}
+
+let pollTimer = null;
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(pollConversations, pollDelay(convAwaiting()));
+}
+
+async function pollConversations() {
+  try { if (convId) await loadConversations(true); }
+  finally { schedulePoll(); }
+}
+
 function kindOf(from) {
   if (from === 'dp') return 'dp';
   if (/-being$/.test(from)) return 'sage';
@@ -560,7 +668,7 @@ function kindOf(from) {
 // said "No conversations on this machine yet." on a machine that had them, and fell back to the
 // raw-model chat. The daemon's own words -- why it refused, and where to read instead -- are
 // shown now, and the panel does not pretend the machine is empty.
-async function loadConversations() {
+async function loadConversations(poll = false) {
   try {
     const r = await fetch(BASE + '/conversations');
     const d = await r.json().catch(() => ({}));
@@ -596,7 +704,14 @@ async function loadConversations() {
     });
     convId = (keep && convs.some(c => c.id === keep)) ? keep
            : (convs.find(convWritable) || convs[0] || {}).id || null;
-    if (convId) { convSelect.value = convId; await loadConversation(convId); }
+    if (convId) {
+      convSelect.value = convId;
+      // A poll reloads the log only when the conversation grew: rebuilding it every 2 s while a turn
+      // waits would reset the scroll and flicker. Otherwise only the waiting line is refreshed.
+      const cur = convs.find(c => c.id === convId);
+      if (!poll || !cur || cur.count !== shownCount) await loadConversation(convId);
+      else renderConvState();
+    }
     else {
       // Empty really is empty here (the daemon answered). Say whose move that is: nothing in the
       // fleet creates a being's conversations automatically -- the seat does, once.
@@ -625,11 +740,9 @@ async function loadConversation(id) {
       chatLog.appendChild(n);
     }
     (d.turns || []).forEach(t => appendChat(t.from, t.text, kindOf(t.from), t.ts, t.trial));
-    const waiting = (c && c.awaiting_being) || 0;
-    convState.textContent = writable
-      ? (waiting ? waiting + ' awaiting the being' : 'up to date')
-      : 'read-only';
-    convState.className = 'conv-state' + (writable ? '' : ' readonly');
+    shownCount = c ? c.count : null;
+    if (d.being) beingName = d.being;
+    renderConvState();
     chatInput.disabled = !writable;
     chatSend.disabled = !writable;
     chatInput.placeholder = writable
@@ -671,7 +784,10 @@ async function sendChat() {
       chatLog.scrollTop = chatLog.scrollHeight;
     }
     refreshStatus();
-    loadConversations();
+    // Awaited, then the poll is re-armed at once: a turn just sent must not sit behind a 20 s timer
+    // armed while nothing was waiting.
+    await loadConversations();
+    schedulePoll();
   } catch(err) {
     appendChat('System', 'Connection error: ' + err.message, 'error');
   } finally {
@@ -712,9 +828,95 @@ async function init() {
   setInterval(refreshStatus, 3000);
   setInterval(refreshPeers, 15000);
   // The being answers on its own rhythm; poll for its turn rather than making a person
-  // reload to find out whether they were answered.
-  setInterval(() => { if (convId) loadConversations(); }, 20000);
+  // reload to find out whether they were answered. Every 2 s while a turn waits, else 20 s (#788).
+  schedulePoll();
 }
+// ---- the being's output stream -------------------------------------------------------------------------------
+// Polled once a second by byte offset (GET /being/output?after=N returns only what was appended). The live line in
+// the header shows on both views: whether output is arriving now, and in which turn.
+const OUT_LIVE_S = 5, OUT_KEEP = 4000;
+let outOffset = null, outEvents = [], outView = false, outBusy = false, outRefused = '';
+
+function outAgo(s) { s = Math.floor(s); return s < 120 ? s + 's' : s < 7200 ? Math.floor(s / 60) + 'm' : Math.floor(s / 3600) + 'h'; }
+function outHms(t) { return new Date(t * 1000).toISOString().slice(11, 19); }
+
+function outStatus(now) {
+  if (outRefused) return ['✗ output not readable here', false];
+  if (!outEvents.length) return ['○ no output yet', false];
+  const last = outEvents[outEvents.length - 1], age = Math.max(0, now - (last.t || 0));
+  const call = [...outEvents].reverse().find(e => e.k === 'call');
+  const turn = (call && call.turn) || '?';
+  const active = { think: 'thinking', text: 'writing', tool: 'calling a tool', call: 'waiting for the model' };
+  if (last.k === 'end') return ['○ resting · last beat ended ' + outAgo(age) + ' ago', false];
+  if (last.k === 'beat') return ['◐ beat starting (' + outAgo(age) + ' ago) · no model call yet', false];
+  if (active[last.k] && age <= OUT_LIVE_S) return ['● live · ' + active[last.k] + ' (' + turn + ')', true];
+  if (active[last.k]) return ['◐ in a beat · no output for ' + outAgo(age) + ' (' + turn + ')', false];
+  return ['◐ in a beat (' + turn + ') · last call ended ' + outAgo(age) + ' ago', false];
+}
+
+function outRender() {
+  const log = document.getElementById('output-log');
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+  log.textContent = '';
+  if (outRefused) { const d = document.createElement('div'); d.className = 'out-error'; d.textContent = outRefused; log.appendChild(d); return; }
+  if (!outEvents.length) { log.innerHTML = '<div class="out-empty">no output yet: the stream starts with the next beat</div>'; return; }
+  let cur = null, curKind = '';
+  const add = (cls, text) => { const d = document.createElement('div'); d.className = cls; d.textContent = text; log.appendChild(d); return d; };
+  for (const e of outEvents) {
+    if ((e.k === 'think' || e.k === 'text') && cur && curKind === e.k) { cur.textContent += e.s || ''; continue; }
+    cur = null; curKind = '';
+    if (e.k === 'beat') add('out-beat', 'beat ' + String(e.beat || '').slice(-12) + '  ' + outHms(e.t) + 'Z  ' + (e.model || ''));
+    else if (e.k === 'call') add('out-call', '▸ ' + (e.turn || '?') + ' · ' + (e.phase || '') + '  ' + outHms(e.t) + 'Z');
+    else if (e.k === 'think' || e.k === 'text') { cur = add('out-' + e.k, e.s || ''); curKind = e.k; }
+    else if (e.k === 'tool') add('out-tool', '⚙ ' + e.name + '(' + (e.args || '') + ')');
+    else if (e.k === 'done') add('out-done', '✓ ' + (e.reason || 'done') + ' · ' + (e.eval_count ?? '?') + ' tokens · ' + (e.s_elapsed ?? '?') + 's');
+    else if (e.k === 'error') add('out-error', '✗ ' + (e.s || ''));
+    else if (e.k === 'end') add('out-end', 'beat ended ' + outHms(e.t) + 'Z');
+  }
+  if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
+async function refreshOutput() {
+  // ONE POLL AT A TIME (legion on #800): a slow reply must not let a second poll read from the same offset
+  if (outBusy) return;
+  outBusy = true;
+  let changed = false;
+  try {
+    const r = await fetch(BASE + '/being/output' + (outOffset === null ? '' : '?after=' + outOffset));
+    const d = await r.json();
+    if (r.ok) {
+      if (outRefused) { outRefused = ''; changed = true; }
+      if (d.reset) { outEvents = []; changed = true; }
+      if (d.events && d.events.length) { outEvents = outEvents.concat(d.events).slice(-OUT_KEEP); changed = true; }
+      outOffset = d.offset;
+    } else {
+      // A REFUSAL IS SHOWN, NOT AN EMPTY STREAM (legion on #800): off this machine the route answers 403
+      const why = (d.error || ('HTTP ' + r.status)) + (d.hint ? ' — ' + d.hint : '');
+      if (why !== outRefused) { outRefused = why; changed = true; }
+    }
+  } catch (e) { /* the header keeps its last word; the next poll tries again */ }
+  finally { outBusy = false; }
+  const [line, live] = outStatus(Date.now() / 1000);
+  const el = document.getElementById('out-live');
+  el.textContent = line; el.classList.toggle('live', live);
+  if (changed && outView) outRender();
+}
+
+function setView(output) {
+  outView = output;
+  document.getElementById('tab-conv').classList.toggle('on', !output);
+  document.getElementById('tab-output').classList.toggle('on', output);
+  document.getElementById('chat-log').style.display = output ? 'none' : '';
+  document.getElementById('chat-form').style.display = output ? 'none' : '';
+  document.getElementById('conv-note').style.display = output ? 'none' : '';
+  document.getElementById('output-log').classList.toggle('on', output);
+  if (output) { outRender(); const log = document.getElementById('output-log'); log.scrollTop = log.scrollHeight; }
+}
+document.getElementById('tab-conv').addEventListener('click', () => setView(false));
+document.getElementById('tab-output').addEventListener('click', () => setView(true));
+refreshOutput();
+setInterval(refreshOutput, 1000);
+
 init();
 </script>
 </body>

@@ -11,6 +11,7 @@ or Qwen-family models. Any machine with Ollama can run SAGE cognition.
 
 import json
 import logging
+import re
 import time
 import urllib.request
 import urllib.error
@@ -32,6 +33,84 @@ def _keep_alive():
         return OLLAMA_KEEP_ALIVE
     except Exception:
         return '5m'
+
+
+# GEMMA4 RE-OPENS ITS THOUGHT CHANNEL WHEN IT MEANS TO END (mcnugget, 2026-11-21). Ollama 0.33.1
+# passes the re-open through as text in `thinking`. Measured on mcnugget-being (gemma4:12b), 154
+# calls, 11-20 13:40..23:56: 15 calls carry it. In 11 of them it is a single marker, the model
+# goes on thinking and makes its tool call, so one marker is not a stop. In the other 4 (all
+# reflect, after "call these tools, then stop", with the tools already called) the model said
+# "I should just stop" and then opened the channel again and again with nothing between:
+# 172, 188, 248 and 2,354 markers. The last one ran 42,364 chars to the 600s deadline and the
+# beat ended in an error. A run of markers with nothing between them is the model's turn
+# ending; the run is cut there and the reply closes as a clean stop. Origin:
+# shared-context forum/mcnugget-reply-being-output-stream-2026-11-21.md, finding 2.
+_THOUGHT_REOPEN = re.compile(r'<\|channel>(?:\s*thought)*')
+THOUGHT_REOPEN_RUN_CUT = 3  # markers in a row with nothing between them
+_THOUGHT_REOPEN_RUN = re.compile(r'(?:<\|channel>(?:\s*thought)*\s*){%d,}$' % THOUGHT_REOPEN_RUN_CUT)
+
+
+def _strip_thought_reopens(thinking: str) -> str:
+    """The thinking text with every re-opened channel marker taken out (a control token, not words)."""
+    return _THOUGHT_REOPEN.sub('', thinking)
+
+
+def _read_stream(resp, on_chunk, timeout_s) -> Dict[str, Any]:
+    """A streamed /api/chat reply, joined into the shape of a non-streamed one.
+
+    Each line is a JSON chunk; its message's content and thinking are pieces to join, its tool_calls are
+    added to the list, and the last chunk (done: true) carries done_reason and the counts. A chunk with
+    "error" (ollama reports a failure after the status line was sent) raises, as the HTTP error would
+    have. The deadline is checked as each line arrives, and each read also has the socket's timeout_s, so a
+    call that stops sending ends within about twice timeout_s; one that keeps sending ends at timeout_s
+    (legion on #799)."""
+    import time as _time
+    deadline = _time.time() + float(timeout_s or 0) if timeout_s else None
+    content, thinking, tool_calls = [], [], []
+    role, final = 'assistant', {}
+    think_tail = ''  # last 400 chars of thinking, kept rolling so the run check is O(chunk), not O(reply)
+    for line in resp:
+        if deadline is not None and _time.time() > deadline:
+            raise TimeoutError(f'streamed reply ran past {timeout_s}s')
+        line = line.strip()
+        if not line:
+            continue
+        chunk = json.loads(line)
+        if chunk.get('error'):
+            raise RuntimeError(f"ollama: {chunk['error']}")
+        msg = chunk.get('message') or {}
+        role = msg.get('role') or role
+        content.append(msg.get('content') or '')
+        thinking.append(msg.get('thinking') or '')
+        tool_calls.extend(msg.get('tool_calls') or [])
+        try:
+            on_chunk(msg)
+        except Exception:
+            pass
+        if chunk.get('done'):
+            final = chunk
+            break
+        if msg.get('thinking'):
+            think_tail = (think_tail + msg['thinking'])[-400:]
+        if msg.get('thinking') and not tool_calls and not any(content):
+            if _THOUGHT_REOPEN_RUN.search(think_tail):
+                # closing the response ends the generation server-side
+                final = {'done': True, 'done_reason': 'stop', 'sage_cut': 'thought_reopen_run'}
+                _log.info('streamed reply: thought channel re-opened %d times in a row; closed as a stop',
+                          THOUGHT_REOPEN_RUN_CUT)
+                break
+    if not final:
+        # the unstreamed read would have failed on a cut connection; a half reply is not a reply
+        raise RuntimeError('streamed reply ended before its last chunk')
+    message = {'role': role, 'content': ''.join(content)}
+    joined_thinking = _strip_thought_reopens(''.join(thinking))
+    if joined_thinking:
+        message['thinking'] = joined_thinking
+    if tool_calls:
+        message['tool_calls'] = tool_calls
+    result = dict(final)
+    result['message'] = message
+    return result
 
 
 def ollama_can_think(model: str, host: str = 'http://localhost:11434', timeout: float = 5) -> Optional[bool]:
@@ -261,9 +340,18 @@ class OllamaIRP(IRPPlugin):
         messages: List[Dict[str, str]],
         tools: Optional[List[Dict[str, Any]]] = None,
         fmt: Optional[Any] = None,
+        on_chunk: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         Generate a response using Ollama /api/chat endpoint.
+
+        on_chunk: when given, the reply is STREAMED and on_chunk(message) is called with each
+        piece's "message" ({"content", "thinking", "tool_calls"}) as it arrives (being_stream:
+        the live view of what the being is producing). The return value is the same either way:
+        the pieces are joined into one message, and 'raw' is the final chunk with that message,
+        which is the shape of a non-streamed reply. timeout_seconds still bounds the call: a reply
+        still arriving stops at it, one that goes silent within about twice it (_read_stream). on_chunk never affects the result:
+        an exception from it is swallowed.
 
         Supports structured messages and native tool calling (T1).
 
@@ -280,6 +368,61 @@ class OllamaIRP(IRPPlugin):
             if not self._ollama_available:
                 return {'content': '[OllamaIRP: Ollama not reachable]', 'tool_calls': [], 'role': 'assistant', 'raw': {}}
 
+        payload = self.chat_payload(messages, tools=tools, fmt=fmt)
+        if on_chunk is not None:
+            payload['stream'] = True
+
+        try:
+            data = json.dumps(payload).encode('utf-8')
+            req = urllib.request.Request(
+                f'{self.ollama_host}/api/chat',
+                data=data,
+                headers={'Content-Type': 'application/json'},
+                method='POST',
+            )
+            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
+                if on_chunk is None:
+                    result = json.loads(resp.read())
+                else:
+                    result = _read_stream(resp, on_chunk, self.timeout_seconds)
+
+            message = result.get('message', {})
+            content = message.get('content', '').strip()
+            tool_calls = message.get('tool_calls', [])
+
+            return {
+                'content': content,
+                'tool_calls': tool_calls,
+                'role': message.get('role', 'assistant'),
+                'raw': result,
+            }
+
+        except urllib.error.URLError as e:
+            self._ollama_available = False
+            # an HTTP error carries Ollama's own reason in the body (template raise,
+            # tool-call parse failure, ...): surface it, the status code alone hides the cause
+            detail = ''
+            try:
+                detail = e.read().decode('utf-8', errors='replace')[:300] if hasattr(e, 'read') else ''
+            except Exception:
+                detail = ''
+            return {'content': f'[OllamaIRP: Connection error: {e}{" — " + detail if detail else ""}]',
+                    'tool_calls': [], 'role': 'assistant', 'raw': {}}
+        except Exception as e:
+            return {'content': f'[OllamaIRP: Error: {e}]', 'tool_calls': [], 'role': 'assistant', 'raw': {}}
+
+    def chat_payload(
+        self,
+        messages: List[Dict[str, str]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        fmt: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """The /api/chat body get_chat_response sends for these messages, built in one place.
+
+        The heartbeat's seed-count probe (heartbeat.probe_seed_count, SAGE #582) builds its
+        request from this too and changes only num_predict and the truncation flags, so its
+        count is of the prompt step 1 will send: same model, template, think, tools, num_ctx.
+        """
         num_predict = self.resolve_num_predict()
 
         payload: Dict[str, Any] = {
@@ -307,42 +450,7 @@ class OllamaIRP(IRPPlugin):
             # Ollama structured output: "json" or a JSON schema. The reply's content is then
             # constrained to that shape (the answer turn uses it, heartbeat.answer_turn_json).
             payload['format'] = fmt
-
-        try:
-            data = json.dumps(payload).encode('utf-8')
-            req = urllib.request.Request(
-                f'{self.ollama_host}/api/chat',
-                data=data,
-                headers={'Content-Type': 'application/json'},
-                method='POST',
-            )
-            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
-                result = json.loads(resp.read())
-
-            message = result.get('message', {})
-            content = message.get('content', '').strip()
-            tool_calls = message.get('tool_calls', [])
-
-            return {
-                'content': content,
-                'tool_calls': tool_calls,
-                'role': message.get('role', 'assistant'),
-                'raw': result,
-            }
-
-        except urllib.error.URLError as e:
-            self._ollama_available = False
-            # an HTTP error carries Ollama's own reason in the body (template raise,
-            # tool-call parse failure, ...): surface it, the status code alone hides the cause
-            detail = ''
-            try:
-                detail = e.read().decode('utf-8', errors='replace')[:300] if hasattr(e, 'read') else ''
-            except Exception:
-                detail = ''
-            return {'content': f'[OllamaIRP: Connection error: {e}{" — " + detail if detail else ""}]',
-                    'tool_calls': [], 'role': 'assistant', 'raw': {}}
-        except Exception as e:
-            return {'content': f'[OllamaIRP: Error: {e}]', 'tool_calls': [], 'role': 'assistant', 'raw': {}}
+        return payload
 
     def _update_memory(self, prompt: str, response: str):
         """Update conversation memory for context."""

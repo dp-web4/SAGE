@@ -136,9 +136,26 @@ def test_the_beat_actually_joins_the_two_ends():
     # `frame=` deleted, because main also builds a config dict with a "frame" key — a pin
     # satisfied by an unrelated string is the same failure as a pin satisfied by a comment.
     # `posture_text` identifies the compose call and appears nowhere else.
-    calls = [set(ins.argval) for ins in dis.get_instructions(H.main)
-             if ins.opname == "KW_NAMES" and isinstance(ins.argval, tuple)
-             and "posture_text" in ins.argval]
+    # main and the functions nested in it: the compose call lives in main's _compose_seed since the
+    # whole-seed refit (#582) renders the seed more than once. Still main's own code, still bytecode.
+    def _codes(co):
+        yield co
+        for c in co.co_consts:
+            if hasattr(c, "co_code"):
+                yield from _codes(c)
+    # A call's keyword names, by bytecode version: Python 3.12 carries them in KW_NAMES; 3.13 removed
+    # that opcode, and the names are the LOAD_CONST tuple right before CALL_KW. Reading only KW_NAMES
+    # found 0 calls on McNugget's 3.14, so the pin failed there with the join intact.
+    def _kw_tuples(co):
+        prev = None
+        for ins in dis.get_instructions(co):
+            if ins.opname == "KW_NAMES":
+                yield ins.argval
+            elif ins.opname == "CALL_KW" and prev is not None and prev.opname == "LOAD_CONST":
+                yield prev.argval
+            prev = ins
+    calls = [set(kw) for co in _codes(H.main.__code__) for kw in _kw_tuples(co)
+             if isinstance(kw, tuple) and "posture_text" in kw]
     assert len(calls) == 1, f"expected exactly one compose call in main, found {len(calls)}"
     kw = calls[0]
 

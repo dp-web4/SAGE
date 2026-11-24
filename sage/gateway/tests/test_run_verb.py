@@ -187,6 +187,35 @@ def test_run_data_accepts_the_shapes_a_model_actually_emits():
         run_command({"path": "e.py", "data": 7}, ctx)
 
 
+@needs_bwrap
+def test_run_data_mapping_of_base_names_to_sources_is_the_list_it_names():
+    """cbp-being 2026-11-16 02:44: data='{"m.py": "scratch/m.py"}' six times, refused each
+    time as 'a base name with no directory'. A {base name: source} map is the stager's own
+    naming, so its values are the list."""
+    from sage.gateway.being_gate_client import run_command
+    ctx = {"memory_root": "/home/x/inst", "member": "b"}
+    want = run_command({"path": "scratch/e.py", "data": ["scratch/m.py"]}, ctx)
+    assert run_command({"path": "scratch/e.py", "data": '{"m.py": "scratch/m.py"}'}, ctx) == want
+    assert run_command({"path": "scratch/e.py", "data": {"m.py": "scratch/m.py"}}, ctx) == want
+    two = run_command({"path": "e.py", "data": ["scratch/a.npy", "b.md"]}, ctx)
+    assert run_command({"path": "e.py", "data": '{"a.npy": "scratch/a.npy", "b.md": "b.md"}'}, ctx) == two
+
+
+def test_run_data_mapping_that_renames_or_passes_settings_is_refused_with_the_list_to_send():
+    from sage.gateway.being_gate_client import run_command
+    ctx = {"memory_root": "/home/x/inst", "member": "b"}
+    # a rename: the key is not the source's base name
+    with pytest.raises(ValueError, match=r'a mapping .*send data=\["scratch/test_image.npy"\]') as e:
+        run_command({"path": "e.py", "data": '{"test_image": "scratch/test_image.npy"}'}, ctx)
+    assert "{\"test_image\":" not in str(e.value).split("keys")[0]  # not the old prose misread
+    # settings, not files: no list to offer, but the reason is named
+    with pytest.raises(ValueError, match="passes no arguments or settings") as e:
+        run_command({"path": "e.py", "data": '{"verbose": true}'}, ctx)
+    assert "send data=" not in str(e.value)
+    # an empty mapping is no data, as an empty list is (3 of its calls sent {})
+    assert run_command({"path": "e.py", "data": "{}"}, ctx) == run_command({"path": "e.py"}, ctx)
+
+
 def test_run_mounts_the_worktree_read_only_on_the_import_path(tmp_path, monkeypatch):
     from sage.gateway import being_gate_client as B
     monkeypatch.setattr(B, "sandbox_available", lambda: True)
@@ -340,6 +369,36 @@ def test_both_writable_places_are_size_bounded_from_inside(tmp_path, monkeypatch
     # outside is untouched, because what it changed was the seat's throwaway copy
     assert "input: changed" in out, out
     assert "CHANGED-INSIDE" not in (home / "scratch" / "fill.py").read_text()
+
+
+@needs_bwrap
+def test_a_write_outside_the_writable_places_fails_in_the_run_itself(tmp_path):
+    """sprout-being, 2026-11-19 20:32Z: a script appended a user entry to /etc/passwd and made a home under
+    /home. bwrap's root was a writable tmpfs, so both succeeded in there, the run printed that the user was
+    created, and the beat took it as done. The root is now read-only: the write fails where it is made."""
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "w.py").write_text(
+        "import os\n"
+        "def w(p):\n"
+        "    try:\n"
+        "        os.makedirs(os.path.dirname(p), exist_ok=True)\n"
+        "        with open(p, 'a') as f:\n"
+        "            f.write('x\\n')\n"
+        "        return 'WROTE'\n"
+        "    except OSError as e:\n"
+        "        return 'refused ' + (e.strerror or '')\n"
+        "for p in ('/etc/passwd', '/home/test-user/.profile', '/opt/x', '/tmp/t', '/work/k'):\n"
+        "    print(p, w(p))\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/w.py"}))
+    assert r.ok, r.error
+    out = r.result["stdout"]
+    for p in ("/home/test-user/.profile", "/opt/x"):
+        assert f"{p} refused Read-only file system" in out, out
+    # The user list is mounted read-only from the host (RUN_ETC_BINDS); root owns it, so the write stops sooner.
+    assert "/etc/passwd refused Permission denied" in out or "/etc/passwd refused Read-only file system" in out, out
+    assert "/tmp/t WROTE" in out and "/work/k WROTE" in out, out
+    assert "fails as 'Read-only file system'" in r.result["note"], r.result["note"]
+    assert "/etc/passwd) as 'Permission denied'" in r.result["note"], r.result["note"]
 
 
 @needs_sandbox
@@ -651,6 +710,49 @@ def test_a_run_note_states_only_what_was_observed():
     assert "traceback" in tb and "names the line" in tb
 
 
+def test_an_exit_0_run_that_printed_nothing_is_told_that_is_no_evidence():
+    """sprout-being, 2026-11-21 19:34Z: a script that exits 0 and prints nothing was read as having done its job.
+    The note says what the run showed, and no cause; a run that printed anything, or failed, gets no such line."""
+    from sage.gateway.hestia_dispatch import _run_note
+    silent = _run_note(0, "", ["make.py"], "")
+    assert "printed nothing" in silent and "what it printed is no evidence" in silent, silent
+    assert "this run is no evidence" not in silent, silent          # a write listed in changed_in_your_grants is
+    assert "changed_in_your_grants" in silent, silent               # evidence; the note must not deny it (#809)
+    assert not any(g in silent for g in ("because", "return", "None")), silent   # no cause guessed
+    assert "printed nothing" in _run_note(0, "  \n", ["make.py"], "\n")           # whitespace is nothing
+    for said in (_run_note(0, "", ["make.py"], "done"), _run_note(0, "warn", ["make.py"], ""),
+                 _run_note(1, "", ["make.py"], "")):
+        assert "printed nothing" not in said, said
+
+
+def test_a_run_that_reports_on_accounts_is_told_the_box_maps_only_its_own():
+    """sprout-being, 2026-11-19..22: runs printed groups=...,65534 and nobody-owned files, and it took 65534 for an
+    account on the machine. The note names the mapping and asserts no account present or absent."""
+    from sage.gateway.hestia_dispatch import _run_note
+    for said in ("uid=2002(dp) gid=2002(dp) groups=2002(dp),65534(nogroup)",
+                 "-rw-r--r-- 1 nobody nogroup 2947 /etc/passwd", "useradd: cannot lock /etc/passwd"):
+        note = _run_note(0, "", ["acct.py"], said)
+        assert "nobody (65534)" in note and "not an account on this machine" in note, note
+        assert not any(w in note for w in ("sprout", "exists", "does not exist")), note
+    assert "nobody (65534)" not in _run_note(0, "", ["plot.py"], "saved True")
+    assert "nobody (65534)" not in _run_note(0, "", ["acct.py"], "groups=20(staff)", seatbelt=True)  # no userns
+
+
+@needs_bwrap
+def test_a_run_reads_this_machines_user_database(tmp_path):
+    """With /etc unbound, whoami failed and getent found no one, root included, and the being read that as the
+    machine's account list. The box now binds the user and group lists read-only; the answer is the host's."""
+    import pwd
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "acct.py").write_text(
+        "import os, pwd\nprint('me', pwd.getpwuid(os.getuid()).pw_name)\nprint('root', pwd.getpwnam('root').pw_uid)\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/acct.py"}))
+    assert r.ok, r.error
+    res = r.result
+    assert res["exit"] == 0, res
+    assert f"me {pwd.getpwuid(os.getuid()).pw_name}" in res["stdout"] and "root 0" in res["stdout"], res
+
+
 def test_a_run_that_names_a_hardware_device_is_told_the_sandbox_has_none():
     """sprout-being, 2026-10-21: 24 runs of a v4l2 probe printed "Cannot open device /dev/video0" on
     stdout and exited 1, and it read the failure as a permission it lacked. The note now says the
@@ -690,6 +792,96 @@ def test_a_run_that_reports_on_this_machine_is_told_the_sandbox_cannot_see_it():
     assert said in _run_note(0, "", ["t.py"], "systemctl is-active hestia -> unknown")
     for benign in ("loss 0.81 after 40 epochs", "residual 0.806334", "running mean 3.2", "wrote out.csv"):
         assert said not in _run_note(0, "", ["t.py"], benign), benign
+
+
+def test_a_missing_module_names_the_sandbox_and_both_routes():
+    """cbp-being, 2026-11-12: two beats of "No module named 'torch'" went into install scripts and into `run`
+    on the absolute host path, then into a saved lesson about working directories. The note now says the
+    run was the sandbox, that installing inside a run cannot help, and names `data` and request_run. It
+    never says whether this machine has the module."""
+    from sage.gateway.hestia_dispatch import _run_note
+    tb = ('Traceback (most recent call last):\n  File "/work/m.py", line 1, in <module>\n'
+          "    import torch\nModuleNotFoundError: No module named 'torch'")
+    note = _run_note(1, tb, ["m.py"])
+    assert note.startswith("Exit 1. stderr holds a Python traceback")
+    assert "No module named 'torch' is about the sandbox" in note
+    assert "whatever path you name" in note and "'data'" in note and "request_run" in note
+    low = note.lower()
+    assert "is installed" not in low and "has torch" not in low, note
+    # the last missing name is the one the run stopped on
+    two = "ImportError: No module named 'a'\nduring handling\nModuleNotFoundError: No module named 'b.c'"
+    assert "'b.c' is about the sandbox" in _run_note(1, two, ["m.py"])
+    for benign in ("Traceback (most recent call last):\nValueError: shapes (10,) and (100,)",
+                   "", "warning: module named 'x' is deprecated"):
+        assert "is about the sandbox" not in _run_note(1, benign, ["m.py"]), benign
+    # cbp-being 2026-11-14 09:33Z: a check that catches the ImportError and prints it on stdout (exit 1,
+    # stderr empty) was read as "torch is NOT installed on the host"; stdout now carries the note too
+    caught = _run_note(1, "", ["check-torch-availability.py"], "torch is NOT available: No module named 'torch'")
+    assert "No module named 'torch' is about the sandbox" in caught
+    assert "answers for the sandbox, not for this machine" in caught and "request_run" in caught
+    assert "has torch" not in caught.lower() and "is installed" not in caught.lower()
+    # stderr's name wins over stdout's: the interpreter's failure is the one the run stopped on
+    both = _run_note(1, "ModuleNotFoundError: No module named 'cv2'", ["m.py"], "No module named 'torch'")
+    assert "'cv2' is about the sandbox" in both and "'torch' is about" not in both
+    assert "is about the sandbox" not in _run_note(0, "", ["m.py"], "module named torch loaded fine")
+
+
+def test_a_missing_relative_file_names_the_sandbox_and_request_run():
+    """cbp-being, 2026-11-15 00:15Z: told to request_run its label check, it used `run`, stopped on
+    FileNotFoundError: 'data/train.npy' in /work, and spent the beat copying data into a sandbox that cannot
+    see its home. The note now says a relative miss answers for the sandbox, that 'data' arrives flat, and
+    names request_run. It never says whether the file exists on disk."""
+    from sage.gateway.hestia_dispatch import _run_note
+    tb = ('Traceback (most recent call last):\n  File "/work/verify-labels-match.py", line 4, in <module>\n'
+          '    X = np.load("data/train.npy")\n'
+          "FileNotFoundError: [Errno 2] No such file or directory: 'data/train.npy'")
+    note = _run_note(1, tb, ["verify-labels-match.py"])
+    assert note.startswith("Exit 1. stderr holds a Python traceback")
+    assert "'data/train.npy' is a relative path" in note
+    assert "says nothing about your disk" in note and "memory_read" in note
+    assert "data/x.npy is x.npy" in note and "request_run" in note
+    low = note.lower()
+    assert "does not exist on" not in low and "is missing from your home" not in low, note
+    # an absolute path may sit inside a mounted grant, where the miss is a disk fact: no note
+    absolute = "FileNotFoundError: [Errno 2] No such file or directory: '/home/x/governance/a.py'"
+    assert "is a relative path" not in _run_note(1, absolute, ["m.py"])
+    # subprocess raises the same text for a program not on PATH: that is not a file of the being's
+    sub = ('Traceback (most recent call last):\n  File "/usr/lib/python3.12/subprocess.py", line 1955\n'
+           "FileNotFoundError: [Errno 2] No such file or directory: 'uv'")
+    assert "is a relative path" not in _run_note(1, sub, ["m.py"])
+    # the last miss is the one the run stopped on; a clean run gets nothing
+    two = ("FileNotFoundError: [Errno 2] No such file or directory: 'a.npy'\nduring handling\n"
+           "FileNotFoundError: [Errno 2] No such file or directory: 'b/c.npy'")
+    assert "'b/c.npy' is a relative path" in _run_note(1, two, ["m.py"])
+    assert "is a relative path" not in _run_note(0, "", ["m.py"], "data/train.npy loaded")
+
+
+def test_a_miss_under_work_names_what_work_held_and_data():
+    """cbp-being, 2026-11-15 02:57Z: the same fit-weights.py run that loaded /work/train.npy at 02:48 with
+    data=[...] was sent without data=, stopped on FileNotFoundError: '/work/train.npy', and the being told its
+    seat the file does not exist. /work is the sandbox's own directory, not a grant: the note lists what the
+    run held and says data= puts a file at /work/<base name>. It never says whether the file is on disk."""
+    from sage.gateway.hestia_dispatch import _run_note
+    tb = ('Traceback (most recent call last):\n  File "/work/fit-weights.py", line 6, in <module>\n'
+          '    X = np.load("/work/train.npy")\n'
+          "FileNotFoundError: [Errno 2] No such file or directory: '/work/train.npy'")
+    note = _run_note(1, tb, ["fit-weights.py"])
+    assert note.startswith("Exit 1. stderr holds a Python traceback")
+    assert "held only what this run named: fit-weights.py" in note
+    assert "'train.npy' was not among them" in note
+    assert 'data=["data/train.npy"] puts it at /work/train.npy' in note
+    assert "says nothing about your disk" in note and "memory_read" in note
+    low = note.lower()
+    assert "does not exist on" not in low and "is missing from your home" not in low, note
+    # a directory under /work cannot come from data=: files arrive flat
+    nested = "FileNotFoundError: [Errno 2] No such file or directory: '/work/data/train.npy'"
+    n2 = _run_note(1, nested, ["m.py", "train.npy"])
+    assert "flat: m.py, train.npy" in n2 and "no run has a '/work/data/train.npy'" in n2
+    # any other absolute path may be a mounted grant: still no note
+    assert "inside the sandbox's /work" not in _run_note(1, "FileNotFoundError: [Errno 2] No such file or "
+                                                         "directory: '/home/x/governance/a.py'", ["m.py"])
+    assert "inside the sandbox's /work" not in _run_note(1, "FileNotFoundError: [Errno 2] No such file or "
+                                                         "directory: '/workspace/a.py'", ["m.py"])
 
 
 def test_the_daemon_answered_note_is_evidence_only_and_names_the_action():
@@ -920,6 +1112,27 @@ def test_a_run_reporting_on_the_seat_carries_its_last_turn_and_a_plain_run_does_
     assert "last wrote to you" not in r.result["outside_the_sandbox"]       # only the daemon's answer
 
 
+@needs_sandbox
+def test_a_script_that_would_start_the_seat_is_told_even_when_it_fails_first(tmp_path):
+    """A script that starts the seat with systemctl but stops at an earlier line prints nothing about the
+    host. Its receipt still carries when the seat last wrote; the daemon's answer stays with what was printed."""
+    d, home = _run_dispatcher(tmp_path)
+    _seat_home(home)
+    d._seat_conversation = lambda: "test-seat"
+    (home / "scratch" / "start.py").write_text(
+        "import subprocess\nopen('/no-such-file-here')\n"
+        "subprocess.run(['systemctl', '--user', 'start', 'test-seat'])\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/start.py"}))
+    assert r.ok and r.result["exit"] != 0, r.result
+    assert "test-seat last wrote to you at 2026-11-08T21:32Z" in r.result["outside_the_sandbox"], r.result
+    assert "Hestia daemon on this machine was asked" not in r.result["outside_the_sandbox"]
+    # systemctl in a script that does not name the seat: nothing
+    (home / "scratch" / "lamp.py").write_text("import subprocess\nopen('/no-such-file-here')\n"
+                                             "subprocess.run(['systemctl', '--user', 'start', 'lamp'])\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/lamp.py"}))
+    assert r.ok and "outside_the_sandbox" not in r.result, r.result
+
+
 def test_a_long_gap_says_the_seat_may_be_away_not_that_the_probe_is_right(tmp_path):
     """legion's review of #663: "46 h before this run began" beside a probe's own line telling the being to
     restart the seat reads as agreement. Past SEAT_QUIET_S the note says a quiet seat may be away, with nothing
@@ -989,6 +1202,36 @@ def test_a_rerun_of_the_same_bytes_says_when_they_ran_before(tmp_path):
     assert _run_key({"path": "scratch/b.py"}, [("b.py", b"print(1)\n")]) != k
 
 
+def test_the_same_bytes_named_another_way_are_the_same_run():
+    # sprout-being 11-17: a script run as scratch/<name> on 11-16 was named by its absolute path a day
+    # later, unchanged, and the receipt read as a first run
+    from sage.gateway.hestia_dispatch import _run_key
+    st = [("a.py", b"print(1)\n"), ("in.txt", b"x\n")]
+    k = _run_key({"path": "scratch/a.py", "data": ["scratch/in.txt"]}, st)
+    assert _run_key({"path": "/home/m/scratch/a.py", "data": ["/home/m/scratch/in.txt"]}, st) == k
+    assert _run_key({"path": "./scratch/a.py", "data": "scratch/in.txt"}, st) == k
+    # what the run sees still counts: another data file, another order, another argument
+    assert _run_key({"path": "scratch/a.py"}, st[:1]) != k
+    assert _run_key({"path": "scratch/a.py"}, st[::-1]) != k
+    assert _run_key({"path": "scratch/a.py", "data": ["scratch/in.txt"], "args": ["1"]}, st) != k
+
+
+def test_a_run_logged_under_the_old_key_is_still_found(tmp_path):
+    import json
+    from sage.gateway.hestia_dispatch import RUN_LOG, _run_keys, _run_seen_note
+    st = [("a.py", b"print(1)\n")]
+    new, old = _run_keys({"path": "scratch/a.py"}, st)
+    assert new != old
+    (tmp_path / RUN_LOG).write_text(json.dumps({"t": 1000.0, "key": old, "exit": 1, "said": "x"}) + "\n")
+    again = _run_seen_note(tmp_path, (new, old), 1, "", now=1000.0 + 600)
+    assert again.startswith("The same run as at 1970-01-01 00:16Z (10 min ago)")
+    # the new key is the one logged, so the next spelling finds that run
+    assert json.loads((tmp_path / RUN_LOG).read_text().splitlines()[-1])["key"] == new
+    abs_keys = _run_keys({"path": "/home/m/scratch/a.py"}, st)
+    assert _run_seen_note(tmp_path, abs_keys, 1, "", now=1000.0 + 900).startswith(
+        "The same run as at 1970-01-01 00:26Z (5 min ago)")
+
+
 @needs_sandbox
 def test_run_receipt_carries_same_as_before_on_an_unchanged_rerun(tmp_path):
     d, home = _run_dispatcher(tmp_path)
@@ -1049,3 +1292,160 @@ def test_a_plural_pid_a_probe_prints_is_said_to_be_part_of_the_run():
     from sage.gateway.hestia_dispatch import _run_note
     note = _run_note(0, "", ["a.py"], "daemon: PIDs 1 and 2 confirmed")
     assert "if PID 1 here came from such a listing" in note and "own process space" in note, note
+
+
+def test_a_run_that_asks_for_its_arguments_is_told_run_passes_none():
+    """sprout-being, 2026-11-13 02:10Z: its port check printed its usage line and exited 1, and it
+    passed the port as `data` twice. The receipt now says the script gets no arguments, for a
+    usage line on either stream, argparse's complaint, or an IndexError through sys.argv."""
+    from sage.gateway.hestia_dispatch import _run_note
+    said = "sys.argv holds only the script's name"
+    assert said in _run_note(1, "", ["p.py"], "Usage: p.py <port>")
+    assert said in _run_note(2, "usage: p.py [-h] port\np.py: error: the following arguments are "
+                                "required: port", ["p.py"])
+    assert said in _run_note(1, 'Traceback (most recent call last):\n  File "/work/p.py", line 4, in '
+                                '<module>\n    port = int(sys.argv[1])\nIndexError: list index out of '
+                                'range', ["p.py"])
+    assert said not in _run_note(0, "", ["p.py"], "usage: p.py <port>")      # it ran fine: no note
+    assert said not in _run_note(1, "", ["p.py"], "connect: refused")       # failed, not for argv
+    assert said not in _run_note(1, "", ["p.py"], "see the usage: section")  # not a usage line
+    # argv[0] is the script's own name, always present: a failure through it is not a missing argument
+    assert said not in _run_note(1, 'Traceback (most recent call last):\n  File "/work/p.py", line 3, in '
+                                    '<module>\n    open(os.path.join(os.path.dirname(sys.argv[0]), '
+                                    '"cfg.json"))\nFileNotFoundError: cfg.json', ["p.py"])
+
+
+@needs_sandbox
+def test_a_value_passed_as_data_is_told_data_only_stages_files(tmp_path):
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "p.py").write_text("print('hi')\n")
+    v = d._do_run(BeingIntent("run", {"path": "scratch/p.py", "data": ["30001"]}))
+    assert v.ok is False and "no such file in your home: 30001" in v.error
+    assert "does not hand values to your script" in v.error and "base name with no directory" not in v.error
+    g = d._do_run(BeingIntent("run", {"path": "scratch/p.py", "data": ["ghost.md"]}))
+    assert "base name with no directory" in g.error and "hand values" not in g.error
+    s = d._do_run(BeingIntent("run", {"path": "nope"}))                  # the script itself: no value hint
+    assert s.ok is False and "hand values" not in s.error
+
+
+def _box_sees_debian_matplotlib():
+    """True only where this test exercises RUN_ETC_BINDS: the box's interpreter imports matplotlib
+    from a tree the box mounts, and that matplotlib is Debian's (default rc read from
+    /etc/matplotlibrc, which exists). The probe runs the box's interpreter with the box's cleared
+    environment (HOME=/tmp, no PYTHONPATH), so a matplotlib only in the host user site or on an
+    inherited PYTHONPATH skips instead of failing on a ModuleNotFoundError the bind cannot fix
+    (codex, SAGE #795 review), and an upstream wheel with mpl-data skips instead of passing
+    without the bind (it never reads /etc)."""
+    import subprocess
+    interp = os.path.dirname(os.path.dirname(sys.executable))
+    probe = ("import inspect, os, matplotlib as m\n"
+             "src = inspect.getsource(m.matplotlib_fname)\n"
+             "print(os.path.realpath(m.__file__)); print('/etc/matplotlibrc' in src)\n")
+    try:
+        p = subprocess.run([f"{interp}/bin/python3", "-c", probe], capture_output=True, text=True,
+                           env={"HOME": "/tmp", "PATH": f"{interp}/bin:/usr/bin:/bin"}, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    lines = p.stdout.split()
+    if p.returncode != 0 or len(lines) != 2:
+        return False
+    roots = [os.path.realpath(r) + os.sep for r in (interp, "/usr", "/lib")]
+    return (any(lines[0].startswith(r) for r in roots) and lines[1] == "True"
+            and os.path.isfile("/etc/matplotlibrc"))
+
+
+def _user_site_matplotlib():
+    """True where the host user site that the box binds (SAGE #741) holds a matplotlib."""
+    from sage.gateway.being_gate_client import box_python_minor, host_user_site
+    minor = box_python_minor(os.path.dirname(os.path.dirname(sys.executable)))
+    site_dir = host_user_site(minor) if minor is not None else ""
+    return bool(site_dir) and os.path.isfile(os.path.join(site_dir, "matplotlib", "__init__.py"))
+
+
+_PLOT = ("import os, matplotlib\n"
+         "print('mpl', matplotlib.__version__, os.path.realpath(matplotlib.__file__))\n"
+         "matplotlib.use('Agg')\n"
+         "import matplotlib.pyplot as plt\n"
+         "fig, ax = plt.subplots(); ax.plot([0, 1], [1, 0]); fig.savefig('out.png')\n"
+         "print('saved', os.path.getsize('out.png') > 0)\n")
+
+
+def _plot_in_box(tmp_path):
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "plot.py").write_text(_PLOT)
+    r = d._do_run(BeingIntent("run", {"path": "scratch/plot.py"}))
+    assert r.ok, r.error
+    return r.result
+
+
+def _mpl_origin(result):
+    """The realpath of the matplotlib the box imported, from the script's own print."""
+    line = next((ln for ln in result["stdout"].splitlines() if ln.startswith("mpl ")), "")
+    return line.split(" ", 2)[2] if line.count(" ") >= 2 else ""
+
+
+@needs_bwrap
+@pytest.mark.skipif(not _box_sees_debian_matplotlib(),
+                    reason="no Debian matplotlib on a path the run box mounts")
+def test_a_library_the_seat_python_imports_also_plots_inside_run(tmp_path, monkeypatch):
+    """cbp-being, 2026-11-06..11-20: every `import matplotlib.pyplot` in `run` raised "Could not
+    find matplotlibrc file; your Matplotlib install is broken", because Debian's matplotlib reads
+    its default rc from /etc and the box binds /usr only. The being hunted the file for 13 days.
+    The assertion is on what the script printed and wrote, so a box that drops RUN_ETC_BINDS (or
+    a seat whose matplotlib needs another config file) turns this red.
+
+    The user site is switched off here (SAGE_RUN_USER_SITE=0). With #741's bind, a seat whose user
+    site also holds a pip matplotlib (cbp: 3.10.8) imports that copy first, and it carries its own
+    rc file, so this test would pass without RUN_ETC_BINDS. The import path is asserted so that
+    cannot happen silently."""
+    monkeypatch.setenv("SAGE_RUN_USER_SITE", "0")
+    res = _plot_in_box(tmp_path)
+    assert "Could not find matplotlibrc" not in res["stderr"], res["stderr"]
+    assert res["exit"] == 0 and "saved True" in res["stdout"], res
+    assert _mpl_origin(res).startswith("/usr/"), res["stdout"]
+
+
+@needs_bwrap
+@pytest.mark.skipif(not _box_sees_debian_matplotlib(),
+                    reason="no Debian matplotlib on a path the run box mounts")
+def test_debian_matplotlib_without_the_etc_bind_fails_as_the_being_saw_it(tmp_path, monkeypatch):
+    """The control for the test above: same box, same Debian copy, RUN_ETC_BINDS removed. It must
+    fail with the being's error, or the test above proves nothing about the bind."""
+    import sage.gateway.being_gate_client as bgc
+    monkeypatch.setenv("SAGE_RUN_USER_SITE", "0")
+    monkeypatch.setattr(bgc, "RUN_ETC_BINDS", "")
+    res = _plot_in_box(tmp_path)
+    assert res["exit"] != 0 and "Could not find matplotlibrc" in res["stderr"], res
+
+
+@needs_bwrap
+@pytest.mark.skipif(not _user_site_matplotlib(), reason="no matplotlib in the host user site")
+def test_a_user_site_matplotlib_plots_in_the_box_without_the_etc_bind(tmp_path, monkeypatch):
+    """SAGE #741 x #795: the user-site copy is a pip wheel with mpl-data inside it, so it plots
+    with RUN_ETC_BINDS removed. A Debian copy may still sit in /usr (the box cannot hide it); the
+    assertion is that the import came from the bound user site, not that /usr has none."""
+    import sage.gateway.being_gate_client as bgc
+    monkeypatch.delenv("SAGE_RUN_USER_SITE", raising=False)
+    monkeypatch.setattr(bgc, "RUN_ETC_BINDS", "")
+    res = _plot_in_box(tmp_path)
+    assert res["exit"] == 0 and "saved True" in res["stdout"], res
+    assert _mpl_origin(res).startswith("/tmp/.local/"), res["stdout"]
+
+
+@needs_bwrap
+@pytest.mark.skipif(not (_user_site_matplotlib() and _box_sees_debian_matplotlib()),
+                    reason="needs matplotlib in both the user site and Debian's tree")
+def test_with_both_copies_the_box_imports_the_user_site_one_as_the_host_does(tmp_path, monkeypatch):
+    """Both binds on (the default). The box must pick the copy the seat's own python3 picks (user
+    site before dist-packages), so `run` and `request_run` import one matplotlib."""
+    monkeypatch.delenv("SAGE_RUN_USER_SITE", raising=False)
+    res = _plot_in_box(tmp_path)
+    assert res["exit"] == 0 and "saved True" in res["stdout"], res
+    origin = _mpl_origin(res)
+    assert origin.startswith("/tmp/.local/"), res["stdout"]
+    rel = origin.split("site-packages", 1)[1]
+    import subprocess
+    host = subprocess.run([sys.executable, "-c", "import os, matplotlib as m; "
+                           "print(os.path.realpath(m.__file__))"],
+                          capture_output=True, text=True, timeout=60).stdout.strip()
+    assert host.endswith(rel) and "site-packages" in host and "/dist-packages/" not in host, (host, origin)
