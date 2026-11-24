@@ -8,6 +8,14 @@ import time
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 from sage.gateway import body  # noqa: E402
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _no_daemon(monkeypatch):
+    """Hermetic, as the docstring says: body.reading() would otherwise ask the running daemon for its machine
+    snapshot (2 s timeout), and a live "CPU 38%" or "sampled 38 s ago" failed a "38" check (legion on #824)."""
+    monkeypatch.setattr(body, "machine_body", lambda **k: {"snapshot": None, "why": "not read in this test"})
 
 
 def _perception(tmp, descriptor="I see a clock. the scene is still; clear view", gaze="open", age=0.0):
