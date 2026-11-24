@@ -25,6 +25,8 @@ def test_a_live_organ_is_rendered_in_words_and_a_stale_one_says_offline(monkeypa
     monkeypatch.setattr(body, "PERCEPTION_PATH", _perception(tmp))
     monkeypatch.setattr(body, "GAZE_PATH", os.path.join(tmp, "gaze.json"))
     monkeypatch.setattr(body, "metabolism", lambda **k: {"live": True, "state": "wake", "atp": 38.0, "felt_source": "dp"})
+    # the live daemon's machine line ("CPU 38%") failed the "38" check below whenever the real CPU read 38
+    monkeypatch.setattr(body, "machine_body", lambda **k: {"snapshot": None, "why": "not read in this test"})
     r = body.reading()
     out = body.render(r, None)
     assert "I see a clock" in out and "2 of 2 eyes live" in out and "hearing on" in out
