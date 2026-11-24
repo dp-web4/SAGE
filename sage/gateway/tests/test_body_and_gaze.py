@@ -8,6 +8,14 @@ import time
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 from sage.gateway import body  # noqa: E402
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _no_daemon(monkeypatch):
+    """Hermetic, as the docstring says: body.reading() would otherwise ask the running daemon for its machine
+    snapshot (2 s timeout), and a live "CPU 38%" or "sampled 38 s ago" failed a "38" check (legion on #824)."""
+    monkeypatch.setattr(body, "machine_body", lambda **k: {"snapshot": None, "why": "not read in this test"})
 
 
 def _perception(tmp, descriptor="I see a clock. the scene is still; clear view", gaze="open", age=0.0):
@@ -25,8 +33,6 @@ def test_a_live_organ_is_rendered_in_words_and_a_stale_one_says_offline(monkeypa
     monkeypatch.setattr(body, "PERCEPTION_PATH", _perception(tmp))
     monkeypatch.setattr(body, "GAZE_PATH", os.path.join(tmp, "gaze.json"))
     monkeypatch.setattr(body, "metabolism", lambda **k: {"live": True, "state": "wake", "atp": 38.0, "felt_source": "dp"})
-    # the live daemon's machine line ("CPU 38%") failed the "38" check below whenever the real CPU read 38
-    monkeypatch.setattr(body, "machine_body", lambda **k: {"snapshot": None, "why": "not read in this test"})
     r = body.reading()
     out = body.render(r, None)
     assert "I see a clock" in out and "2 of 2 eyes live" in out and "hearing on" in out
