@@ -71,3 +71,42 @@ def test_many_receipts_are_capped_and_counted():
 def test_nothing_to_say_leaves_the_prompt_unchanged():
     assert receipts_this_beat() == [] and receipts_this_beat(None, SimpleNamespace(trace=None)) == []
     assert reflect_prompt(refused=False, receipts=[], **KW) == reflect_prompt(refused=False, **KW)
+
+
+# --- an empty receipt list is said out loud when the traces could be read -----------------------
+
+def test_a_beat_that_only_read_and_failed_is_told_nothing_ran():
+    """cbp-being 2026-11-24 10:30Z (heartbeat-f7fe153eb5f4): asked to write and run scratch/unit_count.py,
+    explore made only reads and two failed edits; the journal said unit_count.py ran and printed."""
+    from sage.gateway.heartbeat import nothing_ran_this_beat
+    explore = SimpleNamespace(trace=[_act("web_search", "q"), _act("memory_read", "scratch/check_param.py"),
+                                     _act("memory_edit", "scratch/dead_relu_experiment.py", ok=False),
+                                     _act("memory_read", "scratch/dead_relu_experiment.py")])
+    assert receipts_this_beat(explore, None) == [] and nothing_ran_this_beat(explore, None) is True
+    p = reflect_prompt(refused=True, failed=failed_this_beat(explore, None), receipts=[],
+                       nothing_ran=nothing_ran_this_beat(explore, None), **KW)
+    assert "No act of yours this beat ran a script or wrote a file" in p
+    assert "has not happened" in p and "FAILED" in p
+    assert p.index("FAILED") < p.index("No act of yours this beat ran")
+
+
+def test_nothing_ran_is_false_when_anything_ran_was_asked_or_landed():
+    from sage.gateway.heartbeat import nothing_ran_this_beat
+    assert nothing_ran_this_beat(SimpleNamespace(trace=[_run(1)]), None) is False
+    assert nothing_ran_this_beat(SimpleNamespace(trace=[_act("request_run", S)]), None) is False
+    assert nothing_ran_this_beat(SimpleNamespace(trace=[_act("memory_read", S)]),
+                                 SimpleNamespace(trace=[_act("memory_write", "scratch/x.py")])) is False
+
+
+def test_unreadable_traces_are_not_reported_as_nothing_ran():
+    from sage.gateway.heartbeat import nothing_ran_this_beat
+    assert nothing_ran_this_beat() is False
+    assert nothing_ran_this_beat(None, None) is False
+    assert nothing_ran_this_beat(SimpleNamespace(trace=None)) is False
+    assert nothing_ran_this_beat(SimpleNamespace(trace=["not a pair"])) is False
+
+
+def test_receipts_win_over_nothing_ran_and_the_default_is_unchanged():
+    p = reflect_prompt(refused=False, receipts=[f"run {S} exited 0"], nothing_ran=True, **KW)
+    assert "No act of yours this beat ran a script" not in p
+    assert reflect_prompt(refused=False, nothing_ran=False, **KW) == reflect_prompt(refused=False, **KW)
