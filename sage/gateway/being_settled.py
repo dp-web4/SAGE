@@ -156,6 +156,58 @@ def _account_fact(names, uids) -> str:
     return "This machine's account list, read just now outside your runs: " + "; ".join(said) + "." + box
 
 
+#: A SCOPE REQUEST A SETTLED ENTRY NAMES IS LOOKED UP, BESIDE IT (sprout-being, 11-24). It settled an answer resting
+#: on a request id it said had been pending for a day, and on two grant ids. No request by that id was on record
+#: anywhere; every request it had filed for that path had been refused; no grant carries those ids. A seat it asked
+#: could not read scope status from its wake, so nothing contradicted the entry. The todo view already looks up the
+#: ids an open item names (todo_membot.scope_status_note); this is the same for a settled entry, which outlives the
+#: item. Its entries write the id without the hyphen too (after "scope", "scope request", or in parentheses), so
+#: twelve hex digits after "scope" are read, not only "scope-<id>".
+#: Looked up in this beat's hestia read first, then in the seat's kept rulings (scope_rulings): hestia lets ended
+#: requests go, the kept rulings hold them. An id in neither is said to be in neither, with when the rulings began
+#: to be kept; it is never called "never filed" unless hestia declares its list complete. Evidence only.
+_SCOPE_NAMED = re.compile(r"\bscope(?:[-\s]+request)?[-\s:#(]{1,3}([0-9a-f]{12})\b", re.I)
+SCOPES_SHOWN = 4
+
+
+def _scopes_named(text: str) -> List[str]:
+    """`scope-<id>` for each scope request a text names, in order, each once."""
+    return list(dict.fromkeys(f"scope-{m.lower()}" for m in _SCOPE_NAMED.findall(text or "")))
+
+
+def _scope_fact(instance, ids: List[str], snap=None) -> str:
+    """What this beat's hestia read (`snap`, a todo_membot.ScopeSnapshot, or None) and the kept rulings say of
+    each of `ids`; empty when there are none."""
+    if not ids:
+        return ""
+    from sage.gateway import scope_rulings as _sr
+    rows = (snap.rows or {}) if snap is not None and snap.error is None else {}
+    complete = bool(snap is not None and snap.error is None and snap.complete)
+    kept = _sr._rows(instance)
+    since = min((str(r.get("seen") or "") for r in kept if r.get("seen")), default="")
+    said = []
+    for rid in ids[:SCOPES_SHOWN]:
+        live, ruled = rows.get(rid), _sr.ruling(instance, rid)
+        status = (live or {}).get("status") or (live or {}).get("decision")
+        if status:
+            who = (live or {}).get("decided_by") if status != "pending" else ""
+            said.append(f"{rid} for {live.get('path')}: {status}" + (f" by {who}" if who else ""))
+        elif ruled:
+            said.append(f"{rid} for {ruled.get('path')}: {ruled.get('decision')}"
+                        + (f" by {ruled['by']}" if ruled.get("by") else "") + f" (seen {ruled.get('seen')})")
+        elif complete:
+            said.append(f"{rid}: not on record for you")
+        else:
+            said.append(f"{rid}: not in hestia's list"
+                        + (" this beat" if snap is not None and snap.error is None else "")
+                        + " and not in your kept rulings" + (f" (kept since {since})" if since else ""))
+    if len(ids) > SCOPES_SHOWN:
+        said.append(f"{len(ids) - SCOPES_SHOWN} more not looked up here")
+    unread = (f" hestia could not be read this beat ({snap.error}), so only the kept rulings were looked at."
+              if snap is not None and snap.error is not None else "")
+    return "Your scope requests, looked up: " + "; ".join(said) + "." + unread
+
+
 def _pid_entries(entries: List[dict]) -> Tuple[List[str], List[str]]:
     """(ids newest first, numbers) of the entries whose question, answer or evidence names a process number."""
     ids, nums = [], []
@@ -376,6 +428,9 @@ def settle(instance, args: Dict, now: Optional[float] = None) -> Tuple[bool, str
         if nums:
             msg += " " + _pid_fact("This answer names", nums)
         fact = _account_fact(*_accounts_named(instance, " ".join(a.get(k, "") for k in ("question", "answer", "evidence"))))
+        if fact:
+            msg += " " + fact
+        fact = _scope_fact(instance, _scopes_named(" ".join(a.get(k, "") for k in ("question", "answer", "evidence"))))
         if fact:
             msg += " " + fact
     return ok, msg, changed
@@ -814,8 +869,9 @@ def _short(e: dict, cap: int, near: Optional[Dict[str, List[str]]] = None,
     return pre + _cut(q, qn) + arrow + _cut(a, body - qn) + tail
 
 
-def render(instance) -> str:
+def render(instance, scope_snap=None) -> str:
     """The beat's block: every settled entry, newest first, within RENDER_CHARS. Empty until there is one.
+    `scope_snap` is this beat's hestia read (todo_membot.ScopeSnapshot), for the scope ids entries name.
 
     No entry leaves the block. The newest are shown whole; once the rest would not fit, they are shown as
     id, question and day. Dropping the oldest instead dropped the conclusion settled once and never
@@ -870,6 +926,16 @@ def render(instance) -> str:
     if acc_fact:
         shown = ", ".join(acc_ids[:4]) + (f" +{len(acc_ids) - 4}" if len(acc_ids) > 4 else "")
         head += f"\n({shown} name{'s' if len(acc_ids) == 1 else ''} an account. {acc_fact})"
+    sc_ids, sc_named = [], []
+    for e in reversed(entries):
+        ns = _scopes_named(" ".join(str(e.get(k, "")) for k in ("question", "answer", "evidence")))
+        if ns:
+            sc_ids.append(e["id"])
+            sc_named += [n for n in ns if n not in sc_named]
+    sc_fact = _scope_fact(instance, sc_named, scope_snap)
+    if sc_fact:
+        shown = ", ".join(sc_ids[:4]) + (f" +{len(sc_ids) - 4}" if len(sc_ids) > 4 else "")
+        head += f"\n({shown} name{'s' if len(sc_ids) == 1 else ''} a scope request. {sc_fact})"
     foot = "- (entries shortened with …: settle with no arguments shows them whole)"
     newest = list(reversed(entries))
     # room for the newest whole, then an equal share for each of the rest
