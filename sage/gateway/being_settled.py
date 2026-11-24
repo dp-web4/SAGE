@@ -171,6 +171,32 @@ def _cited_quotes(evidence: str) -> List[Tuple[int, str]]:
     return out
 
 
+#: NOVA on #704 (e2bb864f): a conversation the evidence names that the being does not have used to drop out of
+#: `named`, and the check fell back to every conversation with that seq, so a quote in another one passed as if
+#: from the named one. A name is now read from the evidence itself ("conversation X", "X.jsonl") and held against
+#: the files on disk. The words below follow "conversation" in ordinary prose and are not taken as names.
+_CLAIMED_NAME = re.compile(r"\b(?:conversation|convo)\s*[:=]?\s+([\w.-]+)|(?<![\w.-])([\w.-]+)\.jsonl\b", re.I)
+_NOT_A_NAME = {"with", "about", "the", "a", "an", "in", "on", "from", "to", "between", "where", "that", "this",
+               "i", "my", "our", "your", "its", "and", "or", "of", "at", "is", "was", "where", "which", "when"}
+
+
+def _conversation_names(instance) -> set:
+    d = Path(instance) / "conversations"
+    return {f.stem for f in d.glob("*.jsonl")} if d.is_dir() else set()
+
+
+def _claimed_names(evidence: str) -> set:
+    """Every conversation name the evidence states outright, whether or not one by that name exists."""
+    out = set()
+    for m in _CLAIMED_NAME.finditer(evidence):
+        n = (m.group(1) or m.group(2) or "").rstrip(".,;:")
+        if n.lower().endswith(".jsonl"):
+            n = n[:-len(".jsonl")]
+        if n and n.lower() not in _NOT_A_NAME and not n.isdigit():
+            out.add(n)
+    return out
+
+
 def _named_conversations(evidence: str, names) -> set:
     """The conversations the evidence names outright: "dp.jsonl", "conversation dp", "dp conversation", "dp seq 7"."""
     out = set()
@@ -200,8 +226,18 @@ def _quote_fact(instance, evidence: str) -> str:
     if not pairs:
         return ""
     turns, unread = _turns_numbered(instance, {s for s, _ in pairs})
-    named = _named_conversations(evidence, {c for convs in turns.values() for c in convs} | set(unread))
+    have = _conversation_names(instance) | {c for convs in turns.values() for c in convs} | set(unread)
+    named = _named_conversations(evidence, have)
+    # A NAMED CONVERSATION THAT IS NOT THERE IS SAID, AND NEVER WIDENS TO ALL (NOVA on #704).
+    absent = sorted(n for n in _claimed_names(evidence) if n not in have and n.casefold() not in {h.casefold() for h in have})
     facts, missing = [], []
+    if absent:
+        facts.append(f"Your evidence names {'conversations' if len(absent) > 1 else 'a conversation'} "
+                     f"{', '.join(absent)}, and you have none by that name"
+                     + (f" (yours are {', '.join(sorted(have))})" if have else "")
+                     + ", so its quotes were not checked against any other conversation.")
+        if not named:
+            return " ".join(facts + ([f"Could not read all of {', '.join(unread)}."] if unread else []))
     for s, qn in pairs:
         convs = {c: t for c, t in turns.get(s, {}).items() if not named or c in named}
         if not convs:
@@ -210,6 +246,12 @@ def _quote_fact(instance, evidence: str) -> str:
             continue
         holds = sorted(c for c, t in convs.items() if qn in _ws(t))
         if holds and len(holds) == len(convs):
+            if len(convs) > 1:
+                # PRESERVED IS NOT PROVENANCE (NOVA on #704): the quote is there, but which turn it came from is not
+                # said, and the evidence names no conversation to tell them apart.
+                facts.append(f'Your evidence quotes "{qn}" from seq {s}, and {len(convs)} of your conversations '
+                             f'have a turn with that number holding it ({", ".join(holds)}); it does not say which '
+                             f'one it means.')
             continue
         if holds:
             fact = (f'Your evidence quotes "{qn}" from seq {s}, and {len(convs)} of your conversations have a turn '
