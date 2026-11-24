@@ -98,6 +98,59 @@ def _pid_fact(subject: str, numbers) -> str:
             "listing, it says nothing about a process on this machine, running or not.")
 
 
+#: AN ACCOUNT A SETTLED ENTRY NAMES IS READ FROM THIS MACHINE, BESIDE IT (sprout-being, 11-17..24). Inside a run only
+#: the being's own account is mapped, so root's files and its other groups show as 65534; before SAGE #816 the run had
+#: no account list at all. From that it concluded an account carrying its own name existed at UID 65534, and settled
+#: it, in 20 of the 250 entry versions in its log. On 11-23 it settled the opposite from a seat run that read the
+#: real list (s188), then retired the whole thread, true entry with the false ones, and settled the first belief
+#: again within the hour: the true answer had no fact under it that outlived the entry. This one is read every beat,
+#: outside the run, so it holds whichever entry stands, and changes when the machine does.
+#: What is read: every UID an entry names, a name written with a UID ("<name> user (UID n)"), and the being's own
+#: name before "user"/"account". A free name is not read: "its user", "non-root user" and "systemctl user" are what
+#: a looser pattern caught in the same log. Evidence only; which entry holds stays the being's.
+_UID_SAID = re.compile(r"\buid\s*[=:]?\s*(\d{1,7})\b", re.I)
+_NAME_WITH_UID = re.compile(r"\b([a-z_][a-z0-9_-]{0,31})\s+(?:user|account)\s*\(\s*uid\b", re.I)
+
+
+def _own_name(instance) -> str:
+    stem = Path(str(instance)).name
+    return stem[:-len("-being")] if stem.endswith("-being") else ""
+
+
+def _accounts_named(instance, text: str) -> Tuple[List[str], List[str]]:
+    """(names, uids) a text names, in order, each once."""
+    names = [m.lower() for m in _NAME_WITH_UID.findall(text)]
+    own = _own_name(instance)
+    if own and re.search(rf"\b{re.escape(own)}\s+(?:user|account)\b|\b(?:user|account)\s+(?:named\s+|called\s+)?"
+                         rf"[\"'`]?{re.escape(own)}\b", text, re.I):
+        names.append(own.lower())
+    return list(dict.fromkeys(names)), list(dict.fromkeys(_UID_SAID.findall(text)))
+
+
+def _account_fact(names, uids) -> str:
+    """What this machine's account list says, now, about `names` and `uids`; empty when it cannot be read."""
+    try:
+        import pwd
+    except ImportError:   # no account list to read on this platform
+        return ""
+    said = []
+    for n in names:
+        try:
+            said.append(f"an account named {n} exists, UID {pwd.getpwnam(n).pw_uid}")
+        except KeyError:
+            said.append(f"no account named {n} exists")
+    for u in uids:
+        try:
+            said.append(f"UID {u} is the account {pwd.getpwuid(int(u)).pw_name}")
+        except (KeyError, ValueError, OverflowError):
+            said.append(f"no account has UID {u}")
+    if not said:
+        return ""
+    box = (" Inside a run, files and groups of accounts other than your own show as 65534 (nobody): that is how "
+           "the run maps them, not an account." if "65534" in uids else "")
+    return "This machine's account list, read just now outside your runs: " + "; ".join(said) + "." + box
+
+
 def _pid_entries(entries: List[dict]) -> Tuple[List[str], List[str]]:
     """(ids newest first, numbers) of the entries whose question, answer or evidence names a process number."""
     ids, nums = [], []
@@ -317,6 +370,9 @@ def settle(instance, args: Dict, now: Optional[float] = None) -> Tuple[bool, str
         nums = _PID_SAID.findall(" ".join(a.get(k, "") for k in ("question", "answer", "evidence")))
         if nums:
             msg += " " + _pid_fact("This answer names", nums)
+        fact = _account_fact(*_accounts_named(instance, " ".join(a.get(k, "") for k in ("question", "answer", "evidence"))))
+        if fact:
+            msg += " " + fact
     return ok, msg, changed
 
 
@@ -798,6 +854,17 @@ def render(instance) -> str:
     if pid_ids:
         shown = ", ".join(pid_ids[:4]) + (f" +{len(pid_ids) - 4}" if len(pid_ids) > 4 else "")
         head += "\n(" + _pid_fact(f"{shown} name{'s' if len(pid_ids) == 1 else ''}", pid_nums) + ")"
+    acc_ids, acc_names, acc_uids = [], [], []
+    for e in reversed(entries):
+        ns, us = _accounts_named(instance, " ".join(str(e.get(k, "")) for k in ("question", "answer", "evidence")))
+        if ns or us:
+            acc_ids.append(e["id"])
+            acc_names += [n for n in ns if n not in acc_names]
+            acc_uids += [u for u in us if u not in acc_uids]
+    acc_fact = _account_fact(acc_names, acc_uids) if acc_ids else ""
+    if acc_fact:
+        shown = ", ".join(acc_ids[:4]) + (f" +{len(acc_ids) - 4}" if len(acc_ids) > 4 else "")
+        head += f"\n({shown} name{'s' if len(acc_ids) == 1 else ''} an account. {acc_fact})"
     foot = "- (entries shortened with …: settle with no arguments shows them whole)"
     newest = list(reversed(entries))
     # room for the newest whole, then an equal share for each of the rest

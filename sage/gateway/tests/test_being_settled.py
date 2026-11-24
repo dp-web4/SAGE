@@ -1,6 +1,7 @@
 """being_settled: the being's own conclusions, kept where every beat shows them. dp, 2026-10-27: "what
 tools/affordances can we give it so it can learn conclusively and not perseverate?" """
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -683,3 +684,42 @@ def test_a_rewording_that_keeps_every_sentence_quotes_nothing(tmp_path):
     ok, msg, _ = _s(tmp_path, id="s1", question=q, answer="It failed. Name the step that failed and what it "
                     "printed; never claim untested work worked. Fixed now.")
     assert "No longer in the answer" not in msg, msg     # short sentences are not judged, added ones are not losses
+
+
+# An account a settled entry names is read from this machine, beside it, every beat.
+
+def _being_home(tmp_path):
+    h = tmp_path / "widget-being"
+    h.mkdir()
+    return h
+
+
+def test_an_entry_naming_the_beings_own_name_as_an_account_shows_what_the_machine_holds(tmp_path):
+    import pwd
+    h = _being_home(tmp_path)
+    nobody = pwd.getpwuid(65534).pw_name
+    ok, msg, _ = _s(h, question="Does the test account exist?", answer="Yes, the widget user (UID 65534) is alive.")
+    assert ok and "no account named widget exists; UID 65534 is the account " + nobody in msg, msg
+    assert "show as 65534 (nobody): that is how the run maps them" in msg
+    shown = st.render(h)
+    assert "(s1 names an account. This machine's account list, read just now outside your runs: no account " \
+           "named widget exists" in shown, shown
+
+
+def test_an_account_that_exists_is_said_to_exist(tmp_path):
+    import pwd
+    me = pwd.getpwuid(os.getuid())
+    h = _being_home(tmp_path)
+    _, msg, _ = _s(h, question="Who runs the test seat?", answer=f"the {me.pw_name} user (UID {me.pw_uid})")
+    assert f"an account named {me.pw_name} exists, UID {me.pw_uid}" in msg, msg
+    assert f"UID {me.pw_uid} is the account {me.pw_name}" in msg
+    assert "65534" not in msg
+
+
+def test_prose_about_users_names_no_account(tmp_path):
+    h = _being_home(tmp_path)
+    for q, a in (("Who asks the test questions?", "its user asks them, through a non-root user session"),
+                 ("Is the test unit managed?", "yes, as a systemctl user unit")):
+        _, msg, _ = _s(h, question=q, answer=a)
+        assert "account list" not in msg, msg
+    assert "account list" not in st.render(h)
