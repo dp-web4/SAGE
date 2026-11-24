@@ -197,11 +197,13 @@ def _turns_numbered(instance, seqs) -> Tuple[Dict[int, Dict[str, str]], List[str
     d = Path(instance) / "conversations"
     if not want or not d.is_dir():
         return out, unread
+    # legion on #704: a bare "7" is in most lines, so one bad line anywhere read as a file not read whole
+    wanted = re.compile(r'"seq"\s*:\s*(?:' + "|".join(str(s) for s in sorted(want)) + r")(?!\d)")
     for f in sorted(d.glob("*.jsonl")):
         try:
             with f.open(encoding="utf-8", errors="replace") as fh:
                 for line in fh:
-                    if not any(str(s) in line for s in want):
+                    if not wanted.search(line):
                         continue
                     try:
                         t = json.loads(line)
@@ -217,9 +219,9 @@ def _turns_numbered(instance, seqs) -> Tuple[Dict[int, Dict[str, str]], List[str
     return out, unread
 
 
-def _cited_quotes(evidence: str) -> List[Tuple[int, str, int]]:
-    """(seq, quote, where that seq is cited) for each quote, bound to the seq cited before it; a quote ahead of every
-    seq goes to the first."""
+def _cited_quotes(evidence: str) -> List[Tuple[int, str, int, int]]:
+    """(seq, quote, where that seq is cited, where the quote ends) for each quote, bound to the seq cited before it;
+    a quote ahead of every seq goes to the first."""
     marks = [(m.start(), int(m.group(1))) for m in _SEQ_CITED.finditer(evidence)]
     out = []
     for m in _QUOTED.finditer(evidence) if marks else ():
@@ -227,7 +229,7 @@ def _cited_quotes(evidence: str) -> List[Tuple[int, str, int]]:
         if q:
             before = [(p, s) for p, s in marks if p < m.start()]
             p, s = before[-1] if before else marks[0]
-            out.append((s, q, p))
+            out.append((s, q, p, m.end()))
     return out
 
 
@@ -237,7 +239,7 @@ def _cited_quotes(evidence: str) -> List[Tuple[int, str, int]]:
 #: the files on disk. The words below follow "conversation" in ordinary prose and are not taken as names.
 _CLAIMED_NAME = re.compile(r"\b(?:conversation|convo)\s*[:=]?\s+([\w.-]+)|(?<![\w.-])([\w.-]+)\.jsonl\b", re.I)
 _NOT_A_NAME = {"with", "about", "the", "a", "an", "in", "on", "from", "to", "between", "where", "that", "this",
-               "i", "my", "our", "your", "its", "and", "or", "of", "at", "is", "was", "where", "which", "when"}
+               "i", "my", "our", "your", "its", "and", "or", "of", "at", "is", "was", "which", "when"}
 
 
 def _conversation_names(instance) -> set:
@@ -261,17 +263,24 @@ def _name_marks(evidence: str, have) -> List[Tuple[int, str]]:
     return sorted(set(out))
 
 
-def _named_for(marks: List[Tuple[int, str]], seq_at: int, prev_at: int) -> Optional[str]:
-    """THE CONVERSATION A CITATION NAMES, ITS OWN (NOVA on #704, 5d2dffd2): names were gathered over the whole
-    evidence, so in 'conversation seat seq 7: "a"; conversation dp seq 8: "b"' seq 7 could be checked in dp. The
-    name a citation carries is the last one named after the citation before it and up to its own seq. With none
-    there, the one name the evidence gives, if it gives exactly one ("conversation dp, seq 7 and seq 8"); else
-    none, and the citation is checked against every conversation with that seq, with any ambiguity said."""
-    own = [n for p, n in marks if prev_at < p <= seq_at]
+#: Two or more names in one citation's window: said, and none of them picked.
+CONFLICTING = object()
+
+
+def _named_for(marks: List[Tuple[int, str]], lo: int, hi: int, first_at: int):
+    """THE CONVERSATION A CITATION NAMES, ITS OWN (NOVA on #704, 5d2dffd2; legion, eca5d185): its window runs from
+    the end of the citation before it to the end of its own quote, so the name counts on either side of the seq
+    ("conversation dp seq 7: ..." and "seq 7 in conversation dp: ...") and a name between two citations belongs to
+    one. Two different names there: CONFLICTING. None there: the one name the evidence gives, if it gives exactly
+    one and gives it before the first citation ("conversation dp, seq 7 and seq 8"), never one borrowed from a later
+    citation; else None, and the citation is checked against every conversation with that seq."""
+    own = {n for p, n in marks if lo < p <= hi}
     if own:
-        return own[-1]
+        return own.pop() if len(own) == 1 else CONFLICTING
     names = {n for _, n in marks}
-    return next(iter(names)) if len(names) == 1 else None
+    if len(names) == 1 and all(p < first_at for p, _ in marks):
+        return next(iter(names))
+    return None
 
 
 def _line_like(text: str, qn: str) -> str:
@@ -292,14 +301,21 @@ def _quote_fact(instance, evidence: str) -> str:
     pairs = _cited_quotes(evidence or "")
     if not pairs:
         return ""
-    turns, unread = _turns_numbered(instance, {s for s, _, _ in pairs})
+    turns, unread = _turns_numbered(instance, {s for s, _, _, _ in pairs})
     have = _conversation_names(instance) | {c for convs in turns.values() for c in convs} | set(unread)
     marks = _name_marks(evidence, have)
-    seq_marks = sorted({p for _, _, p in pairs})
+    ends: Dict[int, int] = {}
+    for _, _, at, end in pairs:
+        ends[at] = max(end, ends.get(at, end))
+    seq_marks = sorted(ends)
     facts, missing, absent, unchecked = [], [], [], False
-    for s, qn, at in pairs:
-        prev = max([p for p in seq_marks if p < at] or [-1])
-        name = _named_for(marks, at, prev)
+    for s, qn, at, _ in pairs:
+        lo = max([ends[p] for p in seq_marks if p < at] or [-1])
+        name = _named_for(marks, lo, ends[at], seq_marks[0])
+        if name is CONFLICTING:
+            facts.append(f'Your evidence names more than one conversation for seq {s} ("{qn}"), so it does not '
+                         f'say which one it means.')
+            name = None
         if name is not None and name not in have:
             # A NAMED CONVERSATION THAT IS NOT THERE IS SAID, AND NEVER WIDENS TO ALL (NOVA on #704).
             if name not in absent:
@@ -335,7 +351,7 @@ def _quote_fact(instance, evidence: str) -> str:
                 if line:
                     where = f" In {c}, its" if len(convs) > 1 else " Its"
                     fact += f'{where} line that starts the same reads: "{line}".'
-            elsewhere = sorted({o for o, _, _ in pairs if o != s
+            elsewhere = sorted({o for o, _, _, _ in pairs if o != s
                                 for c, t in turns.get(o, {}).items() if (name is None or c == name) and qn in _ws(t)})
             if elsewhere:
                 fact += f" It is in seq {', '.join(str(o) for o in elsewhere)}."

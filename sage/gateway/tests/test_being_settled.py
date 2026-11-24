@@ -762,6 +762,46 @@ def test_each_citation_is_checked_in_the_conversation_it_names(tmp_path):
     assert "Your evidence" not in msg, msg                                       # one name given: it holds for both
 
 
+
+def test_a_name_after_the_seq_binds_to_its_own_citation_not_the_next(tmp_path):
+    # legion on #704 (eca5d185): a name after the seq was counted for the next citation, and seq 8 passed in seat
+    _conv(tmp_path, "seat", [(7, "printed foo here"), (8, "printed bar here")])
+    _conv(tmp_path, "dp", [(7, "printed zzz here"), (8, "printed qqq here")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7 in conversation seat: "printed foo"; seq 8 in conversation dp: "printed bar"')
+    assert '"printed bar" from seq 8 in dp; no turn with that number contains that text.' in msg, msg
+    assert '"printed foo"' not in msg, msg                                       # in seat seq 7, as cited
+    for i, ev in enumerate(('seq 7 in conversation dp: "printed zzz"; seq 8 in conversation seat: "printed bar"',
+                            'seq 7 (dp.jsonl): "printed zzz"; seq 8 (seat.jsonl): "printed bar"')):
+        _, msg, _ = _s(tmp_path, question=f"Does the test gizmo{i} script run?", answer="yes", evidence=ev)
+        assert "Your evidence" not in msg, (ev, msg)                             # both true where they say
+
+
+def test_a_later_citations_name_is_not_borrowed_by_an_earlier_one(tmp_path):
+    _conv(tmp_path, "seat", [(7, "printed foo here"), (8, "printed bar here")])
+    _conv(tmp_path, "dp", [(7, "printed zzz here"), (8, "printed qqq here")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "printed foo"; conversation dp seq 8: "printed qqq"')
+    assert "from seq 7 in dp" not in msg, msg
+    assert "It is in the one in seat, not in dp." in msg, msg                   # unnamed: checked in both, said
+
+
+def test_two_names_for_one_citation_are_said_and_neither_picked(tmp_path):
+    _conv(tmp_path, "seat", [(7, "printed foo here")])
+    _conv(tmp_path, "dp", [(7, "printed zzz here")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='conversation dp seq 7 in conversation seat: "printed foo"')
+    assert 'names more than one conversation for seq 7 ("printed foo")' in msg, msg
+
+
+def test_one_bad_line_without_the_cited_seq_does_not_mark_the_file_unread(tmp_path):
+    _conv(tmp_path, "seat", [(7, "printed foo here")])
+    with (tmp_path / "conversations" / "seat.jsonl").open("a") as fh:
+        fh.write('{"seq": 1777, "text": "cut off\n')
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "printed foo"')
+    assert "Could not read" not in msg, msg
+
 def test_an_unread_file_is_said_even_when_the_quote_matched_in_a_read_one(tmp_path):
     # NOVA on #704: a match in a file that was read is not the whole provenance when another was not read
     _conv(tmp_path, "dp", [(7, "Epoch [3/3], Loss: 0.6000")])
