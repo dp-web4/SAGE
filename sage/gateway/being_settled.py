@@ -105,11 +105,13 @@ def _pid_fact(subject: str, numbers) -> str:
 #: real list (s188), then retired the whole thread, true entry with the false ones, and settled the first belief
 #: again within the hour: the true answer had no fact under it that outlived the entry. This one is read every beat,
 #: outside the run, so it holds whichever entry stands, and changes when the machine does.
-#: What is read: every UID an entry names, a name written with a UID ("<name> user (UID n)"), and the being's own
-#: name before "user"/"account". A free name is not read: "its user", "non-root user" and "systemctl user" are what
-#: a looser pattern caught in the same log. Evidence only; which entry holds stays the being's.
-_UID_SAID = re.compile(r"\buid\s*[=:]?\s*(\d{1,7})\b", re.I)
-_NAME_WITH_UID = re.compile(r"\b([a-z_][a-z0-9_-]{0,31})\s+(?:user|account)\s*\(\s*uid\b", re.I)
+#: What is read: every UID an entry names ("UID n", "uid=n", "UIDs n and m"), and the being's own name before
+#: "user"/"account". Any other name is not read, even beside a UID: "its user", "non-root user", "the sandbox user
+#: (UID 65534)" are prose, and the UID clause already says which account holds that number (legion's review of #823).
+#: At most ACCOUNTS_SHOWN clauses, the rest counted, so the head line cannot crowd out entries (#783's overrun).
+#: Evidence only; which entry holds stays the being's.
+_UID_SAID = re.compile(r"\buids?\s*[=:]?\s*(\d{1,7}(?:\s*(?:,|and|or|&)\s*\d{1,7})*)\b", re.I)
+ACCOUNTS_SHOWN = 6
 
 
 def _own_name(instance) -> str:
@@ -119,12 +121,13 @@ def _own_name(instance) -> str:
 
 def _accounts_named(instance, text: str) -> Tuple[List[str], List[str]]:
     """(names, uids) a text names, in order, each once."""
-    names = [m.lower() for m in _NAME_WITH_UID.findall(text)]
+    names = []
     own = _own_name(instance)
     if own and re.search(rf"\b{re.escape(own)}\s+(?:user|account)\b|\b(?:user|account)\s+(?:named\s+|called\s+)?"
                          rf"[\"'`]?{re.escape(own)}\b", text, re.I):
         names.append(own.lower())
-    return list(dict.fromkeys(names)), list(dict.fromkeys(_UID_SAID.findall(text)))
+    uids = [u for run in _UID_SAID.findall(text) for u in re.findall(r"\d+", run)]
+    return list(dict.fromkeys(names)), list(dict.fromkeys(uids))
 
 
 def _account_fact(names, uids) -> str:
@@ -146,6 +149,8 @@ def _account_fact(names, uids) -> str:
             said.append(f"no account has UID {u}")
     if not said:
         return ""
+    if len(said) > ACCOUNTS_SHOWN:
+        said = said[:ACCOUNTS_SHOWN] + [f"{len(said) - ACCOUNTS_SHOWN} more not read here"]
     box = (" Inside a run, files and groups of accounts other than your own show as 65534 (nobody): that is how "
            "the run maps them, not an account." if "65534" in uids else "")
     return "This machine's account list, read just now outside your runs: " + "; ".join(said) + "." + box

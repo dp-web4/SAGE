@@ -710,9 +710,8 @@ def test_an_account_that_exists_is_said_to_exist(tmp_path):
     import pwd
     me = pwd.getpwuid(os.getuid())
     h = _being_home(tmp_path)
-    _, msg, _ = _s(h, question="Who runs the test seat?", answer=f"the {me.pw_name} user (UID {me.pw_uid})")
-    assert f"an account named {me.pw_name} exists, UID {me.pw_uid}" in msg, msg
-    assert f"UID {me.pw_uid} is the account {me.pw_name}" in msg
+    _, msg, _ = _s(h, question="Who runs the test seat?", answer=f"the widget account (UID {me.pw_uid})")
+    assert f"UID {me.pw_uid} is the account {me.pw_name}" in msg, msg
     assert "65534" not in msg
 
 
@@ -723,3 +722,27 @@ def test_prose_about_users_names_no_account(tmp_path):
         _, msg, _ = _s(h, question=q, answer=a)
         assert "account list" not in msg, msg
     assert "account list" not in st.render(h)
+    # beside a UID, a prose word is still not an account name: the UID clause says who holds the number
+    for a in ("a non-root user (UID 1000)", "its user (UID 1000)", "the sandbox user (UID 65534)"):
+        _, msg, _ = _s(h, question="Which test account runs it?", answer=a)
+        assert "account named" not in msg, msg
+        assert "account list" in msg
+
+
+def test_plural_uids_are_each_read(tmp_path):
+    import pwd
+    h = _being_home(tmp_path)
+    _, msg, _ = _s(h, question="Which test UIDs?", answer="UIDs 0 and 65534, and uids 0, 65534")
+    assert f"UID 0 is the account {pwd.getpwuid(0).pw_name}" in msg, msg
+    assert f"UID 65534 is the account {pwd.getpwuid(65534).pw_name}" in msg
+    assert msg.count("UID 0 is") == 1
+
+
+def test_the_account_line_is_capped(tmp_path):
+    h = _being_home(tmp_path)
+    uids = ", ".join(str(4000000 + i) for i in range(30))
+    _, msg, _ = _s(h, question="Which test UIDs?", answer=f"UIDs {uids}")
+    assert msg.count("no account has UID") == st.ACCOUNTS_SHOWN, msg
+    assert f"{30 - st.ACCOUNTS_SHOWN} more not read here" in msg
+    line = next(l for l in st.render(h).splitlines() if "account list" in l)
+    assert len(line) < 500, line
