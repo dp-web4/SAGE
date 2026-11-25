@@ -164,48 +164,63 @@ def _account_fact(names, uids) -> str:
 #: item. Its entries write the id without the hyphen too (after "scope", "scope request", or in parentheses), so
 #: twelve hex digits after "scope" are read, not only "scope-<id>".
 #: Looked up in this beat's hestia read first, then in the seat's kept rulings (scope_rulings): hestia lets ended
-#: requests go, the kept rulings hold them. An id in neither is said to be in neither, with when the rulings began
-#: to be kept; it is never called "never filed" unless hestia declares its list complete. Evidence only.
-_SCOPE_NAMED = re.compile(r"\bscope(?:[-\s]+request)?[-\s:#(]{1,3}([0-9a-f]{12})\b", re.I)
+#: requests go, the kept rulings hold them. Each source is named for what it is (NOVA on #827): a row from this
+#: beat's read is that read; a kept ruling is how the request stood when the seat last saw it end, not a reading
+#: now; and an id missing from what was looked at says which lists those were. hestia's list is only said to lack
+#: an id when it was read and the read did not fail; the settle receipt makes no read, so it says only what the
+#: kept rulings hold. "Not on record" only when hestia declares its list complete. Evidence only.
+#: Also read (legion on #827): "scope requests <id> and <id>", "scope request id <id>", "scope_<id>".
+_SCOPE_NAMED = re.compile(r"\bscope(?:[-_\s]+requests?)?(?:\s+ids?)?[-_\s:#(]{1,3}"
+                          r"([0-9a-f]{12}(?:\s*(?:,|and|or|&)\s*(?:scope[-_])?[0-9a-f]{12})*)\b", re.I)
 SCOPES_SHOWN = 4
 
 
 def _scopes_named(text: str) -> List[str]:
     """`scope-<id>` for each scope request a text names, in order, each once."""
-    return list(dict.fromkeys(f"scope-{m.lower()}" for m in _SCOPE_NAMED.findall(text or "")))
+    return list(dict.fromkeys(f"scope-{h.lower()}" for run in _SCOPE_NAMED.findall(text or "")
+                              for h in re.findall(r"[0-9a-f]{12}", run, re.I)))
 
 
 def _scope_fact(instance, ids: List[str], snap=None) -> str:
-    """What this beat's hestia read (`snap`, a todo_membot.ScopeSnapshot, or None) and the kept rulings say of
-    each of `ids`; empty when there are none."""
+    """What this beat's hestia read (`snap`, a todo_membot.ScopeSnapshot; None when no read was made, as in the
+    settle receipt) and the kept rulings say of each of `ids`; empty when there are none."""
     if not ids:
         return ""
     from sage.gateway import scope_rulings as _sr
-    rows = (snap.rows or {}) if snap is not None and snap.error is None else {}
-    complete = bool(snap is not None and snap.error is None and snap.complete)
-    kept = _sr._rows(instance)
-    since = min((str(r.get("seen") or "") for r in kept if r.get("seen")), default="")
+    read_ok = snap is not None and snap.error is None
+    rows = (snap.rows or {}) if read_ok else {}
+    kept: Dict[str, dict] = {}
+    for r in _sr._rows(instance):   # one read; the last line for an id is how it last stood
+        kept[r["id"]] = r
+    since = min((str(r.get("seen") or "") for r in kept.values() if r.get("seen")), default="")
+    rulings = "your kept rulings" + (f" (kept since {since})" if since else "")
     said = []
     for rid in ids[:SCOPES_SHOWN]:
-        live, ruled = rows.get(rid), _sr.ruling(instance, rid)
+        live, ruled = rows.get(rid), kept.get(rid)
         status = (live or {}).get("status") or (live or {}).get("decision")
         if status:
-            who = (live or {}).get("decided_by") if status != "pending" else ""
-            said.append(f"{rid} for {live.get('path')}: {status}" + (f" by {who}" if who else ""))
+            who = live.get("decided_by") if status != "pending" else ""
+            said.append(f"{rid} for {live.get('path')}: {status}" + (f" by {who}" if who else "")
+                        + ", in this beat's hestia read")
         elif ruled:
             said.append(f"{rid} for {ruled.get('path')}: {ruled.get('decision')}"
-                        + (f" by {ruled['by']}" if ruled.get("by") else "") + f" (seen {ruled.get('seen')})")
-        elif complete:
+                        + (f" by {ruled['by']}" if ruled.get("by") else "")
+                        + f", as your seat last saw it end ({ruled.get('seen')})")
+        elif read_ok and snap.complete:
             said.append(f"{rid}: not on record for you")
+        elif read_ok:
+            said.append(f"{rid}: not in this beat's hestia read, and not in {rulings}")
         else:
-            said.append(f"{rid}: not in hestia's list"
-                        + (" this beat" if snap is not None and snap.error is None else "")
-                        + " and not in your kept rulings" + (f" (kept since {since})" if since else ""))
+            said.append(f"{rid}: not in {rulings}")
     if len(ids) > SCOPES_SHOWN:
         said.append(f"{len(ids) - SCOPES_SHOWN} more not looked up here")
-    unread = (f" hestia could not be read this beat ({snap.error}), so only the kept rulings were looked at."
-              if snap is not None and snap.error is not None else "")
-    return "Your scope requests, looked up: " + "; ".join(said) + "." + unread
+    if snap is None:
+        how = " hestia's list was not read here; only the kept rulings were looked at."
+    elif snap.error is not None:
+        how = f" hestia could not be read this beat ({snap.error}); only the kept rulings were looked at."
+    else:
+        how = ""
+    return "Your scope requests, looked up: " + "; ".join(said) + "." + how
 
 
 def _pid_entries(entries: List[dict]) -> Tuple[List[str], List[str]]:
