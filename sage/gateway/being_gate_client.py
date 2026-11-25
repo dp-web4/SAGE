@@ -3365,7 +3365,9 @@ _TOOL_SCHEMAS = {
             "and kept forever; nobody can edit it afterwards, including you. Saying nothing "
             "is also a choice and is recorded as one.",
             {"to": "the conversation id, shown beside each conversation in your state",
-             "text": "what you want to say"},
+             "text": "what you want to say",
+             "answers": "the seq number of the turn this answers (or several: 12, 14); leave it "
+                        "out when this turn answers none of them, and they stay waiting on you"},
             ["to", "text"]),
     "pr_open": ("Open a pull request from the changes in your worktree. This is how your work "
                 "enters the tree (PRD §7): on your own branch, attributed to you in the commit "

@@ -580,6 +580,84 @@ def test_an_old_unanswered_turn_is_a_choice_not_a_debt():
     assert c.unanswered(inst, "dp", "b") == [], "silence that has lasted is an answer; do not nag"
 
 
+def test_an_outage_does_not_age_a_waiting_turn_out_of_the_window():
+    """11-09: dp's 11-08 20:50Z turn was selected for an answer in 163 mute beats (the model never
+    answered), then at 27 h old the first live beat found it past max_age_h and marked it seen with no
+    reply. Dead time is not choosing time."""
+    import json, tempfile
+    from datetime import datetime, timezone, timedelta
+    from pathlib import Path
+    from sage.gateway import conversations as c
+    inst = Path(tempfile.mkdtemp(prefix="deadtime-"))
+    c.create(inst, "dp", title="t", participants=["dp", "b"], writable_by=["dp", "b"])
+    ts = (datetime.now(timezone.utc) - timedelta(hours=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    (inst / "conversations" / "dp.jsonl").write_text(
+        json.dumps({"ts": ts, "seq": 1, "from": "dp", "text": "how are you doing?"}) + "\n")
+    assert c.unanswered(inst, "dp", "b") == [], "30 h on the clock: past the window"
+    seen = []
+    def dead(t):
+        seen.append(t)
+        return 20 * 3600.0                      # 20 h of it was mute beats
+    assert [t["text"] for t in c.unanswered(inst, "dp", "b", dead_s_of=dead)] == ["how are you doing?"]
+    assert seen == [ts], "the dead time is asked for since the turn itself"
+    assert c.unanswered(inst, "dp", "b", dead_s_of=lambda t: 3600.0) == [], "1 h dead: still past"
+
+
+def _answers_conv(prefix):
+    import tempfile
+    from pathlib import Path
+    from sage.gateway import conversations as c
+    inst = Path(tempfile.mkdtemp(prefix=prefix))
+    c.create(inst, "dp", title="t", participants=["dp", "b"], writable_by=["dp", "b"])
+    return inst, c
+
+
+def test_an_unrelated_status_update_leaves_a_waiting_question_open():
+    """NOVA's hold on #675: once the window counts live time, an old question stays open longer, and a
+    later turn about something else must not be what closes it. A turn with answers=[] answers nothing."""
+    inst, c = _answers_conv("status-")
+    c.append(inst, "dp", speaker="dp", text="what did the 18:34 click change?")
+    c.append(inst, "dp", speaker="b", text="status: still reading su15.py", extra={"answers": []})
+    assert [t["seq"] for t in c.unanswered(inst, "dp", "b")] == [1], "the question is still open"
+    assert [t["seq"] for t in c.unanswered(inst, "dp", "b", dead_s_of=lambda ts: 0.0)] == [1], \
+        "and with the live-time window too"
+    c.append(inst, "dp", speaker="b", text="the click set the latch", extra={"answers": [1]})
+    assert c.unanswered(inst, "dp", "b") == [], "naming it closes it"
+
+
+def test_a_turn_closes_only_the_seqs_it_names():
+    inst, c = _answers_conv("named-")
+    c.append(inst, "dp", speaker="dp", text="first question?")          # 1
+    c.append(inst, "dp", speaker="dp", text="second question?")         # 2
+    c.append(inst, "dp", speaker="b", text="on the second: yes", extra={"answers": [2]})
+    assert [t["seq"] for t in c.unanswered(inst, "dp", "b")] == [1]
+    c.append(inst, "dp", speaker="dp", text="third?")                   # 4
+    assert [t["seq"] for t in c.unanswered(inst, "dp", "b")] == [1, 4], "oldest first, newest still counts"
+
+
+def test_a_turn_without_the_field_still_closes_everything_before_it():
+    """Every turn written before `answers` existed, and the seat's own appends, keep the old reading."""
+    inst, c = _answers_conv("legacy-")
+    c.append(inst, "dp", speaker="dp", text="first question?")
+    c.append(inst, "dp", speaker="dp", text="second question?")
+    c.append(inst, "dp", speaker="b", text="a reply")
+    assert c.unanswered(inst, "dp", "b") == []
+
+
+def test_the_render_does_not_call_an_open_question_settled_after_a_status_update():
+    """'The last word here is YOURS ... nothing here is owed by you' would be false when the being's
+    last turn named no answer to a question still open."""
+    inst, c = _answers_conv("render-open-")
+    c.append(inst, "dp", speaker="dp", text="what did the click change?")
+    c.append(inst, "dp", speaker="b", text="status: reading", extra={"answers": []})
+    text = c.render_for_being(inst, "b")
+    assert "Nothing here is owed by you" not in text
+    assert "no turn of yours named seq 1 (dp) as answered" in text
+    assert "(seq 1, " in text and "(seq 2, " in text, "turn headers carry the seq answers takes"
+    c.append(inst, "dp", speaker="b", text="it set the latch", extra={"answers": [1]})
+    assert "Nothing here is owed by you" in c.render_for_being(inst, "b")
+
+
 def test_non_object_and_malformed_turns_do_not_crash_readers_or_drop_valid_turns():
     """SAGE #652: Conversation readers must handle non-object JSON values (arrays, scalars),
     malformed JSON, and records missing required fields without crashing (AttributeError on .get)
