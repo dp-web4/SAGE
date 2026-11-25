@@ -69,6 +69,47 @@ def test_a_say_into_the_conversation_or_an_acting_explore_marks_it():
     assert out2["explore_acted"] is True and out2["marked"]
 
 
+def _late_turn():
+    """A turn that arrives after the beat took its shown snapshot, selected at reflect."""
+    inst = _instance_with_dp_question()
+    shown = conv.latest_seqs(inst, "cbp-being")
+    conv.append(inst, "dp", speaker="dp", text="and what did you find?")
+    return inst, shown, SimpleNamespace(cid="dp", seq=shown["dp"] + 1)
+
+
+def test_a_late_turn_answered_at_reflect_is_not_listed_as_unanswered_again():
+    inst, shown, sel = _late_turn()
+    say = _res(("say", {"to": "dp", "text": "this"}, True))
+    out = mark_conversations_after_beat(inst, "cbp-being", shown, _res(), [None, say, None],
+                                        selected=sel, answering=(say, None))
+    assert out["marked"] == {"dp": sel.seq}
+    assert conv.awaiting(inst, "dp", "cbp-being") == []
+
+
+def test_a_turn_arriving_after_the_selection_stays_unseen():
+    inst, shown, sel = _late_turn()
+    say = _res(("say", {"to": "dp", "text": "this"}, True))
+    conv.append(inst, "dp", speaker="dp", text="one more thing")
+    mark_conversations_after_beat(inst, "cbp-being", shown, _res(), [None, say, None],
+                                  selected=sel, answering=(say, None))
+    assert [t["text"] for t in conv.awaiting(inst, "dp", "cbp-being")] == ["one more thing"]
+
+
+def test_a_late_turn_stays_waiting_unless_an_answering_phase_spoke_into_its_conversation():
+    for answering in ((_res(), None),                                                 # silent
+                      (_res(("say", {"to": "other", "text": "x"}, True)),),            # elsewhere
+                      (_res(("say", {"to": "dp", "text": "x"}, False)),)):             # refused
+        inst, shown, sel = _late_turn()
+        mark_conversations_after_beat(inst, "cbp-being", shown, _res(), [None], selected=sel, answering=answering)
+        assert [t["seq"] for t in conv.awaiting(inst, "dp", "cbp-being")][-1] == sel.seq, answering
+    # An explore say came before the selection, so it answers nothing the selection named.
+    inst, shown, sel = _late_turn()
+    early = _res(("say", {"to": "dp", "text": "x"}, True))
+    out = mark_conversations_after_beat(inst, "cbp-being", shown, early, [None], selected=sel, answering=(None,))
+    assert out["marked"] == shown
+    assert [t["seq"] for t in conv.awaiting(inst, "dp", "cbp-being")] == [sel.seq]
+
+
 def test_a_stale_outage_claim_meets_the_beings_own_successful_remember():
     inst = Path(tempfile.mkdtemp(prefix="contra-"))
     (inst / "todo.md").write_text("2026-09-15 05:02 UTC\n- [ ] Determine root cause of MCP server at "
