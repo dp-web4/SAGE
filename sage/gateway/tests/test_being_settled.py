@@ -746,3 +746,91 @@ def test_the_account_line_is_capped(tmp_path):
     assert f"{30 - st.ACCOUNTS_SHOWN} more not read here" in msg
     line = next(l for l in st.render(h).splitlines() if "account list" in l)
     assert len(line) < 500, line
+
+
+def _snap(rows, complete=False, error=None):
+    from datetime import datetime, timezone
+    from sage.gateway.todo_membot import ScopeSnapshot
+    return ScopeSnapshot(None if error else {r["request_id"]: r for r in rows}, datetime.now(timezone.utc),
+                         complete=complete, error=error)
+
+
+def _kept(h, *rows):
+    with open(Path(h) / "scope_rulings.jsonl", "a") as f:
+        for r in rows:
+            f.write(json.dumps(r) + "\n")
+
+
+def test_a_scope_id_an_entry_names_is_looked_up_in_the_kept_rulings(tmp_path):
+    h = _being_home(tmp_path)
+    _kept(h, {"id": "scope-aaaaaaaaaaaa", "path": "/etc/widget", "decision": "refused", "by": "test-seat",
+              "why": "no", "seen": "2026-11-23 18:46 UTC"})
+    # written bare, as entries do: after "scope request", in parentheses
+    ok, msg, _ = _s(h, question="Is the widget ask still open?", answer="Yes, scope request (aaaaaaaaaaaa) is pending.")
+    assert ok and "scope-aaaaaaaaaaaa for /etc/widget: refused by test-seat, as your seat last saw it end " \
+                  "(2026-11-23 18:46 UTC)" in msg, msg
+    shown = st.render(h)
+    assert "(s1 names a scope request. Your scope requests, looked up: scope-aaaaaaaaaaaa for /etc/widget: " \
+           "refused by test-seat" in shown, shown
+
+
+def test_a_scope_id_in_neither_list_is_said_to_be_in_neither_and_not_called_never_filed(tmp_path):
+    h = _being_home(tmp_path)
+    _kept(h, {"id": "scope-aaaaaaaaaaaa", "path": "/etc/widget", "decision": "refused", "seen": "2026-11-23 18:46 UTC"})
+    _s(h, question="Which widget ask is pending?", answer="scope bbbbbbbbbbbb, pending since yesterday")
+    shown = st.render(h, scope_snap=_snap([]))
+    assert "scope-bbbbbbbbbbbb: not in this beat's hestia read, and not in your kept rulings " \
+           "(kept since 2026-11-23 18:46 UTC)" in shown, shown
+    assert "not on record" not in shown
+    # only a list hestia declares complete lets an absent id be called not on record
+    assert "scope-bbbbbbbbbbbb: not on record for you" in st.render(h, scope_snap=_snap([], complete=True))
+
+
+def test_this_beats_hestia_read_comes_before_the_kept_ruling(tmp_path):
+    h = _being_home(tmp_path)
+    _kept(h, {"id": "scope-cccccccccccc", "path": "/etc/widget", "decision": "granted", "seen": "2026-11-23 18:46 UTC"})
+    _s(h, question="Does the widget grant stand?", answer="yes, scope-cccccccccccc was granted")
+    live = _snap([{"request_id": "scope-cccccccccccc", "path": "/etc/widget", "status": "revoked",
+                   "decided_by": "test-seat"}])
+    shown = st.render(h, scope_snap=live)
+    assert "scope-cccccccccccc for /etc/widget: revoked by test-seat" in shown, shown
+    assert ": granted" not in shown
+    # a read that failed is said, and the kept ruling is what is shown
+    shown = st.render(h, scope_snap=_snap([], error="TimeoutError"))
+    assert "granted" in shown and "hestia could not be read this beat (TimeoutError)" in shown, shown
+    # a failed read claims nothing about hestia's list (NOVA on #827)
+    assert "not in this beat's hestia read" not in shown
+
+
+def test_prose_about_scope_and_other_hex_names_no_request(tmp_path):
+    h = _being_home(tmp_path)
+    for a in ("the scope of the widget test is narrow", "telescope 0123456789ab is a test lens",
+              "commit 0123456789ab changed the widget scope"):
+        _, msg, _ = _s(h, question="What is the test widget's scope?", answer=a)
+        assert "looked up" not in msg, msg
+    assert "scope request" not in st.render(h)
+
+
+def test_the_receipt_reads_no_hestia_list_and_says_so(tmp_path):
+    """NOVA on #827: the settle receipt makes no hestia read, so a missing id is said to be missing from the kept
+    rulings only, and the receipt says hestia's list was not read; nothing about hestia's list is claimed."""
+    h = _being_home(tmp_path)
+    _kept(h, {"id": "scope-aaaaaaaaaaaa", "path": "/etc/widget", "decision": "refused", "seen": "2026-11-23 18:46 UTC"})
+    ok, msg, _ = _s(h, question="Is the widget ask pending?", answer="yes, scope dddddddddddd is pending")
+    assert ok and "scope-dddddddddddd: not in your kept rulings (kept since 2026-11-23 18:46 UTC)" in msg, msg
+    assert "hestia's list was not read here; only the kept rulings were looked at." in msg
+    assert "hestia read" not in msg and "not on record" not in msg
+    # a block rendered with no read (a bare call) says the same, and a failed read says it failed
+    assert "hestia's list was not read here" in st.render(h)
+    failed = st.render(h, scope_snap=_snap([], error="TimeoutError"))
+    assert "scope-dddddddddddd: not in your kept rulings" in failed and "hestia read" not in failed, failed
+
+
+def test_plural_and_id_phrasings_name_each_request():
+    """legion on #827: phrasings the first parser missed."""
+    assert st._scopes_named("scope requests aaaaaaaaaaaa and bbbbbbbbbbbb") == \
+        ["scope-aaaaaaaaaaaa", "scope-bbbbbbbbbbbb"]
+    assert st._scopes_named("scope request id cccccccccccc") == ["scope-cccccccccccc"]
+    assert st._scopes_named("scope_dddddddddddd, Scope eeeeeeeeeeee") == ["scope-dddddddddddd", "scope-eeeeeeeeeeee"]
+    assert st._scopes_named("scope-aaaaaaaaaaaa, scope-bbbbbbbbbbbb or ffffffffffff") == \
+        ["scope-aaaaaaaaaaaa", "scope-bbbbbbbbbbbb", "scope-ffffffffffff"]

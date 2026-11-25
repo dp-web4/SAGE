@@ -3673,7 +3673,7 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     # only once it has settled something. Fail-open.
     try:
         from sage.gateway import being_settled as _settled
-        _known = _settled.render(instance)
+        _known = _settled.render(instance, scope_snap=scope_snap)
     except Exception:
         _known = ""
     if _known:
