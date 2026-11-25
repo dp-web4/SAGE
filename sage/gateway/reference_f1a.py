@@ -642,6 +642,42 @@ def _which_copy(text: str, line: int) -> str:
     return note
 
 
+def _splice_note(text: str, idx: int, old: str) -> str:
+    """For an old= matched at text[idx:] that is only part of its line: what stays around the new
+    text, for a refusal when the spliced line does not parse. "" when old is the whole line (past
+    its indentation), or ends in a newline.
+
+    THE REFUSAL BLAMED TEXT THE BEING NEVER WROTE. cbp-being, 2026-11-16 22:54Z: a one-line old
+    matched the start of a longer line, so that line's tail stayed after the new text and the
+    result did not parse. The refusal said Python could not read line 1 of its text and quoted
+    the spliced line. A second try with a multi-line new was refused the same way; then it
+    stored a memory concluding that memory_edit takes only single-line edits. The cause was the
+    rest of the line its old matched, not its text.
+
+    WHERE IN THE LINE (NOVA's HOLD on #746): old can match the middle of a line too, and
+    "matched the start" is then false. The start wording is used only when everything before
+    the match is indentation; otherwise the note gives the column and both sides."""
+    if old.endswith("\n") or "\n" in old.strip("\n"):
+        return ""
+    ls = text.rfind("\n", 0, idx) + 1
+    end = idx + len(old)
+    before, rest = text[ls:idx], text[end:].split("\n", 1)[0]
+    at = text.count("\n", 0, idx) + 1
+    fix = (f"your new text was not the problem, and memory_edit does take several lines. To "
+           f"replace the whole line, call memory_edit with start_line={at} end_line={at}, old "
+           f"set to that line, and new set to the line you want. ")
+    if not before.strip():
+        if not rest:
+            return ""
+        return (f"Your old text matched only the start of line {at}, so the rest of that line, "
+                f"{rest!r}, stayed after your new text. That spliced line is what Python could not "
+                f"read; " + fix)
+    col = idx - ls + 1
+    kept = f"{before!r} stayed before your new text" + (f" and {rest!r} after it" if rest else "")
+    return (f"Your old text matched part of line {at}, starting at column {col}, not the whole "
+            f"line: {kept}. That spliced line is what Python could not read; " + fix)
+
+
 def _defs_removed(removed: str) -> str:
     """Name every def/class line a removal took, since a quote can be cut but a name list is short."""
     names = [ln.strip().split("(")[0].rstrip(":") for ln in removed.splitlines()
@@ -2317,7 +2353,9 @@ class ReferenceF1aDispatcher:
                         f"range, and appears there once)")
                 if str(p).endswith(".py"):
                     what += _which_copy(text, s0 + removed[:removed.find(old)].count("\n"))
-                return self._commit_edit(p, path, text, new_text, what, "", replacement=new)
+                splice = _splice_note(text, len("".join(lines[:s0 - 1])) + removed.find(old), old)
+                return self._commit_edit(p, path, text, new_text, what, "", replacement=new,
+                                         splice=splice)
             if old and inner > 1:
                 where = f"line {s0}" if s0 == s1 else f"lines {s0}-{s1}"
                 return ResultEnvelope(ok=False, error=(
@@ -2496,8 +2534,12 @@ class ReferenceF1aDispatcher:
         what = f"replaced 1 occurrence, on line {at}"
         if str(p).endswith(".py"):
             what += _which_copy(text, at)
+        # A SINGLE-LINE OLD THAT STOPS MID-LINE IS LEFT ALONE ABOVE (it can be a token swap),
+        # but if the spliced line then fails to parse, the refusal must say the splice did
+        # it (see _splice_note).
+        splice = _splice_note(text, text.index(old), old)
         return self._commit_edit(p, path, text, text.replace(old, new, 1),
-                                 what, "", replacement=new)
+                                 what, "", replacement=new, splice=splice)
 
     def _earlier_edit(self, path: str, new: str) -> Optional[str]:
         """When the being's own landed memory_edit of `path` carried `new` (stripped, as all or part
@@ -2515,7 +2557,8 @@ class ReferenceF1aDispatcher:
         return None
 
     def _commit_edit(self, p, path: str, text: str, new_text: str, what: str,
-                     gone: str, replacement: Optional[str] = None) -> ResultEnvelope:
+                     gone: str, replacement: Optional[str] = None,
+                     splice: str = "") -> ResultEnvelope:
         """Write an edit atomically and say what it did. Shared by the text and line modes.
 
         THE SAME CHECK AS THE APPEND PATH, BECAUSE THE PATTERN WALKED TO THIS DOOR. Guarding
@@ -2546,6 +2589,15 @@ class ReferenceF1aDispatcher:
             # SAGE #427). Only text Python reads as invalid, not as unfinished, is refused.
             if why and _is_unfinished_code(_changed_lines(text, new_text) or replacement):
                 why = ""
+            if why and splice:
+                # Not `why`: it says "line 1 of your text" and quotes the spliced line as if the
+                # being wrote it, the very reading this note replaces. Show the result as the
+                # file's lines instead.
+                after = _changed_lines(text, new_text).rstrip("\n")
+                after = after if len(after) <= 400 else after[:400] + "..."
+                return ResultEnvelope(ok=False, error=(
+                    f"memory_edit refused, nothing was changed in {p.name}. {splice}With the "
+                    f"splice, the file would have read:\n{after}"))
             if why:
                 return ResultEnvelope(ok=False, error=(
                     f"memory_edit refused, nothing was changed in {p.name}. {why} A note about "
