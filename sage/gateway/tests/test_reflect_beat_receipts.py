@@ -75,19 +75,19 @@ def test_nothing_to_say_leaves_the_prompt_unchanged():
 
 # --- an empty receipt list is said out loud when the traces could be read -----------------------
 
-def test_a_beat_that_only_read_and_failed_is_told_nothing_ran():
-    """cbp-being 2026-11-24 10:30Z (heartbeat-f7fe153eb5f4): asked to write and run scratch/unit_count.py,
-    explore made only reads and two failed edits; the journal said unit_count.py ran and printed."""
-    from sage.gateway.heartbeat import nothing_ran_this_beat
+def test_a_beat_that_read_and_failed_keeps_attempts_distinct_from_absence():
+    """A failed edit may have effects; an empty receipt list does not prove no work happened."""
+    from sage.gateway.heartbeat import nothing_ran_this_beat, run_write_trace_status
     explore = SimpleNamespace(trace=[_act("web_search", "q"), _act("memory_read", "scratch/check_param.py"),
                                      _act("memory_edit", "scratch/dead_relu_experiment.py", ok=False),
                                      _act("memory_read", "scratch/dead_relu_experiment.py")])
-    assert receipts_this_beat(explore, None) == [] and nothing_ran_this_beat(explore, None) is True
+    assert receipts_this_beat(explore, None) == [] and nothing_ran_this_beat(explore, None) is False
+    assert run_write_trace_status(explore, None) == "incomplete"
     p = reflect_prompt(refused=True, failed=failed_this_beat(explore, None), receipts=[],
-                       nothing_ran=nothing_ran_this_beat(explore, None), **KW)
-    assert "No act of yours this beat ran a script or wrote a file" in p
-    assert "has not happened" in p and "FAILED" in p
-    assert p.index("FAILED") < p.index("No act of yours this beat ran")
+                       nothing_ran=nothing_ran_this_beat(explore, None), unresolved_run_write=True, **KW)
+    assert "outcome may be incomplete or unknown" in p and "FAILED" in p
+    assert "contain no run" not in p and "no output of one exists" not in p
+    assert p.index("FAILED") < p.index("run or write attempt")
 
 
 def test_nothing_ran_is_false_when_anything_ran_was_asked_or_landed():
@@ -108,5 +108,36 @@ def test_unreadable_traces_are_not_reported_as_nothing_ran():
 
 def test_receipts_win_over_nothing_ran_and_the_default_is_unchanged():
     p = reflect_prompt(refused=False, receipts=[f"run {S} exited 0"], nothing_ran=True, **KW)
-    assert "No act of yours this beat ran a script" not in p
+    assert "recorded explore and posture traces contain no run" not in p
     assert reflect_prompt(refused=False, nothing_ran=False, **KW) == reflect_prompt(refused=False, **KW)
+
+
+def test_absence_is_scoped_to_readable_recorded_calls_not_external_execution():
+    from sage.gateway.heartbeat import nothing_ran_this_beat, run_write_trace_status
+    turn = SimpleNamespace(trace=[_act("memory_read", S), _act("web_search", "q")])
+    assert run_write_trace_status(turn) == "none" and nothing_ran_this_beat(turn)
+    assert nothing_ran_this_beat(SimpleNamespace(trace=[]))
+    p = reflect_prompt(nothing_ran=True, **KW)
+    assert "recorded explore and posture traces contain no run" in p
+    assert "A request is not a completion receipt" in p
+    assert "has not happened" not in p and "no output" not in p
+
+
+def test_incomplete_failed_pending_or_targetless_calls_are_never_absence():
+    from sage.gateway.heartbeat import nothing_ran_this_beat, run_write_trace_status
+    cases = [
+        (BeingIntent("run", {"path": S}), ResultEnvelope(ok=True, result={"stdout": "partial"})),
+        (BeingIntent("run", {"path": S}), ResultEnvelope(ok=False, error="failed after writing")),
+        (BeingIntent("run", {"path": S}), ResultEnvelope(ok=False, pending=True)),
+        (BeingIntent("memory_write", {}), ResultEnvelope(ok=True)),
+        (BeingIntent("request_run", {}), ResultEnvelope(ok=True)),
+    ]
+    for item in cases:
+        turn = SimpleNamespace(trace=[item])
+        assert not nothing_ran_this_beat(turn), item
+        assert run_write_trace_status(turn) == "incomplete", item
+
+
+def test_unreadable_intent_does_not_establish_absence_or_an_attempt():
+    from sage.gateway.heartbeat import run_write_trace_status
+    assert run_write_trace_status(SimpleNamespace(trace=[(object(), ResultEnvelope(ok=True))])) == "unknown"

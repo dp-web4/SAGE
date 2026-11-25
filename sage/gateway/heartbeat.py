@@ -1220,32 +1220,52 @@ def _receipts_sentence(receipts) -> str:
             " says happened): " + "; ".join(shown) + (f"; and {more} more" if more > 0 else "") + ".")
 
 
-_NOTHING_RAN_SENTENCE = (" No act of yours this beat ran a script or wrote a file: there was no `run`, no"
-                         " request_run and no landed write. A run or write that a message asked for has not"
-                         " happened, and no output of one exists, so do not record one.")
+_NOTHING_RAN_SENTENCE = (" The recorded explore and posture traces contain no run, request_run,"
+                         " memory_write, memory_edit or retire_note call. They provide no evidence that a"
+                         " requested run or file write happened. A request is not a completion receipt.")
+_UNRESOLVED_RUN_WRITE_SENTENCE = (
+    " The recorded explore and posture traces contain a run or write attempt, but no completed run"
+    " or file-write receipt. Its outcome may be incomplete or unknown; do not record the attempt"
+    " as a completed result.")
+
+
+def run_write_trace_status(*turns) -> str:
+    """Classify only these recorded calls, never global execution or external/earlier output.
+
+    Missing or malformed traces are unknown. Any run/request/write attempt rules out absent calls,
+    even if it failed or lacks the fields used by receipts_this_beat; failure can follow a side effect.
+    """
+    if refused_this_beat(*turns) is None:
+        return "unknown"
+    relevant = False
+    for turn in turns:
+        if turn is None:
+            continue
+        for intent, _env in turn.trace:
+            effector = getattr(intent, "effector", None)
+            if not isinstance(effector, str) or not effector:
+                return "unknown"
+            relevant |= effector in ("run", "request_run", *_LANDED_VERBS)
+    if not relevant:
+        return "none"
+    return "receipted" if receipts_this_beat(*turns) else "incomplete"
 
 
 def nothing_ran_this_beat(*turns) -> bool:
-    """True only when the traces are READABLE and hold no ok `run`, no `request_run` and no landed write.
-    False when there was such an act, and False when the traces cannot be read (unknown is not "none")."""
-    return refused_this_beat(*turns) is not None and not receipts_this_beat(*turns)
+    """Whether readable traces contain no run/request/write CALL, including failed attempts."""
+    return run_write_trace_status(*turns) == "none"
 
 
-def reflect_prompt(optional=(), refused=True, failed=(), receipts=(), nothing_ran=False, **kw) -> str:
+def reflect_prompt(optional=(), refused=True, failed=(), receipts=(), nothing_ran=False,
+                   unresolved_run_write=False, **kw) -> str:
     """REFLECT, with the records in `optional` offered rather than required, and the refusal question
     unless `refused` is False (known: nothing recorded as refused). True and None (unknown) keep it.
     `failed` (failed_this_beat) names acts that ran and failed; when any did, "no act refused" is not
     said alone, the failures are named beside it. `receipts` (receipts_this_beat) says what the ok acts
-    did: run exits, requests not yet run, landed writes (#716). `nothing_ran` (nothing_ran_this_beat)
-    says the opposite out loud when the traces show none of those.
-
-    SILENCE WAS READ AS "IT RAN". cbp-being, 2026-11-24 10:30Z (heartbeat-f7fe153eb5f4): the seat's
-    message asked for one memory_write of scratch/unit_count.py and one `run` of it. Explore made
-    neither (2 web_search, recall, 3 memory_read, 2 failed memory_edit). The receipts list was empty,
-    so reflect was told only the two failures, and the journal said "Ran dead_relu_experiment.py and
-    unit_count.py ... unit_count.py printed dead neuron counts per seed for Adam and SGD": a file that
-    does not exist and a run that never happened. An empty receipt list said nothing, and the newest
-    text (the request) filled the gap."""
+    did: run exits, requests not yet run, landed writes (#716). `nothing_ran` names absent recorded
+    calls; `unresolved_run_write` keeps an attempted act with no receipt distinct from absence.
+    This prevents a request in conversation from filling the evidence gap as a fabricated result.
+    Neither flag establishes that an external or earlier run did not happen."""
     body = REFLECT.format(**kw)
     for r in optional:
         old, new = _REFLECT_OPTIONAL_LINE[r]
@@ -1255,6 +1275,8 @@ def reflect_prompt(optional=(), refused=True, failed=(), receipts=(), nothing_ra
         tail += _receipts_sentence(receipts)
     elif nothing_ran:
         tail += _NOTHING_RAN_SENTENCE
+    elif unresolved_run_write:
+        tail += _UNRESOLVED_RUN_WRITE_SENTENCE
     if refused is False:
         old, new = _REFLECT_REFUSED
         body = body.replace(old, new + tail, 1)
@@ -5950,6 +5972,7 @@ def main(argv=None) -> int:
                 failed=failed_this_beat(explore, after),
                 receipts=receipts_this_beat(explore, after),
                 nothing_ran=nothing_ran_this_beat(explore, after),
+                unresolved_run_write=run_write_trace_status(explore, after) == "incomplete",
                 date=f"{now:%Y-%m-%d %H:%M} UTC", say_line=say_line, say_first=say_first)})
             # One extra step when someone is waiting, because the routine three fill the budget exactly.
             # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
