@@ -47,7 +47,8 @@ _try("delete-site", lambda: os.remove(os.path.join(here, "pthprobe.py")))
 _try("chmod-site", lambda: os.chmod(os.path.join(here, "pthprobe.py"), 0o777))
 _try("net", lambda: socket.create_connection(("1.1.1.1", 53), timeout=2))
 _try("net-dns", lambda: socket.getaddrinfo("example.com", 80))
-for k, p in [("seat-home", SEAT_HOME), ("being-home", BEING_HOME), ("host-file", HOST_FILE)]:
+_say("seat-home", sorted(os.listdir(SEAT_HOME)) if os.path.isdir(SEAT_HOME) else False)
+for k, p in [("being-home", BEING_HOME), ("host-file", HOST_FILE)]:
     _say(k, os.path.exists(p))
 _say("secret-env", os.environ.get("SAGE_PTH_SECRET"))
 _try("write-host-path", lambda: open(HOST_DROP, "w").write("x"))
@@ -107,7 +108,14 @@ def test_a_hostile_pth_runs_inside_the_box_and_reaches_nothing(tmp_path, monkeyp
     assert "REACHED" not in out, out
     for k in ("write-site", "delete-site", "chmod-site", "net", "net-dns", "write-host-path"):
         assert f"PTH {k}: denied" in out, (k, out)
-    for k in ("seat-home", "being-home", "host-file"):
+    # The box binds the interpreter's prefix at its own path. Where that prefix is under the seat's
+    # home (Legion: ~/miniforge3), the home exists in the box as a mount parent holding only the
+    # first step toward the prefix. Anything more listed there is the seat's home reached.
+    interp = os.path.dirname(os.path.dirname(sys.executable))
+    rel = os.path.relpath(os.path.realpath(interp), seat_home)
+    seen = [rel.split(os.sep)[0]] if not rel.startswith("..") else False
+    assert f"PTH seat-home: {seen}" in out, (seen, out)
+    for k in ("being-home", "host-file"):
         assert f"PTH {k}: False" in out, (k, out)
     assert "PTH secret-env: None" in out, out
     # and on the host: the user site is unchanged, and nothing landed outside the box
