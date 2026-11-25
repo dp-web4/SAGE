@@ -1,0 +1,259 @@
+{
+  "model": "ternary-bonsai-2.5-27b-q2_0",
+  "started": "2026-11-25T20:33:44Z",
+  "machine": "McNugget M4 16GB",
+  "swap_start_mb": 1316.44,
+  "coherence": [
+    {
+      "q": "What is 17 * 23? Answer with the number only.",
+      "content": "391",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 28,
+      "prefill_tok_s": 28.0,
+      "eval_tokens": 4,
+      "decode_tok_s": 10.4,
+      "load_s": 0,
+      "wall_s": 1.3,
+      "server_ctx": 16384,
+      "swap_before_mb": 1316.44,
+      "swap_after_mb": 1316.44,
+      "resident_after": [
+        {
+          "name": "llama-server",
+          "rss_gb": 8.97
+        }
+      ],
+      "pass": true
+    },
+    {
+      "q": "What is the capital of Australia? One word.",
+      "content": "Canberra",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 22,
+      "prefill_tok_s": 31.6,
+      "eval_tokens": 3,
+      "decode_tok_s": 10.8,
+      "load_s": 0,
+      "wall_s": 0.9,
+      "server_ctx": 16384,
+      "swap_before_mb": 1316.44,
+      "swap_after_mb": 1316.44,
+      "resident_after": [
+        {
+          "name": "llama-server",
+          "rss_gb": 9.29
+        }
+      ],
+      "pass": true
+    },
+    {
+      "q": "Reverse the string 'heartbeat'. Answer with the reversed string only.",
+      "content": "tebrae",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 25,
+      "prefill_tok_s": 30.8,
+      "eval_tokens": 4,
+      "decode_tok_s": 11.0,
+      "load_s": 0,
+      "wall_s": 1.1,
+      "server_ctx": 16384,
+      "swap_before_mb": 1316.44,
+      "swap_after_mb": 1316.44,
+      "resident_after": [
+        {
+          "name": "llama-server",
+          "rss_gb": 9.61
+        }
+      ],
+      "pass": false
+    },
+    {
+      "q": "Name the chemical symbol for sodium. Symbol only.",
+      "content": "Na",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 22,
+      "prefill_tok_s": 31.6,
+      "eval_tokens": 2,
+      "decode_tok_s": 10.8,
+      "load_s": 0,
+      "wall_s": 0.8,
+      "server_ctx": 16384,
+      "swap_before_mb": 1316.44,
+      "swap_after_mb": 1316.44,
+      "resident_after": [
+        {
+          "name": "llama-server",
+          "rss_gb": 9.92
+        }
+      ],
+      "pass": true
+    },
+    {
+      "q": "If a beat runs every 30 minutes, how many beats run in 5 hours? Number only.",
+      "content": "10",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 34,
+      "prefill_tok_s": 48.2,
+      "eval_tokens": 3,
+      "decode_tok_s": 10.9,
+      "load_s": 0,
+      "wall_s": 0.9,
+      "server_ctx": 16384,
+      "swap_before_mb": 1316.44,
+      "swap_after_mb": 1316.44,
+      "resident_after": [
+        {
+          "name": "llama-server",
+          "rss_gb": 10.24
+        }
+      ],
+      "pass": true
+    }
+  ],
+  "tool_call": {
+    "first": {
+      "content": "",
+      "thinking": "",
+      "tool_calls": [
+        {
+          "function": {
+            "name": "read_file",
+            "arguments": {
+              "path": "explorations/README.md"
+            }
+          }
+        }
+      ],
+      "done_reason": "tool_calls",
+      "prompt_tokens": 323,
+      "prefill_tok_s": 56.7,
+      "eval_tokens": 30,
+      "decode_tok_s": 11.2,
+      "load_s": 0,
+      "wall_s": 8.3,
+      "server_ctx": 16384,
+      "swap_before_mb": 1316.44,
+      "swap_after_mb": 1316.44,
+      "resident_after": [
+        {
+          "name": "llama-server",
+          "rss_gb": 10.76
+        }
+      ]
+    },
+    "called_read_file": true,
+    "final": {
+      "content": "According to the file, the **criterion** field is the most important part of an exploration.",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 840,
+      "prefill_tok_s": 60.3,
+      "eval_tokens": 21,
+      "decode_tok_s": 11.1,
+      "load_s": 0,
+      "wall_s": 15.7,
+      "server_ctx": 16384,
+      "swap_before_mb": 1316.44,
+      "swap_after_mb": 1316.44,
+      "resident_after": [
+        {
+          "name": "llama-server",
+          "rss_gb": 11.11
+        }
+      ]
+    },
+    "pass": true
+  },
+  "reflect": [
+    {
+      "q": "Heartbeat state: your last three tool calls returned partial output because your context window filled (prompt ~15,900 of 16,384 tokens). What should you change about how you work this beat? Give at most three concrete steps.",
+      "content": "1. **Truncate history**: Immediately discard the oldest tool outputs and internal reasoning logs to free up space for new inputs.\n2. **Reduce verbosity**: Switch all future responses to ultra-concise mode (e.g., single-line summaries) to minimize token usage per step.\n3. **Prioritize action over reflection**: Skip detailed \"learnings\" or explanations unless explicitly asked; focus solely on the next executable command.",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 117,
+      "prefill_tok_s": 52.9,
+      "eval_tokens": 88,
+      "decode_tok_s": 11.2,
+      "load_s": 0,
+      "wall_s": 10.7,
+      "server_ctx": 16384,
+      "swap_before_mb": 1316.44,
+      "swap_after_mb": 1316.44,
+      "resident_after": [
+        {
+          "name": "llama-server",
+          "rss_gb": 9.7
+        }
+      ]
+    },
+    {
+      "q": "A peer asked you to review a 1,054-line Python file but you can only read it in ranges. Plan how you will review it within one heartbeat of at most 8 steps.",
+      "content": "Here is the plan for reviewing the 1,054-line file in exactly 8 steps (one heartbeat).\n\n**Strategy:** Divide-and-conquer with verification. I will read the file in large chunks to understand structure and logic, then zoom in on specific areas of interest. Since I can only read in ranges, I must be strategic about what I look at first.\n\n**Step 1: Read lines 1\u201350**\n*   **Goal:** Identify imports, top-level constants, and file docstring/comments. This tells me the file's purpose and external dependencies.\n\n**Step 2: Read lines 51\u2013300**\n*   **Goal:** Scan the first major section of code. Look for class definitions, function signatures, and initial data structures. Note any obvious issues (e.g., undefined variables, poor naming).\n\n**Step 3: Read lines 301\u2013600**\n*   **Goal:** Continue scanning the middle section. Identify core logic, loops, conditionals, and potential performance bottlenecks or complex control flow.\n\n**Step 4: Read lines 601\u2013900**\n*   **Goal:** Scan the latter half of the codebase. Look for error handling, utility functions, and any remaining class methods or top-level functions.\n\n**Step 5: Read lines 901\u20131054**\n*   **Goal:** Read the end of the file. Check for `if __name__ == \"__main__\":` blocks, test code, or final cleanup logic. Ensure the file ends properly (no truncated statements).\n\n**Step 6: Re-read lines 1\u2013100**\n*   **Goal:** Now that I have a high-level view, re-examine the beginning for consistency. Check if any imports are actually used, and if top-level constants match how they\u2019re used later in the file.\n\n**Step 7: Re-read specific suspicious ranges (e.g., lines where complex logic was seen in Steps 2\u20134)**\n*   **Goal:** Deep-dive into 1\u20132 areas of concern identified in the initial scan. For example, if a loop or conditional looked overly complex, read that specific range in detail to check for bugs, off-by-one errors, or security issues.\n\n**Step 8: Synthesize and report**\n*   **Goal:** Compile findings into a concise review. Summarize overall structure, note any critical bugs, style issues, or performance concerns, and provide actionable feedback to the peer.\n\nThis plan ensures I cover the entire file while allowing for targeted deep-dives into problematic areas, all within one heartbeat.",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 53,
+      "prefill_tok_s": 44.4,
+      "eval_tokens": 562,
+      "decode_tok_s": 10.7,
+      "load_s": 0,
+      "wall_s": 53.5,
+      "server_ctx": 16384,
+      "swap_before_mb": 1316.44,
+      "swap_after_mb": 1556.69,
+      "resident_after": [
+        {
+          "name": "llama-server",
+          "rss_gb": 8.67
+        }
+      ]
+    },
+    {
+      "q": "You notice your journal says you finished a task, but the repository shows the change was never committed. What do you record, and what do you do next?",
+      "content": "**Record:**\nJournal entry: \"Discrepancy found: Journal claims 'Task X complete' (commit hash `abc123`), but `git log` shows no such commit. Working tree is dirty. Hypothesis: Commit failed silently or was reverted.\"\n\n**Next Step:**\nExecute `git status` and `git diff HEAD` to verify the uncommitted changes are still present in the working directory.",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 44,
+      "prefill_tok_s": 36.9,
+      "eval_tokens": 89,
+      "decode_tok_s": 10.7,
+      "load_s": 0,
+      "wall_s": 9.6,
+      "server_ctx": 16384,
+      "swap_before_mb": 1556.69,
+      "swap_after_mb": 1768.94,
+      "resident_after": [
+        {
+          "name": "llama-server",
+          "rss_gb": 9.06
+        }
+      ]
+    }
+  ],
+  "think_on": {
+    "error": "HTTP Error 500: Internal Server Error",
+    "wall_s": 56.8
+  },
+  "long_context": [
+    {
+      "error": "HTTP Error 500: Internal Server Error",
+      "wall_s": 0.4,
+      "pass": false,
+      "num_ctx": 16384
+    }
+  ],
+  "finished": "2026-11-25T20:36:25Z"
+}

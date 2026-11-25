@@ -1,0 +1,83 @@
+{
+  "model": "ternary-bonsai-2.5-27b-q2_0",
+  "started": "2026-11-25T20:36:28Z",
+  "machine": "McNugget M4 16GB",
+  "swap_start_mb": 1641.31,
+  "coherence": [
+    {
+      "q": "What is 17 * 23? Answer with the number only.",
+      "error": "HTTP Error 500: Internal Server Error",
+      "wall_s": 0.0,
+      "pass": false
+    },
+    {
+      "q": "What is the capital of Australia? One word.",
+      "error": "HTTP Error 500: Internal Server Error",
+      "wall_s": 0.0,
+      "pass": false
+    },
+    {
+      "q": "Reverse the string 'heartbeat'. Answer with the reversed string only.",
+      "error": "HTTP Error 500: Internal Server Error",
+      "wall_s": 0.0,
+      "pass": false
+    },
+    {
+      "q": "Name the chemical symbol for sodium. Symbol only.",
+      "error": "HTTP Error 500: Internal Server Error",
+      "wall_s": 0.0,
+      "pass": false
+    },
+    {
+      "q": "If a beat runs every 30 minutes, how many beats run in 5 hours? Number only.",
+      "error": "HTTP Error 500: Internal Server Error",
+      "wall_s": 0.0,
+      "pass": false
+    }
+  ],
+  "tool_call": {
+    "first": {
+      "error": "HTTP Error 500: Internal Server Error",
+      "wall_s": 0.1
+    },
+    "called_read_file": false,
+    "final": null,
+    "pass": false
+  },
+  "reflect": [
+    {
+      "q": "Heartbeat state: your last three tool calls returned partial output because your context window filled (prompt ~15,900 of 16,384 tokens). What should you change about how you work this beat? Give at most three concrete steps.",
+      "error": "HTTP Error 500: Internal Server Error",
+      "wall_s": 0.0
+    },
+    {
+      "q": "A peer asked you to review a 1,054-line Python file but you can only read it in ranges. Plan how you will review it within one heartbeat of at most 8 steps.",
+      "error": "HTTP Error 500: Internal Server Error",
+      "wall_s": 0.0
+    },
+    {
+      "q": "You notice your journal says you finished a task, but the repository shows the change was never committed. What do you record, and what do you do next?",
+      "error": "HTTP Error 500: Internal Server Error",
+      "wall_s": 0.0
+    }
+  ],
+  "think_on": {
+    "error": "HTTP Error 500: Internal Server Error",
+    "wall_s": 0.0
+  },
+  "long_context": [
+    {
+      "error": "HTTP Error 500: Internal Server Error",
+      "wall_s": 0.1,
+      "pass": false,
+      "num_ctx": 16384
+    },
+    {
+      "error": "HTTP Error 500: Internal Server Error",
+      "wall_s": 0.0,
+      "pass": false,
+      "num_ctx": 32768
+    }
+  ],
+  "finished": "2026-11-25T20:36:28Z"
+}
