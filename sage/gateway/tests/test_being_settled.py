@@ -1,6 +1,7 @@
 """being_settled: the being's own conclusions, kept where every beat shows them. dp, 2026-10-27: "what
 tools/affordances can we give it so it can learn conclusively and not perseverate?" """
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -83,13 +84,45 @@ def test_a_refused_settle_says_why_and_changes_nothing(tmp_path, args, says):
     assert not (tmp_path / st.SETTLED_FILE).exists()
 
 
+#: Thirty questions on distinct subjects, which read close to none of the others (the ≈ the beat marks).
+DISTINCT = [f"Where does the {w} belong?" for w in (
+    "anchor", "bucket", "candle", "dagger", "easel", "funnel", "goblet", "hammock", "igloo", "jigsaw", "kettledrum",
+    "ladder", "mitten", "napkin", "oar", "pulley", "quilt", "rudder", "saddle", "trowel", "umbrella", "violin",
+    "wagon", "xylophone", "yoke", "zither", "abacus", "bellows", "compass", "doorknob")]
+
+
 def test_a_full_list_refuses_a_new_question_but_still_changes_an_old_one(tmp_path):
-    for i in range(st.MAX_ENTRIES):
-        assert _s(tmp_path, question=f"question {i}", answer="a")[0]
+    for q in DISTINCT[:st.MAX_ENTRIES]:
+        assert _s(tmp_path, question=q, answer="a")[0]
     ok, msg, _ = _s(tmp_path, question="one more", answer="a")
     assert not ok and "the most this list holds" in msg and "reopen" in msg
-    assert "(\u00abquestion 0\u00bb, " in msg, msg  # the longest held are shown copyable (cbp on #676)
-    assert _s(tmp_path, question="question 3", answer="b")[0]
+    # NOT THE LONGEST HELD (sprout-being 11-18..19 reopened the three it named, in order, to make room): with no
+    # question asked twice, no entry is named, and the way to see them all is
+    assert "\u00ab" not in msg and "s1 " not in msg and "longest" not in msg, msg
+    assert "Settle with no arguments to see every entry" in msg
+    assert _s(tmp_path, question=DISTINCT[3], answer="b")[0]
+
+
+def test_a_full_list_names_the_questions_settled_more_than_once_not_the_oldest(tmp_path):
+    for q in DISTINCT[:st.MAX_ENTRIES - 3]:
+        assert _s(tmp_path, question=q, answer="a")[0]
+    for q in ("Is the test widget connected to this machine?", "Is the test widget connected here?",
+              "Is the test widget connected and ready?"):
+        assert _s(tmp_path, question=q, answer="yes")[0]
+    ok, msg, _ = _s(tmp_path, question="What colour is the sky at dusk?", answer="b")
+    assert not ok and "settled more than once" in msg, msg
+    first = st.read(tmp_path)[0][-3]["id"]
+    assert f"{first} \u00abIs the test widget connected to this machine?\u00bb \u2248 " in msg, msg
+    assert "s1 " not in msg and "anchor" not in msg, "the oldest is not named for its age"
+    assert len(st.read(tmp_path)[0]) == st.MAX_ENTRIES
+
+
+def test_close_groups_join_through_a_shared_neighbour_and_stay_in_list_order():
+    es = [{"id": "s1", "question": "x"}, {"id": "s2", "question": "y"}, {"id": "s3", "question": "z"},
+          {"id": "s4", "question": "w"}]
+    import unittest.mock as m
+    with m.patch.object(st, "_neighbours", return_value={"s1": ["s3"], "s3": ["s1", "s4"], "s4": ["s3"]}):
+        assert [[e["id"] for e in g] for g in st._close_groups(es)] == [["s1", "s3", "s4"]]
 
 
 def test_a_full_list_names_the_entry_a_refused_question_reads_close_to(tmp_path):
@@ -292,7 +325,7 @@ def test_a_full_list_names_what_to_reopen_and_never_advises_folding(tmp_path):
         assert _s(tmp_path, question=f"question {i} about lamps", answer="a")[0]
     ok, msg, _ = _s(tmp_path, question="What colour is the sky at dusk?", answer="b")
     assert not ok and "fold" not in msg and "settling that id with a new answer" not in msg
-    assert "reopen" in msg and "s1 (" in msg and "different question" in msg, msg
+    assert "reopen" in msg and "different question" in msg, msg
 
 
 def test_a_hyphenated_name_and_its_spaced_spelling_read_close_and_the_receipt_quotes_the_earlier_answer(tmp_path):
@@ -623,3 +656,378 @@ def test_the_plural_is_a_process_number_too(tmp_path):
     ok, msg, _ = _s(tmp_path, question="Is the test daemon alive?", answer="Yes, PIDs 1 and 2 confirmed.")
     assert "This answer names a process number." in msg, msg
     assert "(s1 names a process number." in st.render(tmp_path)
+
+
+def _conv(h, name, turns):
+    d = h / "conversations"
+    d.mkdir(exist_ok=True)
+    (d / f"{name}.jsonl").write_text("".join(json.dumps({"seq": s, "from": "x", "text": t}) + "\n" for s, t in turns))
+
+
+def test_a_quote_the_cited_seq_does_not_hold_is_named_with_the_line_that_is_there(tmp_path):
+    # cbp-being s476, 11-13: replaced citing the seat's run at seq 14735 for a loss that run never printed.
+    _conv(tmp_path, "seat", [(14735, "exit code 1.\n\nstdout:\nEpoch [1/3], Loss: 0.6627\nEpoch [3/3], Loss: 0.6000")])
+    ok, msg, changed = _s(tmp_path, question="Does the test widget script run?", answer="yes, loss 0.5553",
+                          evidence='seq 14735: "Epoch [3/3], Loss: 0.5553"')
+    assert ok and changed
+    assert '"Epoch [3/3], Loss: 0.5553" from seq 14735; no turn with that number contains that text' in msg
+    assert 'starts the same reads: "Epoch [3/3], Loss: 0.6000"' in msg
+    entries, _, _ = st.read(tmp_path)
+    assert entries[0]["evidence"] == 'seq 14735: "Epoch [3/3], Loss: 0.5553"'  # kept as written
+
+
+def test_a_quote_that_is_there_or_no_quote_adds_nothing(tmp_path):
+    _conv(tmp_path, "seat", [(7, "stdout:\nEpoch  [3/3],\nLoss: 0.6000")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="no",
+                   evidence='seq 7: "Epoch [3/3], Loss: 0.6000"')
+    assert "Your evidence" not in msg, msg
+    _, msg, _ = _s(tmp_path, question="Does the test gizmo script run?", answer="no", evidence="seq 7, the run")
+    assert "Your evidence" not in msg
+
+
+def test_a_cited_seq_no_conversation_has_is_named(tmp_path):
+    _conv(tmp_path, "seat", [(1, "hello")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 99: "it ran fine"')
+    assert "cites seq 99; no conversation of yours has a turn with that number" in msg
+
+
+# NOVA's HOLD on #704: a quote is checked against the one turn it cites, never against turns joined together.
+
+def test_s476_in_its_real_shape_seq_only_is_named_when_other_conversations_are_short(tmp_path):
+    # cbp-being cited the seat's run by seq alone; its dp conversation is far shorter, so seq 14735 is the seat's
+    _conv(tmp_path, "seat", [(14735, "exit code 1.\n\nstdout:\nEpoch [3/3], Loss: 0.6000")])
+    _conv(tmp_path, "dp", [(1, "hello"), (2, "Epoch [3/3], Loss: 0.5553")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes, loss 0.5553",
+                   evidence='seq 14735: "Epoch [3/3], Loss: 0.5553"')
+    assert '"Epoch [3/3], Loss: 0.5553" from seq 14735; no turn with that number contains that text.' in msg
+    assert 'Its line that starts the same reads: "Epoch [3/3], Loss: 0.6000".' in msg, msg
+
+
+def test_the_same_seq_in_another_conversation_does_not_count_as_a_match(tmp_path):
+    _conv(tmp_path, "seat", [(7, "stdout:\nEpoch [3/3], Loss: 0.6000")])
+    _conv(tmp_path, "dp", [(7, "Loss: 0.5553 is what I hope for")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "Loss: 0.5553 is what"')
+    assert ('quotes "Loss: 0.5553 is what" from seq 7, and 2 of your conversations have a turn with that number. '
+            "It is in the one in dp, not in seat.") in msg, msg
+
+
+def test_a_named_conversation_settles_which_turn_is_meant(tmp_path):
+    _conv(tmp_path, "seat", [(7, "stdout:\nEpoch [3/3], Loss: 0.6000")])
+    _conv(tmp_path, "dp", [(7, "Loss: 0.5553 is what I hope for")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seat seq 7: "Loss: 0.5553 is what"')
+    assert '"Loss: 0.5553 is what" from seq 7 in seat; no turn with that number contains that text.' in msg, msg
+    _, msg, _ = _s(tmp_path, question="Does the test gizmo script run?", answer="yes",
+                   evidence='conversation dp, seq 7: "Loss: 0.5553 is what"')
+    assert "Your evidence" not in msg, msg
+
+
+def test_a_named_conversation_that_is_not_there_never_widens_to_the_others(tmp_path):
+    # NOVA on #704 (e2bb864f): `conversation missing_name, seq 7: "foo"` with seat's seq 7 holding "foo"
+    _conv(tmp_path, "seat", [(7, "the run printed foo and bar")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='conversation missing_name, seq 7: "printed foo and"')
+    assert "names a conversation missing_name, and you have none by that name (yours are seat)" in msg, msg
+    assert "not checked against any other conversation" in msg
+    _, msg, _ = _s(tmp_path, question="Does the test gizmo script run?", answer="yes",
+                   evidence='missing_name.jsonl seq 7: "printed foo and"')
+    assert "missing_name, and you have none by that name" in msg, msg
+
+
+def test_a_quote_every_same_numbered_turn_holds_is_not_certified_as_from_one(tmp_path):
+    # NOVA on #704: preserving a quote is not certifying its provenance
+    _conv(tmp_path, "seat", [(7, "the plan: reach Loss: 0.5553")])
+    _conv(tmp_path, "dp", [(7, "you said reach Loss: 0.5553 earlier")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "reach Loss: 0.5553"')
+    assert ('2 of your conversations have a turn with that number holding it (dp, seat); it does not say which '
+            'one it means.') in msg, msg
+    _, msg, _ = _s(tmp_path, question="Does the test gizmo script run?", answer="yes",
+                   evidence='seat seq 7: "reach Loss: 0.5553"')
+    assert "Your evidence" not in msg, msg                                    # named: no ambiguity
+
+
+def test_each_citation_is_checked_in_the_conversation_it_names(tmp_path):
+    # NOVA on #704 (5d2dffd2): names were gathered over the whole evidence, so seq 7 could be checked in dp
+    _conv(tmp_path, "seat", [(7, "the run printed bar"), (8, "nothing")])
+    _conv(tmp_path, "dp", [(7, "you said printed foo here"), (8, "printed bar again")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='conversation seat seq 7: "printed foo"; conversation dp seq 8: "printed bar"')
+    assert '"printed foo" from seq 7 in seat; no turn with that number contains that text.' in msg, msg
+    assert '"printed bar"' not in msg, msg                                       # in dp seq 8, as cited
+    _, msg, _ = _s(tmp_path, question="Does the test gizmo script run?", answer="yes",
+                   evidence='conversation dp, seq 7: "printed foo" and seq 8: "printed bar"')
+    assert "Your evidence" not in msg, msg                                       # one name given: it holds for both
+
+
+
+def test_a_name_after_the_seq_binds_to_its_own_citation_not_the_next(tmp_path):
+    # legion on #704 (eca5d185): a name after the seq was counted for the next citation, and seq 8 passed in seat
+    _conv(tmp_path, "seat", [(7, "printed foo here"), (8, "printed bar here")])
+    _conv(tmp_path, "dp", [(7, "printed zzz here"), (8, "printed qqq here")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7 in conversation seat: "printed foo"; seq 8 in conversation dp: "printed bar"')
+    assert '"printed bar" from seq 8 in dp; no turn with that number contains that text.' in msg, msg
+    assert '"printed foo"' not in msg, msg                                       # in seat seq 7, as cited
+    for i, ev in enumerate(('seq 7 in conversation dp: "printed zzz"; seq 8 in conversation seat: "printed bar"',
+                            'seq 7 (dp.jsonl): "printed zzz"; seq 8 (seat.jsonl): "printed bar"')):
+        _, msg, _ = _s(tmp_path, question=f"Does the test gizmo{i} script run?", answer="yes", evidence=ev)
+        assert "Your evidence" not in msg, (ev, msg)                             # both true where they say
+
+
+def test_a_later_citations_name_is_not_borrowed_by_an_earlier_one(tmp_path):
+    _conv(tmp_path, "seat", [(7, "printed foo here"), (8, "printed bar here")])
+    _conv(tmp_path, "dp", [(7, "printed zzz here"), (8, "printed qqq here")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "printed foo"; conversation dp seq 8: "printed qqq"')
+    assert "from seq 7 in dp" not in msg, msg
+    assert "It is in the one in seat, not in dp." in msg, msg                   # unnamed: checked in both, said
+
+
+def test_two_names_for_one_citation_are_said_and_neither_picked(tmp_path):
+    _conv(tmp_path, "seat", [(7, "printed foo here")])
+    _conv(tmp_path, "dp", [(7, "printed zzz here")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='conversation dp seq 7 in conversation seat: "printed foo"')
+    assert 'names more than one conversation for seq 7 ("printed foo")' in msg, msg
+
+
+def test_one_bad_line_without_the_cited_seq_does_not_mark_the_file_unread(tmp_path):
+    _conv(tmp_path, "seat", [(7, "printed foo here")])
+    with (tmp_path / "conversations" / "seat.jsonl").open("a") as fh:
+        fh.write('{"seq": 1777, "text": "cut off\n')
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "printed foo"')
+    assert "Could not read" not in msg, msg
+
+def test_an_unread_file_is_said_even_when_the_quote_matched_in_a_read_one(tmp_path):
+    # NOVA on #704: a match in a file that was read is not the whole provenance when another was not read
+    _conv(tmp_path, "dp", [(7, "Epoch [3/3], Loss: 0.6000")])
+    (tmp_path / "conversations" / "seat.jsonl").mkdir()          # cannot be opened
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "Loss: 0.6000"')
+    assert "Could not read all of seat, so where the quote came from is not fully checked." in msg, msg
+    _, msg, _ = _s(tmp_path, question="Does the test gizmo script run?", answer="yes",
+                   evidence='dp seq 7: "Loss: 0.6000"')
+    assert "Your evidence" not in msg and "Could not read" not in msg, msg       # named, and that one was read
+
+
+def test_prose_after_the_word_conversation_is_not_taken_for_a_name(tmp_path):
+    _conv(tmp_path, "seat", [(7, "the run printed foo and bar")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='in the conversation with the seat, seq 7: "printed foo and"')
+    assert "Your evidence" not in msg, msg
+
+
+def test_a_quote_from_another_cited_seq_is_not_found_in_the_seq_it_follows(tmp_path):
+    _conv(tmp_path, "seat", [(7, "Epoch [3/3], Loss: 0.6000"), (8, "the plan: reach Loss: 0.5553")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "reach Loss: 0.5553"; seq 8: "the plan"')
+    assert '"reach Loss: 0.5553" from seq 7; no turn with that number contains that text.' in msg, msg
+    assert "It is in seq 8." in msg
+    assert '"the plan"' not in msg  # that one is in its turn
+
+
+def test_a_quote_split_across_two_turns_is_not_found(tmp_path):
+    _conv(tmp_path, "seat", [(7, "the run printed Epoch [3/3],"), (8, "Loss: 0.5553 was the target")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7 and seq 8: "Epoch [3/3], Loss: 0.5553"')
+    assert "no turn with that number contains that text" in msg, msg
+
+
+def test_a_malformed_transcript_is_said_and_not_read_as_absence_alone(tmp_path):
+    d = tmp_path / "conversations"
+    d.mkdir()
+    (d / "seat.jsonl").write_text('{"seq": 7, "text": "Epoch [3/3], Loss: 0.5553"\n')  # cut off mid-write
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "Epoch [3/3], Loss: 0.5553"')
+    assert "Could not read all of seat, so the quote may be there." in msg, msg
+
+
+def test_an_unreadable_transcript_is_said(tmp_path):
+    _conv(tmp_path, "dp", [(1, "hello")])
+    (tmp_path / "conversations" / "seat.jsonl").mkdir()  # a directory where a file should be: open() fails
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "Epoch [3/3], Loss: 0.5553"')
+    assert "no conversation of yours has a turn with that number" in msg
+    assert "Could not read all of seat" in msg, msg
+
+
+def test_a_replace_quotes_the_sentences_the_new_answer_no_longer_says(tmp_path):
+    q = "How should a failed test be reported?"
+    _s(tmp_path, question=q, answer="Say which step failed and what it printed. Never write that something "
+                                    "worked when nobody watched it work.")
+    ok, msg, _ = _s(tmp_path, id="s1", question=q, answer="Say which step failed and what it printed, plainly.")
+    assert ok and 'No longer in the answer: "Never write that something worked when nobody watched it work."' in msg, msg
+    assert msg.index("No longer") < msg.index("earlier answer is kept")
+    assert '."."' not in msg and '.".' not in msg, msg                          # one period, inside the quote
+
+
+def test_other_forms_of_the_same_words_are_a_rewording_not_a_loss(tmp_path):
+    q = "How should a failed test be reported?"
+    _s(tmp_path, question=q, answer="Reports must name the failing step.")
+    ok, msg, _ = _s(tmp_path, id="s1", question=q, answer="Report the failed step by name.")
+    assert ok and "No longer in the answer" not in msg, msg               # legion's probe on #821
+
+
+def test_a_rewording_that_keeps_every_sentence_quotes_nothing(tmp_path):
+    q = "How should a failed test be reported?"
+    _s(tmp_path, question=q, answer="Say which step failed and what it printed. Never claim untested work worked.")
+    ok, msg, _ = _s(tmp_path, id="s1", question=q,
+                    answer="Name the step that failed and what it printed; never claim untested work worked.")
+    assert ok and "No longer in the answer" not in msg, msg
+    ok, msg, _ = _s(tmp_path, id="s1", question=q, answer="It failed. Name the step that failed and what it "
+                    "printed; never claim untested work worked. Fixed now.")
+    assert "No longer in the answer" not in msg, msg     # short sentences are not judged, added ones are not losses
+
+
+# An account a settled entry names is read from this machine, beside it, every beat.
+
+def _being_home(tmp_path):
+    h = tmp_path / "widget-being"
+    h.mkdir()
+    return h
+
+
+def test_an_entry_naming_the_beings_own_name_as_an_account_shows_what_the_machine_holds(tmp_path):
+    import pwd
+    h = _being_home(tmp_path)
+    nobody = pwd.getpwuid(65534).pw_name
+    ok, msg, _ = _s(h, question="Does the test account exist?", answer="Yes, the widget user (UID 65534) is alive.")
+    assert ok and "no account named widget exists; UID 65534 is the account " + nobody in msg, msg
+    assert "show as 65534 (nobody): that is how the run maps them" in msg
+    shown = st.render(h)
+    assert "(s1 names an account. This machine's account list, read just now outside your runs: no account " \
+           "named widget exists" in shown, shown
+
+
+def test_an_account_that_exists_is_said_to_exist(tmp_path):
+    import pwd
+    me = pwd.getpwuid(os.getuid())
+    h = _being_home(tmp_path)
+    _, msg, _ = _s(h, question="Who runs the test seat?", answer=f"the widget account (UID {me.pw_uid})")
+    assert f"UID {me.pw_uid} is the account {me.pw_name}" in msg, msg
+    assert "65534" not in msg
+
+
+def test_prose_about_users_names_no_account(tmp_path):
+    h = _being_home(tmp_path)
+    for q, a in (("Who asks the test questions?", "its user asks them, through a non-root user session"),
+                 ("Is the test unit managed?", "yes, as a systemctl user unit")):
+        _, msg, _ = _s(h, question=q, answer=a)
+        assert "account list" not in msg, msg
+    assert "account list" not in st.render(h)
+    # beside a UID, a prose word is still not an account name: the UID clause says who holds the number
+    for a in ("a non-root user (UID 1000)", "its user (UID 1000)", "the sandbox user (UID 65534)"):
+        _, msg, _ = _s(h, question="Which test account runs it?", answer=a)
+        assert "account named" not in msg, msg
+        assert "account list" in msg
+
+
+def test_plural_uids_are_each_read(tmp_path):
+    import pwd
+    h = _being_home(tmp_path)
+    _, msg, _ = _s(h, question="Which test UIDs?", answer="UIDs 0 and 65534, and uids 0, 65534")
+    assert f"UID 0 is the account {pwd.getpwuid(0).pw_name}" in msg, msg
+    assert f"UID 65534 is the account {pwd.getpwuid(65534).pw_name}" in msg
+    assert msg.count("UID 0 is") == 1
+
+
+def test_the_account_line_is_capped(tmp_path):
+    h = _being_home(tmp_path)
+    uids = ", ".join(str(4000000 + i) for i in range(30))
+    _, msg, _ = _s(h, question="Which test UIDs?", answer=f"UIDs {uids}")
+    assert msg.count("no account has UID") == st.ACCOUNTS_SHOWN, msg
+    assert f"{30 - st.ACCOUNTS_SHOWN} more not read here" in msg
+    line = next(l for l in st.render(h).splitlines() if "account list" in l)
+    assert len(line) < 500, line
+
+
+def _snap(rows, complete=False, error=None):
+    from datetime import datetime, timezone
+    from sage.gateway.todo_membot import ScopeSnapshot
+    return ScopeSnapshot(None if error else {r["request_id"]: r for r in rows}, datetime.now(timezone.utc),
+                         complete=complete, error=error)
+
+
+def _kept(h, *rows):
+    with open(Path(h) / "scope_rulings.jsonl", "a") as f:
+        for r in rows:
+            f.write(json.dumps(r) + "\n")
+
+
+def test_a_scope_id_an_entry_names_is_looked_up_in_the_kept_rulings(tmp_path):
+    h = _being_home(tmp_path)
+    _kept(h, {"id": "scope-aaaaaaaaaaaa", "path": "/etc/widget", "decision": "refused", "by": "test-seat",
+              "why": "no", "seen": "2026-11-23 18:46 UTC"})
+    # written bare, as entries do: after "scope request", in parentheses
+    ok, msg, _ = _s(h, question="Is the widget ask still open?", answer="Yes, scope request (aaaaaaaaaaaa) is pending.")
+    assert ok and "scope-aaaaaaaaaaaa for /etc/widget: refused by test-seat, as your seat last saw it end " \
+                  "(2026-11-23 18:46 UTC)" in msg, msg
+    shown = st.render(h)
+    assert "(s1 names a scope request. Your scope requests, looked up: scope-aaaaaaaaaaaa for /etc/widget: " \
+           "refused by test-seat" in shown, shown
+
+
+def test_a_scope_id_in_neither_list_is_said_to_be_in_neither_and_not_called_never_filed(tmp_path):
+    h = _being_home(tmp_path)
+    _kept(h, {"id": "scope-aaaaaaaaaaaa", "path": "/etc/widget", "decision": "refused", "seen": "2026-11-23 18:46 UTC"})
+    _s(h, question="Which widget ask is pending?", answer="scope bbbbbbbbbbbb, pending since yesterday")
+    shown = st.render(h, scope_snap=_snap([]))
+    assert "scope-bbbbbbbbbbbb: not in this beat's hestia read, and not in your kept rulings " \
+           "(kept since 2026-11-23 18:46 UTC)" in shown, shown
+    assert "not on record" not in shown
+    # only a list hestia declares complete lets an absent id be called not on record
+    assert "scope-bbbbbbbbbbbb: not on record for you" in st.render(h, scope_snap=_snap([], complete=True))
+
+
+def test_this_beats_hestia_read_comes_before_the_kept_ruling(tmp_path):
+    h = _being_home(tmp_path)
+    _kept(h, {"id": "scope-cccccccccccc", "path": "/etc/widget", "decision": "granted", "seen": "2026-11-23 18:46 UTC"})
+    _s(h, question="Does the widget grant stand?", answer="yes, scope-cccccccccccc was granted")
+    live = _snap([{"request_id": "scope-cccccccccccc", "path": "/etc/widget", "status": "revoked",
+                   "decided_by": "test-seat"}])
+    shown = st.render(h, scope_snap=live)
+    assert "scope-cccccccccccc for /etc/widget: revoked by test-seat" in shown, shown
+    assert ": granted" not in shown
+    # a read that failed is said, and the kept ruling is what is shown
+    shown = st.render(h, scope_snap=_snap([], error="TimeoutError"))
+    assert "granted" in shown and "hestia could not be read this beat (TimeoutError)" in shown, shown
+    # a failed read claims nothing about hestia's list (NOVA on #827)
+    assert "not in this beat's hestia read" not in shown
+
+
+def test_prose_about_scope_and_other_hex_names_no_request(tmp_path):
+    h = _being_home(tmp_path)
+    for a in ("the scope of the widget test is narrow", "telescope 0123456789ab is a test lens",
+              "commit 0123456789ab changed the widget scope"):
+        _, msg, _ = _s(h, question="What is the test widget's scope?", answer=a)
+        assert "looked up" not in msg, msg
+    assert "scope request" not in st.render(h)
+
+
+def test_the_receipt_reads_no_hestia_list_and_says_so(tmp_path):
+    """NOVA on #827: the settle receipt makes no hestia read, so a missing id is said to be missing from the kept
+    rulings only, and the receipt says hestia's list was not read; nothing about hestia's list is claimed."""
+    h = _being_home(tmp_path)
+    _kept(h, {"id": "scope-aaaaaaaaaaaa", "path": "/etc/widget", "decision": "refused", "seen": "2026-11-23 18:46 UTC"})
+    ok, msg, _ = _s(h, question="Is the widget ask pending?", answer="yes, scope dddddddddddd is pending")
+    assert ok and "scope-dddddddddddd: not in your kept rulings (kept since 2026-11-23 18:46 UTC)" in msg, msg
+    assert "hestia's list was not read here; only the kept rulings were looked at." in msg
+    assert "hestia read" not in msg and "not on record" not in msg
+    # a block rendered with no read (a bare call) says the same, and a failed read says it failed
+    assert "hestia's list was not read here" in st.render(h)
+    failed = st.render(h, scope_snap=_snap([], error="TimeoutError"))
+    assert "scope-dddddddddddd: not in your kept rulings" in failed and "hestia read" not in failed, failed
+
+
+def test_plural_and_id_phrasings_name_each_request():
+    """legion on #827: phrasings the first parser missed."""
+    assert st._scopes_named("scope requests aaaaaaaaaaaa and bbbbbbbbbbbb") == \
+        ["scope-aaaaaaaaaaaa", "scope-bbbbbbbbbbbb"]
+    assert st._scopes_named("scope request id cccccccccccc") == ["scope-cccccccccccc"]
+    assert st._scopes_named("scope_dddddddddddd, Scope eeeeeeeeeeee") == ["scope-dddddddddddd", "scope-eeeeeeeeeeee"]
+    assert st._scopes_named("scope-aaaaaaaaaaaa, scope-bbbbbbbbbbbb or ffffffffffff") == \
+        ["scope-aaaaaaaaaaaa", "scope-bbbbbbbbbbbb", "scope-ffffffffffff"]

@@ -70,6 +70,29 @@ def test_a_table_too_long_for_the_tail_keeps_its_newest_lines_and_says_how_many_
     assert ANSWERS in shown and "stderr: (empty)" in shown
 
 
+def test_the_11_21_counts_before_a_long_list_survive_the_stdout_clip():
+    # consolidate-inbox.py, seq 16933: counts first, then one ~21 KB list line; the posted stdout is
+    # its last OUT_CAP chars, so the counts were in neither the post nor the lifted lines.
+    paths = ", ".join(f"'notes/inbox/202611{d:02d}-0{d:05d}-coordination-{d:08x}.md'" for d in range(400))
+    out = ("=== Inbox Consolidation Report ===\nTotal entries processed: 452\nArchived (stale): 424\n"
+           f"Kept (recent): 28\nStale files: [{paths}]\nRecent files: ['notes/inbox/x.md']\n=== End Report ===\n")
+    assert len(out) > srr.OUT_CAP and "Archived (stale): 424" not in srr._block("stdout", out)
+    text, lifted, dropped = srr.run_answer(HEADER, out, "", ANSWERS, CAP)
+    shown = _shown(text)
+    for line in ("Total entries processed: 452", "Archived (stale): 424", "Kept (recent): 28"):
+        assert line in shown, shown
+    assert (lifted, dropped) == (3, 0)
+    assert shown.index("Lines with numbers from stdout") < shown.index("stderr: (empty)")
+
+
+def test_a_long_log_bounds_its_candidates_and_counts_the_rest():
+    out = "".join(f"epoch {i}: loss 0.{i:05d}\n" for i in range(5000))
+    text, lifted, dropped = srr.run_answer(HEADER, out, "", ANSWERS, CAP)
+    assert lifted >= 1 and lifted + dropped == 5000 - sum(
+        1 for i in range(5000) if f"epoch {i}: loss 0.{i:05d}" in text[:CAP * 2 // 5])
+    assert "epoch 4999: loss 0.04999" in _shown(text)
+
+
 def test_a_crash_keeps_its_traceback_last_and_still_lifts_what_fits():
     out = _ident_out().replace("CONCLUSION: no separation\n", "")
     err = ("Traceback (most recent call last):\n  File \"scratch/t.py\", line 102, in <module>\n"

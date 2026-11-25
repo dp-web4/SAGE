@@ -371,6 +371,36 @@ def test_both_writable_places_are_size_bounded_from_inside(tmp_path, monkeypatch
     assert "CHANGED-INSIDE" not in (home / "scratch" / "fill.py").read_text()
 
 
+@needs_bwrap
+def test_a_write_outside_the_writable_places_fails_in_the_run_itself(tmp_path):
+    """sprout-being, 2026-11-19 20:32Z: a script appended a user entry to /etc/passwd and made a home under
+    /home. bwrap's root was a writable tmpfs, so both succeeded in there, the run printed that the user was
+    created, and the beat took it as done. The root is now read-only: the write fails where it is made."""
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "w.py").write_text(
+        "import os\n"
+        "def w(p):\n"
+        "    try:\n"
+        "        os.makedirs(os.path.dirname(p), exist_ok=True)\n"
+        "        with open(p, 'a') as f:\n"
+        "            f.write('x\\n')\n"
+        "        return 'WROTE'\n"
+        "    except OSError as e:\n"
+        "        return 'refused ' + (e.strerror or '')\n"
+        "for p in ('/etc/passwd', '/home/test-user/.profile', '/opt/x', '/tmp/t', '/work/k'):\n"
+        "    print(p, w(p))\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/w.py"}))
+    assert r.ok, r.error
+    out = r.result["stdout"]
+    for p in ("/home/test-user/.profile", "/opt/x"):
+        assert f"{p} refused Read-only file system" in out, out
+    # The user list is mounted read-only from the host (RUN_ETC_BINDS); root owns it, so the write stops sooner.
+    assert "/etc/passwd refused Permission denied" in out or "/etc/passwd refused Read-only file system" in out, out
+    assert "/tmp/t WROTE" in out and "/work/k WROTE" in out, out
+    assert "fails as 'Read-only file system'" in r.result["note"], r.result["note"]
+    assert "/etc/passwd) as 'Permission denied'" in r.result["note"], r.result["note"]
+
+
 @needs_sandbox
 def test_output_goes_to_capped_files_and_only_head_and_tail_come_back(tmp_path, monkeypatch):
     """capture_output read everything into the seat (outside every limit) before trimming it."""
@@ -678,6 +708,49 @@ def test_a_run_note_states_only_what_was_observed():
     tb = _run_note(1, 'Traceback (most recent call last):\n  File "example.py", line 3\nValueError',
                    ["example.py"])
     assert "traceback" in tb and "names the line" in tb
+
+
+def test_an_exit_0_run_that_printed_nothing_is_told_that_is_no_evidence():
+    """sprout-being, 2026-11-21 19:34Z: a script that exits 0 and prints nothing was read as having done its job.
+    The note says what the run showed, and no cause; a run that printed anything, or failed, gets no such line."""
+    from sage.gateway.hestia_dispatch import _run_note
+    silent = _run_note(0, "", ["make.py"], "")
+    assert "printed nothing" in silent and "what it printed is no evidence" in silent, silent
+    assert "this run is no evidence" not in silent, silent          # a write listed in changed_in_your_grants is
+    assert "changed_in_your_grants" in silent, silent               # evidence; the note must not deny it (#809)
+    assert not any(g in silent for g in ("because", "return", "None")), silent   # no cause guessed
+    assert "printed nothing" in _run_note(0, "  \n", ["make.py"], "\n")           # whitespace is nothing
+    for said in (_run_note(0, "", ["make.py"], "done"), _run_note(0, "warn", ["make.py"], ""),
+                 _run_note(1, "", ["make.py"], "")):
+        assert "printed nothing" not in said, said
+
+
+def test_a_run_that_reports_on_accounts_is_told_the_box_maps_only_its_own():
+    """sprout-being, 2026-11-19..22: runs printed groups=...,65534 and nobody-owned files, and it took 65534 for an
+    account on the machine. The note names the mapping and asserts no account present or absent."""
+    from sage.gateway.hestia_dispatch import _run_note
+    for said in ("uid=2002(dp) gid=2002(dp) groups=2002(dp),65534(nogroup)",
+                 "-rw-r--r-- 1 nobody nogroup 2947 /etc/passwd", "useradd: cannot lock /etc/passwd"):
+        note = _run_note(0, "", ["acct.py"], said)
+        assert "nobody (65534)" in note and "not an account on this machine" in note, note
+        assert not any(w in note for w in ("sprout", "exists", "does not exist")), note
+    assert "nobody (65534)" not in _run_note(0, "", ["plot.py"], "saved True")
+    assert "nobody (65534)" not in _run_note(0, "", ["acct.py"], "groups=20(staff)", seatbelt=True)  # no userns
+
+
+@needs_bwrap
+def test_a_run_reads_this_machines_user_database(tmp_path):
+    """With /etc unbound, whoami failed and getent found no one, root included, and the being read that as the
+    machine's account list. The box now binds the user and group lists read-only; the answer is the host's."""
+    import pwd
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "acct.py").write_text(
+        "import os, pwd\nprint('me', pwd.getpwuid(os.getuid()).pw_name)\nprint('root', pwd.getpwnam('root').pw_uid)\n")
+    r = d._do_run(BeingIntent("run", {"path": "scratch/acct.py"}))
+    assert r.ok, r.error
+    res = r.result
+    assert res["exit"] == 0, res
+    assert f"me {pwd.getpwuid(os.getuid()).pw_name}" in res["stdout"] and "root 0" in res["stdout"], res
 
 
 def test_a_run_that_names_a_hardware_device_is_told_the_sandbox_has_none():
@@ -1253,3 +1326,126 @@ def test_a_value_passed_as_data_is_told_data_only_stages_files(tmp_path):
     assert "base name with no directory" in g.error and "hand values" not in g.error
     s = d._do_run(BeingIntent("run", {"path": "nope"}))                  # the script itself: no value hint
     assert s.ok is False and "hand values" not in s.error
+
+
+def _box_sees_debian_matplotlib():
+    """True only where this test exercises RUN_ETC_BINDS: the box's interpreter imports matplotlib
+    from a tree the box mounts, and that matplotlib is Debian's (default rc read from
+    /etc/matplotlibrc, which exists). The probe runs the box's interpreter with the box's cleared
+    environment (HOME=/tmp, no PYTHONPATH), so a matplotlib only in the host user site or on an
+    inherited PYTHONPATH skips instead of failing on a ModuleNotFoundError the bind cannot fix
+    (codex, SAGE #795 review), and an upstream wheel with mpl-data skips instead of passing
+    without the bind (it never reads /etc)."""
+    import subprocess
+    interp = os.path.dirname(os.path.dirname(sys.executable))
+    probe = ("import inspect, os, matplotlib as m\n"
+             "src = inspect.getsource(m.matplotlib_fname)\n"
+             "print(os.path.realpath(m.__file__)); print('/etc/matplotlibrc' in src)\n")
+    try:
+        p = subprocess.run([f"{interp}/bin/python3", "-c", probe], capture_output=True, text=True,
+                           env={"HOME": "/tmp", "PATH": f"{interp}/bin:/usr/bin:/bin"}, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    lines = p.stdout.split()
+    if p.returncode != 0 or len(lines) != 2:
+        return False
+    roots = [os.path.realpath(r) + os.sep for r in (interp, "/usr", "/lib")]
+    return (any(lines[0].startswith(r) for r in roots) and lines[1] == "True"
+            and os.path.isfile("/etc/matplotlibrc"))
+
+
+def _user_site_matplotlib():
+    """True where the host user site that the box binds (SAGE #741) holds a matplotlib."""
+    from sage.gateway.being_gate_client import box_python_minor, host_user_site
+    minor = box_python_minor(os.path.dirname(os.path.dirname(sys.executable)))
+    site_dir = host_user_site(minor) if minor is not None else ""
+    return bool(site_dir) and os.path.isfile(os.path.join(site_dir, "matplotlib", "__init__.py"))
+
+
+_PLOT = ("import os, matplotlib\n"
+         "print('mpl', matplotlib.__version__, os.path.realpath(matplotlib.__file__))\n"
+         "matplotlib.use('Agg')\n"
+         "import matplotlib.pyplot as plt\n"
+         "fig, ax = plt.subplots(); ax.plot([0, 1], [1, 0]); fig.savefig('out.png')\n"
+         "print('saved', os.path.getsize('out.png') > 0)\n")
+
+
+def _plot_in_box(tmp_path):
+    d, home = _run_dispatcher(tmp_path)
+    (home / "scratch" / "plot.py").write_text(_PLOT)
+    r = d._do_run(BeingIntent("run", {"path": "scratch/plot.py"}))
+    assert r.ok, r.error
+    return r.result
+
+
+def _mpl_origin(result):
+    """The realpath of the matplotlib the box imported, from the script's own print."""
+    line = next((ln for ln in result["stdout"].splitlines() if ln.startswith("mpl ")), "")
+    return line.split(" ", 2)[2] if line.count(" ") >= 2 else ""
+
+
+@needs_bwrap
+@pytest.mark.skipif(not _box_sees_debian_matplotlib(),
+                    reason="no Debian matplotlib on a path the run box mounts")
+def test_a_library_the_seat_python_imports_also_plots_inside_run(tmp_path, monkeypatch):
+    """cbp-being, 2026-11-06..11-20: every `import matplotlib.pyplot` in `run` raised "Could not
+    find matplotlibrc file; your Matplotlib install is broken", because Debian's matplotlib reads
+    its default rc from /etc and the box binds /usr only. The being hunted the file for 13 days.
+    The assertion is on what the script printed and wrote, so a box that drops RUN_ETC_BINDS (or
+    a seat whose matplotlib needs another config file) turns this red.
+
+    The user site is switched off here (SAGE_RUN_USER_SITE=0). With #741's bind, a seat whose user
+    site also holds a pip matplotlib (cbp: 3.10.8) imports that copy first, and it carries its own
+    rc file, so this test would pass without RUN_ETC_BINDS. The import path is asserted so that
+    cannot happen silently."""
+    monkeypatch.setenv("SAGE_RUN_USER_SITE", "0")
+    res = _plot_in_box(tmp_path)
+    assert "Could not find matplotlibrc" not in res["stderr"], res["stderr"]
+    assert res["exit"] == 0 and "saved True" in res["stdout"], res
+    assert _mpl_origin(res).startswith("/usr/"), res["stdout"]
+
+
+@needs_bwrap
+@pytest.mark.skipif(not _box_sees_debian_matplotlib(),
+                    reason="no Debian matplotlib on a path the run box mounts")
+def test_debian_matplotlib_without_the_etc_bind_fails_as_the_being_saw_it(tmp_path, monkeypatch):
+    """The control for the test above: same box, same Debian copy, RUN_ETC_BINDS removed. It must
+    fail with the being's error, or the test above proves nothing about the bind."""
+    import sage.gateway.being_gate_client as bgc
+    monkeypatch.setenv("SAGE_RUN_USER_SITE", "0")
+    monkeypatch.setattr(bgc, "RUN_ETC_BINDS", "")
+    res = _plot_in_box(tmp_path)
+    assert res["exit"] != 0 and "Could not find matplotlibrc" in res["stderr"], res
+
+
+@needs_bwrap
+@pytest.mark.skipif(not _user_site_matplotlib(), reason="no matplotlib in the host user site")
+def test_a_user_site_matplotlib_plots_in_the_box_without_the_etc_bind(tmp_path, monkeypatch):
+    """SAGE #741 x #795: the user-site copy is a pip wheel with mpl-data inside it, so it plots
+    with RUN_ETC_BINDS removed. A Debian copy may still sit in /usr (the box cannot hide it); the
+    assertion is that the import came from the bound user site, not that /usr has none."""
+    import sage.gateway.being_gate_client as bgc
+    monkeypatch.delenv("SAGE_RUN_USER_SITE", raising=False)
+    monkeypatch.setattr(bgc, "RUN_ETC_BINDS", "")
+    res = _plot_in_box(tmp_path)
+    assert res["exit"] == 0 and "saved True" in res["stdout"], res
+    assert _mpl_origin(res).startswith("/tmp/.local/"), res["stdout"]
+
+
+@needs_bwrap
+@pytest.mark.skipif(not (_user_site_matplotlib() and _box_sees_debian_matplotlib()),
+                    reason="needs matplotlib in both the user site and Debian's tree")
+def test_with_both_copies_the_box_imports_the_user_site_one_as_the_host_does(tmp_path, monkeypatch):
+    """Both binds on (the default). The box must pick the copy the seat's own python3 picks (user
+    site before dist-packages), so `run` and `request_run` import one matplotlib."""
+    monkeypatch.delenv("SAGE_RUN_USER_SITE", raising=False)
+    res = _plot_in_box(tmp_path)
+    assert res["exit"] == 0 and "saved True" in res["stdout"], res
+    origin = _mpl_origin(res)
+    assert origin.startswith("/tmp/.local/"), res["stdout"]
+    rel = origin.split("site-packages", 1)[1]
+    import subprocess
+    host = subprocess.run([sys.executable, "-c", "import os, matplotlib as m; "
+                           "print(os.path.realpath(m.__file__))"],
+                          capture_output=True, text=True, timeout=60).stdout.strip()
+    assert host.endswith(rel) and "site-packages" in host and "/dist-packages/" not in host, (host, origin)

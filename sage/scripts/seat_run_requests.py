@@ -527,11 +527,13 @@ def _run(args) -> None:
 # result lines were cut. So, only when the answer would be cut:
 #   * a run of 1-3 lines repeated back to back is shown once and counted (no fact is lost: the count is
 #     the fact);
-#   * stdout lines that hold a number beside a word, and fall in the cut, are COPIED into a short
+#   * stdout lines that hold a number beside a word, and fall in the cut (or before the last OUT_CAP
+#     chars, which is all of stdout the answer posts), are COPIED into a short
 #     section placed after stdout and before stderr, newest kept when they do not all fit in the tail.
 # stdout and stderr stay in place, in order; a crash's traceback stays last.
 REPEAT_BLOCK_MAX = 3
 LIFT_LINE_MAX = 200
+LIFT_CANDIDATES_MAX = 200
 _NUMBER = re.compile(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
 _NOT_A_NUMBER = re.compile(r"\b(?:nan|inf)\b", re.I)
 
@@ -588,7 +590,7 @@ def _compose(header: str, out_block: str, lifted: list[str], dropped: int, err_b
     parts = [header, "", out_block, ""]
     if lifted:
         more = f" ({dropped} earlier one{'s' if dropped != 1 else ''} did not fit here)" if dropped else ""
-        parts += ["Lines with numbers from stdout above, copied here because your view of this answer"
+        parts += ["Lines with numbers from stdout, copied here because your view of this answer"
                   f" cuts its middle (in order{more}):", *lifted, ""]
     return "\n".join(parts + [err_block, "", answers, closing])
 
@@ -615,15 +617,19 @@ def run_answer(header: str, out: str, err: str, answers: str, cap: int | None = 
     tail_n = cap - head_n
     in_head = text[:head_n]
     cands, seen = [], set()
-    for ln in out_block.split("\n")[1:]:
+    # From ALL of stdout, not out_block: out_block keeps only the last OUT_CAP chars, and a report
+    # that prints its counts first and a long list after lost every count (cbp-being 2026-11-21,
+    # seq 16933: 24096 chars, `Archived (stale): 424` in the clipped-off head, 0 lifted, 0 reported
+    # as dropped; the being had journaled invented counts for that script's runs an hour earlier).
+    for ln in out_c.split("\n"):
         t = ln.strip()
         if t and len(t) <= LIFT_LINE_MAX and is_result_line(t) and t not in seen and t not in in_head:
             seen.add(t)
             cands.append(t)
-    keep = list(cands)
+    keep = cands[-LIFT_CANDIDATES_MAX:]  # newest kept anyway; bounds the fit loop on a long log
     while keep:
         text = _compose(header, out_block, keep, len(cands) - len(keep), err_block, answers, closing)
-        start = text.index("\nLines with numbers from stdout above, copied here") + 1
+        start = text.index("\nLines with numbers from stdout, copied here") + 1
         if start >= len(text) - tail_n:
             return text, len(keep), len(cands) - len(keep)
         keep = keep[1:]
@@ -665,6 +671,36 @@ def decline_text(rel, reason: str, seqs: list[int], closing: str | None = None) 
     return f"[request_run] I did not run {rel}. {reason}\n\n{_answers(seqs)}\n{tail}"
 
 
+def _asked_digest(turn: dict) -> str | None:
+    """The sha a request was made about (its `sha256:` tag), or None when it carries none."""
+    d = conv._request_digest(turn.get("text") or "")
+    return None if not d or d.startswith("untagged:") else d
+
+
+def refuse_mixed_bytes(inst: Path, cid: str, rel, seqs: list[int]) -> None:
+    """A DECLINE WITHOUT --seq IS ABOUT ONE VERSION OF THE FILE (#806). Measured on cbp-being
+    2026-11-21: the seat read scratch/list-inbox.py at sha daa818ef148c (requests 16946, 16947) and
+    wrote "the file has not changed"; the being's edit landed (a84d5fb1d8c2) and it asked again
+    (16948) eight seconds before the decline posted, and the no-`--seq` binding closed all three,
+    telling the being its landed fix had changed nothing. So when the requests a bare decline
+    would close were made about different bytes, or about bytes the file no longer has, nothing
+    is posted and the seat picks the seqs its reason is about. `run` needs no such guard: it runs
+    the current bytes and its answer says which sha it ran."""
+    by_seq = {int(t["seq"]): t for t in pending(inst, cid)}
+    asked = {s: _asked_digest(by_seq[s]) for s in seqs if s in by_seq}
+    tagged = {d for d in asked.values() if d}
+    p = inst / rel
+    now = hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else None
+    stale = bool(now) and any(not now.startswith(d) for d in tagged)
+    if len(tagged) < 2 and not stale:
+        return
+    rows = "\n".join(f"  seq {s}: sha {d or '(untagged)'}" for s, d in sorted(asked.items()))
+    now_line = f"The file is now sha {now[:12]}." if now else "The file is gone from that path now."
+    sys.exit(f"refusing: the file changed between these requests, and a decline without --seq "
+             f"would answer all of them with one reason. Nothing was posted.\n{rows}\n{now_line}\n"
+             f"Pass --seq for the requests this reason is about; `run` answers the current bytes.")
+
+
 def cmd_decline(args) -> None:
     inst = _instance()
     with answering_lock(inst, _conv_id()):
@@ -681,6 +717,8 @@ def _decline(args) -> None:
     rel = _in_home(inst, args.path).relative_to(inst.resolve())
     seqs = bind(inst, _conv_id(), str(rel), args.seq)
     require_pending(seqs, rel, args, "declined")
+    if not args.seq:
+        refuse_mixed_bytes(inst, _conv_id(), rel, seqs)
     text = decline_text(rel, args.reason, seqs, decline_closing(inst))
     shown, hidden = as_shown(text)
     if hidden and not args.cut_anyway:

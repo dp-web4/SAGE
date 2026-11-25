@@ -4,6 +4,7 @@ mod conversations;
 mod ollama;
 mod consciousness;
 mod federation;
+mod output_stream;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -844,6 +845,20 @@ async fn conversation_get(
     })))
 }
 
+/// The being's output as it is produced (`output_stream`): `?after=<offset>` for what was appended
+/// since the last poll. Loopback only, as the conversations are: it is what the being is saying.
+async fn being_output(
+    State(state): State<Arc<AppState>>,
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if let Some(refused) = loopback_reader(peer, "/being/output") {
+        return refused;
+    }
+    let after = q.get("after").and_then(|s| s.parse::<u64>().ok());
+    (StatusCode::OK, Json(output_stream::read_since(&state.being_instance, after)))
+}
+
 /// Speak in a conversation, as dp by default.
 ///
 /// This is the canonical "talk to the being" path, and it is ASYNCHRONOUS by nature: the
@@ -1201,6 +1216,7 @@ async fn main() {
         .route("/conversations", get(conversations_list))
         .route("/conversations/:id", get(conversation_get))
         .route("/conversations/:id/say", post(conversation_say))
+        .route("/being/output", get(being_output))
         .route("/chat/history", get(chat_history))
         .route("/chat-history", get(chat_history))
         .route("/stream", post(stream_chat))

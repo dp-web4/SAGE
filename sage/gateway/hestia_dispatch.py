@@ -47,7 +47,7 @@ from typing import Any, Callable, Dict, List, Optional
 from sage.gateway.being_gate_client import (BeingIntent, GatewayVerdict, ResultEnvelope, camera_command,
                                             copy_alternative, same_path_in_reach)
 from sage.gateway.hestia_witness import _ENDPOINT, _Mcp, _unwrap, make_hestia_witness_fn
-from sage.gateway.reference_f1a import ReferenceF1aDispatcher
+from sage.gateway.reference_f1a import ReferenceF1aDispatcher, retired_copy_note
 
 # The marker the seat's run-request reader keys on (sage/scripts/seat_run_requests.py).
 _RUN_MARKER = "[request_run]"
@@ -81,6 +81,51 @@ _SEAT_AWAY = ("(From this receipt, not from the seat.) A seat that has not writt
 _SEAT_AWAY_REQUEST = ("(From this receipt, not from the seat.) A quiet seat may be away, not stuck: there is "
                       "nothing for you to restart from this request. Your requests stay here, and it can answer "
                       "them when it is back.")
+
+
+def _file_system_fact(path: str) -> str:
+    """'' when the user the being's runs run as may write `path`, or it cannot be looked at; else what the
+    file system says about writing it. A grant is the gate's reach, not the file's permissions: on sprout-being
+    (11-20..21) scope requests for a root-owned system file, made for writes its mode refuses, lapsed or
+    waited on a ruling that could not make those writes work, and each lapse was asked again. The request is still filed: reading
+    may be what it serves, and a human decides it.
+
+    Checked as this process's euid, which is the user the being's runs run as because the bwrap run keeps
+    the gateway's uid. A sandbox that maps the run to another uid (a userns uid map) makes this text false."""
+    import os, pwd, stat as _stat
+    try:
+        rp = os.path.realpath(os.path.expanduser(path))
+        st = os.stat(rp)
+        if os.access(rp, os.W_OK):
+            return ""
+        ro_mount = bool(os.statvfs(rp).f_flag & os.ST_RDONLY)
+    except OSError:
+        return ""
+
+    def name(uid):
+        try:
+            return pwd.getpwuid(uid).pw_name
+        except KeyError:
+            return f"uid {uid}"
+
+    me, owner = name(os.geteuid()), name(st.st_uid)
+    is_dir = _stat.S_ISDIR(st.st_mode)
+    what = "directory" if is_dir else "file"
+    write = "create or remove entries in it" if is_dir else "write it"
+    head = "(From this receipt, not from whoever decides it.) "
+    if ro_mount:
+        return (head + f"This {what} is on a file system mounted read-only, so nobody can {write} there, "
+                f"whoever owns it. A grant changes what the gate lets you reach, not the mount: granted, "
+                f"a write still fails with 'Read-only file system'.")
+    if st.st_uid == os.geteuid():
+        return (head + f"This {what} belongs to {me}, the user your runs run as, and its mode does not let "
+                f"{me} {write}. Its owner may change its mode, so this is the file's own setting, not "
+                f"another user's file. A grant lets you reach it; it does not change the mode.")
+    return (head + f"This {what} belongs to {owner}, and the file system does not let {me}, the user your "
+            f"runs run as, {write}. A grant changes what the gate lets you reach, not what the file system "
+            f"allows: granted, a write still fails with 'Permission denied'. "
+            + (f"{me} can read it, so a grant would let you read it." if os.access(rp, os.R_OK)
+               else f"{me} cannot read it either."))
 
 
 def _seat_quiet(turns, member: str, seat_conv: str, truncated: bool, now=None):
@@ -238,6 +283,25 @@ def _call_text_note(verbs: List[str]) -> str:
             f"{'it' if len(verbs) == 1 else 'them'}.")
 
 
+def _answer_seqs(raw) -> tuple:
+    """(seqs, unreadable) from say's `answers`: an int, a list, or text like "12" / "12, 14" /
+    "seq 12 and 14". Order kept, repeats dropped. Absent or empty is ([], []): a turn that answers
+    nothing. What is not a positive number is returned as unreadable, never guessed at."""
+    if raw is None or raw == "" or raw == []:
+        return [], []
+    items = raw if isinstance(raw, (list, tuple)) else re.split(r"[,\s]+|\band\b", str(raw))
+    seqs, bad = [], []
+    for it in items:
+        s = str(it).strip().lower().removeprefix("seq").strip().lstrip("#")
+        if not s:
+            continue
+        if isinstance(it, bool) or not s.isdigit() or int(s) <= 0:
+            bad.append(str(it).strip())
+        elif int(s) not in seqs:
+            seqs.append(int(s))
+    return seqs, bad
+
+
 def _hestia_error(env: dict) -> Optional[str]:
     """Render a daemon error envelope as the r1 `error` string keyed by hestia's own code."""
     err = env.get("_hestia_error")
@@ -292,9 +356,10 @@ def _literal_key(pattern: str) -> dict:
     """The receipt's word on HOW the pattern was matched, when it was not a regex: a search
     the being sent as a regex but that ran as literal text must say so, or a hit or an absence
     would be read as an answer to a question it did not ask (see search_mode)."""
-    from sage.gateway.being_gate_client import search_mode
-    if search_mode(pattern) != "-F":
-        return {}
+    from sage.gateway.being_gate_client import search_regex
+    mode, _, note = search_regex(pattern)
+    if mode != "-F":
+        return {"translated": note} if note else {}
     return {"literal": (f"{pattern!r} is not a valid regex, so it was matched as literal text, "
                         f"exactly as written; to use regex operators, write a valid pattern")}
 
@@ -547,7 +612,8 @@ class HestiaF1aDispatcher:
             facts = [f"{i}: could not read your scope queue ({err})" for i in ids]
         else:
             rows = {str(r.get("request_id")): r for r in st["requests"]}
-            facts = [_named_scope_fact(i, rows.get(i)) for i in ids]
+            from sage.gateway import scope_rulings as _sr
+            facts = [_named_scope_fact(i, rows.get(i) or _kept_row(_sr.ruling(self.memory_root, i))) for i in ids]
         if isinstance(env.result, dict):
             env.result["scope_requests_you_named"] = facts
         else:
@@ -601,6 +667,8 @@ class HestiaF1aDispatcher:
     # `hestia_open_appeals` does not help: by construction it lists only UNRULED appeals, so a
     # ruling is the one thing it cannot show. So the pointer is resolved here, at read time.
     _POINTER = re.compile(r"^hestia://(appeal|scope|egress|escalation)/([^#\s]+)(?:#(.*))?$")
+    # hestia's tool_my_appeals clamps `limit` to 1..=100 (core/src/server/handler.rs).
+    _MY_APPEALS_LIMIT = 100
 
     def _resolve_pointer(self, raw: str) -> Optional[str]:
         """What a `hestia://` pointer from a disposition notice actually says, or None if this
@@ -613,11 +681,14 @@ class HestiaF1aDispatcher:
         # `hestia://appeal/<hash>/ruling`, and the suffix made the hash match nothing.
         ident = ident.split("/", 1)[0]
         if kind == "appeal":
-            # The exact, windowless lookup first (hestia #164). The 500-row scan below is only a
-            # fallback for a daemon that predates hestia_my_appeals.
-            mine = self._call("hestia_my_appeals", {"limit": 100})
+            # The exact lookup first (hestia #164). It has no recency window, but the daemon clamps
+            # `limit` to 100 and takes no hash filter or offset, so a member with more appeals
+            # than that sees only its newest 100 (#814). The 500-row scan below is the fallback
+            # for a daemon that predates hestia_my_appeals, and for a capped list with no match.
+            mine = self._call("hestia_my_appeals", {"limit": self._MY_APPEALS_LIMIT})
             if isinstance(mine, dict) and "_hestia_error" not in mine and "appeals" in mine:
-                for a in mine.get("appeals") or []:
+                rows = mine.get("appeals") or []
+                for a in rows:
                     if str(a.get("deny_hash", "")).startswith(ident) or str(a.get("appeal_entry", "")).startswith(ident):
                         r = a.get("ruling")
                         if not r:
@@ -633,10 +704,14 @@ class HestiaF1aDispatcher:
                                 f"What follows: a ruling is the end of that appeal. If you still need the "
                                 f"thing, the way forward is a scope request for it with a reason, or asking "
                                 f"in a conversation — not another appeal on the same deny.")
-                return (f"[you have no appeal about deny {ident[:12]}… on record. The lookup has no "
-                        f"recency window, so this is not an old appeal gone missing: none was filed "
-                        f"against that hash under your name.]")
-            hist = self._call("hestia_query_history", {"filter": {"limit": 500}})
+                if len(rows) < self._MY_APPEALS_LIMIT:
+                    return (f"[you have no appeal about deny {ident[:12]}… on record. The lookup "
+                            f"returned all {len(rows)} of your appeals, so this is not an old appeal "
+                            f"gone missing: none was filed against that hash under your name.]")
+                # A full page is the newest 100 only: an older appeal may still exist, so "none was
+                # filed" would be untrue. Fall through to the history scan, whose own miss text
+                # says its window is bounded.
+            hist =self._call("hestia_query_history", {"filter": {"limit": 500}})
             entries = hist.get("entries") or []
             for e in entries:
                 d = e.get("eventData") or e.get("event_data") or {}
@@ -673,6 +748,13 @@ class HestiaF1aDispatcher:
                     return (f"[your scope request {ident} for {r.get('path')}]\n"
                             f"status: {r.get('status')} ; decided by: {r.get('decided_by') or '—'}\n"
                             f"their note: {why}")
+            from sage.gateway import scope_rulings as _sr
+            kept = _sr.ruling(self.memory_root, ident)
+            if kept:
+                return (f"[your scope request {ident} for {kept.get('path')}, as your seat saw it end; "
+                        f"hestia's list no longer shows it]\n"
+                        f"status: {kept.get('decision')} ; decided by: {kept.get('by') or '—'}\n"
+                        f"their note: {kept.get('why') or '(no note recorded)'}")
             # SAY WHAT IS KNOWN, NOT A GUESS (cbp-being, 2026-10-24). This line said "it may have
             # aged out". The being's notes turned the hedge into a fact, then into "dp replied that
             # it aged out and needs re-issuing", and it asked dp to re-issue a REFUSED request for a
@@ -3671,6 +3753,9 @@ class HestiaF1aDispatcher:
                                     "base name is only how it appears inside the sandbox")
                     except Exception:  # noqa: BLE001 — a hint must never turn a miss into a crash
                         hint = ""
+                if not hint and i == 0:
+                    gone = retired_copy_note(Path(full), Path(root))
+                    hint = f".{gone}" if gone else ""
                 return ResultEnvelope(ok=False, error=f"run: no such file in your home: {n}{hint}")
             try:
                 fd = os.open(full, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
@@ -4369,9 +4454,33 @@ class HestiaF1aDispatcher:
         rid = out.get("request_id")
         result = {"request_id": rid, "status": out.get("status"), "path": path,
                   "next": _scope_next(rid, out.get("next")), "on_timeout": out.get("on_timeout")}
+        # A STANDING REFUSAL IS ANSWERED, NOT FILED (hestia #1417): who closed the path, when, and why
+        # are the whole answer. Copying only the fields of a filed ask dropped them, and the being saw
+        # a bare status with no ruler and no reason.
+        if out.get("status") == "refused_standing":
+            for k in ("refused_by", "refused_at", "reason", "note"):
+                if out.get(k):
+                    result[k] = out[k]
         if copies:
             result["copy_in_reach"] = [c for c, _ in copies]
             result["meanwhile"] = copy_alternative(path, copies)
+        fs = _file_system_fact(path)
+        if fs:
+            result["file_system"] = fs
+        # ASKED BEFORE, AND REFUSED (sprout-being, 2026-11-23): the same write to a system file was asked
+        # for an hour after a refusal whose note said why no grant could help, and hestia's list no longer
+        # held that refusal. The new ask is filed all the same; the earlier ruling and its note ride with it.
+        # Only when hestia filed it (a request_id came back): it also answers without filing (a standing
+        # refusal, already granted, not filed), and "this request was filed" would then be false.
+        from sage.gateway import scope_rulings as _sr
+        before = [r for r in _sr.refused_before(self.memory_root, path) if r["id"] != rid] if rid else []
+        if before:
+            shown = before[-2:]
+            result["refused_before"] = (
+                [_sr.said(r) for r in shown]
+                + ([f"{len(before) - len(shown)} earlier refusals of this path are in {_sr.SCOPE_RULINGS}"]
+                   if len(before) > len(shown) else [])
+                + ["This request was filed and is ruled on its own; the earlier refusal stands as it was ruled."])
         return ResultEnvelope(ok=True, witness_id=out.get("witnessEntryHash"), result=result)
 
     def _do_say(self, intent: BeingIntent) -> ResultEnvelope:
@@ -4485,6 +4594,23 @@ class HestiaF1aDispatcher:
         # Below the run routing on purpose: a run request, whichever door it came through, has
         # its repeats delivered marked "SAME AS the request at seq N" by request_run, not refused.
         # Refused before begin_action: no witness row, no line.
+        # WHICH TURN THIS ANSWERS IS SAID, NOT INFERRED (NOVA's hold on #675). The turn records
+        # `answers`, the seqs the being names, and [] when it names none: an update about something
+        # else must not close a question still waiting (conversations.unanswered). A seq that is not
+        # someone else's turn here is refused before begin_action, with the ones that are.
+        answers, bad = _answer_seqs(intent.args.get("answers"))
+        theirs = {int(t.get("seq", 0)): t for t in conv.recent(self.memory_root, to, limit=200)
+                  if isinstance(t, dict) and t.get("from") != self.member}
+        bad += [str(s) for s in answers if s not in theirs]
+        if bad:
+            open_now = [f"{t.get('seq')} ({t.get('from')})"
+                        for t in conv.unanswered(self.memory_root, to, self.member)]
+            return ResultEnvelope(ok=False, error=(
+                f"answers names {', '.join(bad)}, which is not the seq of anyone else's turn in "
+                f"{to!r}, so nothing was sent. answers takes the seq numbers shown beside the turns "
+                f"you are answering" + (f"; waiting on you there now: {', '.join(open_now)}."
+                                        if open_now else "; nothing there is waiting on you.")
+                + " Leave answers out if this turn answers none of them."))
         mine = (None if text.startswith(_RUN_MARKER)
                 else conv.repeat_of_own(self.memory_root, to, self.member, text))
         if mine is not None:
@@ -4502,9 +4628,11 @@ class HestiaF1aDispatcher:
         try:
             from sage.gateway.governed_turn import trial_name
             trial = trial_name(self.memory_root)
+            extra = {"answers": answers}
+            if trial:
+                extra["trial"] = trial
             turn = conv.append(self.memory_root, to, speaker=self.member, text=text, via="say",
-                               witness=action_id, beat=self.host_session_id,
-                               extra={"trial": trial} if trial else None)
+                               witness=action_id, beat=self.host_session_id, extra=extra)
         except ValueError as e:
             self._call("hestia_record_outcome",
                        {"action_id": action_id, "success": False, "magnitude": 0.0})
@@ -4527,7 +4655,18 @@ class HestiaF1aDispatcher:
             said = (said[:200] + f"… [your own message, shortened in this receipt only — all "
                     f"{len(turn['text'])} chars were delivered as seq {turn['seq']}]")
         result = {"conversation": to, "seq": turn["seq"],
-                  "said": said, "action_id": action_id}
+                  "said": said, "action_id": action_id, "answers": answers}
+        # WHAT IS STILL WAITING, so an answer that did not name its turn is seen the same beat.
+        try:
+            still = conv.unanswered(self.memory_root, to, self.member)
+        except Exception:
+            still = []
+        if still:
+            result["still_waiting"] = (
+                f"{', '.join(str(t.get('seq')) for t in still)} in {to!r} "
+                f"{'is' if len(still) == 1 else 'are'} still waiting on you: this turn "
+                + (f"answered {', '.join(map(str, answers))}" if answers else "named no turn it answers")
+                + ". If it was your answer to one of them, the next say can name it with answers.")
         _verbs = call_text_verbs(turn["text"])
         if _verbs:
             result["not_performed"] = _call_text_note(_verbs)
@@ -5569,6 +5708,14 @@ def _scope_next(request_id, daemon_next) -> str:
 _SCOPE_ID = re.compile(r"\bscope-[0-9a-f]{12}\b")
 
 
+def _kept_row(kept):
+    """A kept ruling (scope_rulings) in the shape of a hestia_scope_status row, or None."""
+    if not kept:
+        return None
+    return {"status": f"{kept.get('decision')} (kept by your seat; hestia's list no longer shows it)",
+            "decided_by": kept.get("by") or None, "path": kept.get("path")}
+
+
 def _named_scope_fact(rid: str, row) -> str:
     """One named request as hestia holds it. tool_scope_status lists every request of the member's,
     decided and expired included, so an id it lacks is not one waiting on anyone."""
@@ -5644,7 +5791,10 @@ def _run_reach_note(mounts: list, skipped: list) -> str:
                               "can mount. ")
             + "Any other path, your home included, does not exist in there, so a check like "
               "os.path.exists() is False for it whatever is on disk; memory_read answers about "
-              "the disk.")
+              "the disk. Outside /tmp, /work and what is WRITABLE above, nothing in there can be "
+              "written: a write elsewhere (/home/..., /opt/...) fails as 'Read-only file system', and to "
+              "a system file mounted in there (/etc/passwd) as 'Permission denied', so a run cannot "
+              "change those files on this machine.")
     if skipped:
         text += " Not mounted: " + "; ".join(f"{p} ({why})" for p, why in skipped) + "."
     return text
@@ -5671,7 +5821,36 @@ def _run_note(rc: int, stderr: str, files: list, stdout: str = "", seatbelt: boo
         note += " " + _missing_file_note(absent, files)
     if rc != 0 and _ARGV_SAID.search(said):
         note += " " + _NO_ARGV_NOTE
+    if rc == 0 and not said.strip():
+        note += " " + _SILENT_NOTE
+    if not seatbelt and _ACCOUNT_VIEW.search(said):
+        note += " " + _ACCOUNT_NOTE
     return note
+
+
+#: THE BOX MAPS ONE ACCOUNT. A run is in a user namespace that maps only the being's own uid, so inside it a
+#: file owned by root or by any other account shows as 65534 (nobody), and the being's other groups as 65534
+#: (nogroup). sprout-being, 2026-11-19..22: its runs printed groups=...,65534 and nobody-owned system files, and
+#: it concluded that an account it wanted existed at UID 65534, then asked, for days, to change that account.
+#: The mapping is the sandbox's design, so saying it is evidence-only; it names no account as present or absent.
+#: Not on macOS: sandbox-exec has no user namespace.
+_ACCOUNT_VIEW = re.compile(r"\b65534\b|\bnobody\b|\bnogroup\b|/etc/(?:passwd|group|shadow)\b|\buseradd\b"
+                           r"|\busermod\b|\bgetent\b|\bwhoami\b|\bgroups=", re.I)
+_ACCOUNT_NOTE = ("Inside the run you are the only account mapped: a file owned by root or any other account shows "
+                 "as nobody (65534), and your other groups as nogroup (65534). That is the box's mapping, not an "
+                 "account on this machine. The user and group lists in there are this machine's own, read-only.")
+
+
+#: EXIT 0 WITH NOTHING PRINTED IS NOT A FINDING. sprout-being, 2026-11-21 19:34Z: a 30-line script meant to create
+#: a system account ran in the sandbox, exited 0 and printed nothing on either stream (its only prints sat on the
+#: success and not-found paths). In that beat its todo recorded the account as existing and the scope as granted;
+#: at 21:24Z a note listed checks no run had made, and at 22:44Z that answer was settled. The note had said only
+#: what the sandbox is. This says what the run showed, and only that: no cause is guessed.
+#: Scoped to what was printed (legion on #809): changed_in_your_grants, when the receipt carries it, IS evidence of
+#: what the run wrote, and a note that called the whole run no evidence would contradict it.
+_SILENT_NOTE = ("It printed nothing, on stdout or on stderr. Exit 0 says only that it did not end with an error: "
+                "what it printed is no evidence of what it did or found (changed_in_your_grants, when present, "
+                "lists what it wrote).")
 
 
 #: A run that ended asking for its arguments: a usage line, argparse's complaint, or an IndexError

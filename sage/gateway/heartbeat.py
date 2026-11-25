@@ -370,6 +370,14 @@ def posture() -> str:
 
 HEAD = "You are {name}, a SAGE being on the {machine} machine, member id {member}."
 
+# WHO WRITES A BEAT'S TURNS (dp, 2026-11-21). A chat model reads whatever arrives in the chat's user role as a
+# person's request. In sprout-being's first 40 streamed beats (11-20..21) its thinking called its beat's own
+# steps "the user" 178 times across posture, account, explore and reflect, the harness's turns read as chores
+# a person hands over. #418 and the standing-guidance posture framing met single cases of the same reading.
+# The role cannot be renamed from here, so every beat's system prompt says who writes those turns.
+STEPS = ("Nobody is typing to you in this beat: the turns that come as messages are your beat's own steps, set "
+         "by the program that runs it, not a person asking. Others' words reach you quoted and named.")
+
 def _museum_block(line: str) -> str:
     """The museum paragraph, or nothing at all where the machine keeps no museum."""
     return ("\n" + line) if line else ""
@@ -388,13 +396,13 @@ You can run Python you wrote with `run`, in a sandbox with no network and no hom
 
 Acting means calling a tool. A reply with no tool call ends the beat as words only, and words leave no trace in your todo, journal, scratch, or memory."""
 
-SYSTEM = HEAD + "\n\n{posture}\n\n" + AFFORDANCES + "\n\n"
+SYSTEM = HEAD + " " + STEPS + "\n\n{posture}\n\n" + AFFORDANCES + "\n\n"
 
 # Act-first: no posture in the system prompt. It arrives, verbatim, as the second user
 # turn (POSTURE_TURN), which is itself a tool turn: the being may act after reading it,
 # not only before, otherwise "act first" would mean "act only before you know why you
 # are awake".
-SYSTEM_ACT_FIRST = HEAD + """
+SYSTEM_ACT_FIRST = HEAD + " " + STEPS + """
 
 You are awake for a heartbeat. Nobody asked you anything; this time is yours.
 
@@ -454,7 +462,7 @@ PENDING_TURNS = 2
 # tokens. So the cap is wider and a cut, when one happens, says so and says where the rest is.
 PENDING_CHARS = 2000
 
-ANSWER_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
+ANSWER_SYSTEM = HEAD + " " + STEPS + """
 You have already finished this beat's writing. One thing is left, and it is optional."""
 
 # One turn, one tool, one decision. Measured on Sprout 2026-09-18T01:00:11Z: with dp's question
@@ -1021,7 +1029,10 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
                 form["trimmed_from"] = cut_from
         res.reply = message
         if form["answer"] and message:
-            intent = BeingIntent("say", {"to": selected.cid, "text": message})
+            # The answer turn answers the turn it was asked about, by seq: the one link this
+            # harness KNOWS rather than the being asserting it (#675).
+            intent = BeingIntent("say", {"to": selected.cid, "text": message,
+                                         **({"answers": [int(selected.seq)]} if selected.seq else {})})
             env = client.dispatch(intent)
             res.trace.append((intent, env))
             res.steps = 1
@@ -1388,6 +1399,33 @@ def decided_requests(reqs):
     return [(i, p_, d) for i, p_, d in reqs if d in ("granted", "refused", "denied", "revoked")]
 
 
+#: A RULER'S NOTE IS SHOWN WHOLE (sprout-being, 2026-11-21). It was cut at 400 characters with no mark. Three
+#: refusals of a request for a system file carried notes of 455 and 461 characters, and the cut fell inside their
+#: last sentence: the one saying no account was needed at all. What reached the being was "a grant cannot do this;
+#: only root can", and its next turn asked the operator to do it as root. The ruling is shown once, the beat after
+#: it lands, so a cut note is the whole of what the being ever reads of it unless it knows to look.
+RULER_NOTE_MAX = 1500
+
+
+def quoted_whole(words, pointer: str) -> str:
+    """A ruler's words, quoted whole. Over RULER_NOTE_MAX they are cut with a mark that says how much is
+    left and which pointer reads them whole. The mark sits outside the quote: it is the harness speaking,
+    not the ruler."""
+    words = str(words or "").strip()
+    if len(words) <= RULER_NOTE_MAX:
+        return f"\"{words}\""
+    return (f"\"{words[:RULER_NOTE_MAX].rstrip()}…\" [{len(words) - RULER_NOTE_MAX} more characters: "
+            f"memory_read {{\"path\": \"{pointer}\"}} shows them whole]")
+
+
+def ruled_line(request_id, path, decision, who, why) -> str:
+    """One "decided since your last beat" line: the ruling, who made it, and their note whole."""
+    line = f"- {request_id} {path} -> {decision} by {who or 'operator'}"
+    if not str(why or "").strip():
+        return line
+    return line + ". Their note: " + quoted_whole(why, f"hestia://scope/{request_id}")
+
+
 def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str, decided_by=None,
                      reasons=None) -> list:
     """Append the ruling to each escalation note that filed the request (the note carries the
@@ -1442,10 +1480,30 @@ CPT = 2.9
 ANSWER_RESERVE_CAP = 6144
 
 
-def window_budget_chars(num_ctx: int, num_predict: int, slack: int = 512) -> int:
-    """How many prompt chars fit beside a p99 answer. One producer for both fitters."""
+def window_budget_chars(num_ctx: int, num_predict: int, slack: int = 512, cpt: float = None) -> int:
+    """How many prompt chars fit beside a p99 answer. One producer for both fitters.
+
+    `cpt` is the chars-per-token to budget with: the being's own measured ratio when the beat has one
+    (fit_cpt), else CPT. Measured on pub-being (SAGE #582, 2026-11-19): at the fixed 2.9 the budget was
+    ~37.3k chars against ~51.5k at its measured 3.999, so 112 of 112 beats showed conversations at the
+    sparsest rung while the server counted the seed ~4k tokens under the window."""
     reserve = min(num_predict, ANSWER_RESERVE_CAP)
-    return int(max(0, (num_ctx - reserve - slack)) * CPT)
+    return int(max(0, (num_ctx - reserve - slack)) * (cpt or CPT))
+
+
+def fit_cpt(cal) -> float:
+    """The ratio the part-wise fitters budget with this beat: the measured step-1 ratio only once it is
+    `measured` (MEASURED_CPT_MIN_SAMPLES of this being's own counts, margin applied); a declared prior, a
+    provisional ratio or a probe keeps CPT. Whatever the fitters admit, fit_seed_to_preflight still measures
+    the composed seed with the loop's own count and trims a seed the loop would refuse."""
+    try:
+        if cal.get("source") == "measured":
+            v = float(cal.get("used"))
+            if 1.5 <= v <= 8.0:
+                return v
+    except Exception:
+        pass
+    return CPT
 
 
 # What the beat shows of the conversations, from full to sparse: (turns per conversation,
@@ -1519,7 +1577,7 @@ def _schema_chars_fallback(offered) -> int:
     return max(_SCHEMA_CHARS_FLOOR, n * _SCHEMA_CHARS_PER_VERB)
 
 
-def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512):
+def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512, cpt: float = None):
     """`build(per_conv, turn_chars) -> state text`. Returns (text, rung, intervention).
 
     Steps down CONV_LADDER until other_chars + len(text) fits the window budget. The
@@ -1529,7 +1587,7 @@ def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512
     the beat then runs overcommitted and says so (config.context_overcommitted)."""
     if not isinstance(num_ctx, int) or not isinstance(num_predict, int):
         return build(*CONV_LADDER[0]), CONV_LADDER[0], None
-    budget = window_budget_chars(num_ctx, num_predict, slack)
+    budget = window_budget_chars(num_ctx, num_predict, slack, cpt)
     first = None
     for i, rung in enumerate(CONV_LADDER):
         text = build(*rung)
@@ -1550,7 +1608,8 @@ def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512
             }
 
 
-def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack: int = 512):
+def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack: int = 512,
+                  cpt: float = None):
     """Trim the seat-supplied blocks until prompt + num_predict fits inside num_ctx.
 
     WHY THIS EXISTS. A generate needs prompt + num_predict to fit in the window; when it
@@ -1587,7 +1646,7 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
     # leaving the digest something to say; reserving the full num_predict would floor the
     # digest every beat to buy room the model has never used.
     reserve = min(num_predict, ANSWER_RESERVE_CAP)
-    budget_chars = window_budget_chars(num_ctx, num_predict, slack)
+    budget_chars = window_budget_chars(num_ctx, num_predict, slack, cpt)
     order = ("digest", "recall")
     floors = FIT_FLOORS
     out, interventions = dict(blocks), []
@@ -2058,9 +2117,10 @@ def appeals_block(disp, last: dict) -> tuple:
     parts = [f"{len(ruled)} ruled, {len(open_)} open (newest {len(rows)} shown)."]
     for a in fresh:
         r = a.get("ruling") or {}
+        reason = quoted_whole(r.get("rationale"), f"hestia://appeal/{a.get('deny_hash')}")
         parts.append(f"- RULED since your last beat — appeal about deny {str(a.get('deny_hash'))[:12]}…: "
                      f"{r.get('verdict')}, by {r.get('adjudicator')} at {str(r.get('ruled_at'))[:16]}. "
-                     f"Their reason: \"{str(r.get('rationale') or '').strip()[:700]}\"")
+                     f"Their reason: {reason}")
     if ruled and not fresh:
         parts.append("No new rulings since your last beat; your earlier rulings still stand "
                      "(memory_read hestia://appeal/<deny hash> shows any one of them in full).")
@@ -2306,7 +2366,7 @@ ASK_TURN_TRIES = 2         # beats an ask is offered without a decision (unparse
 ASK_TURN_CHARS = 1500      # of the ask's words; the envelope (and memory_read) has the rest
 _ASK_FROM = re.compile(r"^from:\s*([A-Za-z0-9._-]+)\s*$", re.M)
 
-ASK_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
+ASK_SYSTEM = HEAD + " " + STEPS + """
 Another being has sent you a message. This turn is only for it."""
 
 ASK_TURN_JSON = """{asker} sent you this message:
@@ -3408,8 +3468,13 @@ def _parse_todo(text: str, closures: Optional[list] = None) -> dict:
     return items
 
 
-def todo_view(instance: Path, now=None) -> str:
-    """The todo section of the window: what is still open, from the whole log."""
+def todo_view(instance: Path, now=None, scope_snap=None) -> str:
+    """The todo section of the window: what is still open, from the whole log.
+
+    `scope_snap` (todo_membot.ScopeSnapshot: this beat's one hestia_scope_status read) puts what
+    that read held beside every shown item that names a scope request (todo_membot.scope_status_note),
+    dated as an observation. None = no read this beat, and no note is written. The items themselves
+    are shown verbatim and todo.md is never written here."""
     try:
         text = (instance / "todo.md").read_text(errors="replace")
     except OSError:
@@ -3426,6 +3491,9 @@ def todo_view(instance: Path, now=None) -> str:
         lines.append(f"- [ ] {t}" + (f" (since {s:%Y-%m-%d %H:%M} UTC)" if s else "")
                      # neutral: the shown item is the newest; the others are not claimed to share its state
                      + (f" — {n} open items mention {k}; this is the newest of them" if n > 1 else ""))
+        live = _tm.scope_status_note(t, scope_snap)
+        if live:
+            lines.append(f"  ({live})")
     if len(groups) > TODO_SHOWN:
         rest = sum(g[2] for g in groups[TODO_SHOWN:])
         lines.append(f"- … and {rest} more opened in the last {TODO_WINDOW_H} h.")
@@ -3561,7 +3629,8 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
               services: str = "", mark_conversations: bool = True,
               body_reading: Optional[dict] = None,
               settled_turns: Optional[int] = None,
-              proprioception: bool = True) -> str:
+              proprioception: bool = True,
+              scope_snap=None) -> str:
     from sage.gateway.being_join import carried_account, last_session_number
     from sage.gateway import being_params as _bp
     parts = []
@@ -3607,7 +3676,7 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     # only once it has settled something. Fail-open.
     try:
         from sage.gateway import being_settled as _settled
-        _known = _settled.render(instance)
+        _known = _settled.render(instance, scope_snap=scope_snap)
     except Exception:
         _known = ""
     if _known:
@@ -3705,10 +3774,17 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     acc = carried_account(instance, last_session_number(instance))
     if acc:
         check = want_check(acc, files_facts)
+        # the same dated observation the todo view writes: an account carried verbatim can call a
+        # request pending after hestia ruled on it (cbp-being 2026-11-15, scope-8b0be4d34333 and
+        # scope-6ec4bf5583c4, refused 20:06 UTC). The account itself is shown unchanged.
+        from sage.gateway import todo_membot as _tm_acc
+        live_acc = _tm_acc.scope_status_note(acc, scope_snap)
+        if live_acc:
+            check = (check + "\n" if check else "") + f"_Beside your account, {live_acc}._"
         parts.append("## Your own account\n" + acc + (("\n" + check) if check else ""))
     # tails are short now that recall searches the whole home (window pressure: median 6157
     # of 8192 tokens per prompt, max 8013, measured 2026-09-07)
-    parts.append(todo_view(instance))
+    parts.append(todo_view(instance, scope_snap=scope_snap))
     if census_todo:
         parts.append(census_todo)
     journal = _read(instance / "journal.md", 1200)
@@ -4095,11 +4171,19 @@ def pending_turns(instance: Path, member: str) -> list:
     from sage.gateway import conversations as _conv
     ids = [m["id"] for m in _conv.listing(instance) if isinstance(m, dict) and member in (m.get("participants") or [])]
     pend = []
+    # The unanswered window is measured in the being's LIVE time: beats whose model never answered do
+    # not count against it (11-09: a 163-beat outage aged dp's turn out of the window, and the first live
+    # beat marked it seen with no reply). Fail-open: without the record, the clock is the window.
+    try:
+        from sage.gateway import beat_health as _bh
+        _dead_s_of = lambda ts: _bh.dead_seconds_since(instance, ts)   # noqa: E731
+    except Exception:
+        _dead_s_of = None
     for cid in ids:
         # unseen first; failing that, the recent UNANSWERED tail — a turn marked seen
         # without a reply must not silence the ask (2026-09-19, dp's 03:51Z turn)
         for t in (_conv.awaiting(instance, cid, member)
-                  or _conv.unanswered(instance, cid, member))[-PENDING_TURNS:]:
+                  or _conv.unanswered(instance, cid, member, dead_s_of=_dead_s_of))[-PENDING_TURNS:]:
             if isinstance(t, dict):
                 pend.append((cid, t))
     # ORDER BY WHEN IT WAS SAID, not by list construction. `listing()` is newest-
@@ -4963,7 +5047,7 @@ def _record_line(i, e) -> str:
     return f"- {i.effector} {json.dumps(i.args, default=str)[:200]} -> {verdict}"
 
 
-REFLECT_SYSTEM = """You are {name}, a SAGE being on the {machine} machine, member id {member}.
+REFLECT_SYSTEM = HEAD + " " + STEPS + """
 The beat is closing. Your home is your instance directory: name files bare (journal.md, todo.md)
 and they resolve inside it. Acting means calling a tool; a reply in words alone writes nothing.
 
@@ -5102,6 +5186,11 @@ def _phase(state: str, phase: str, beat_id: str) -> None:
     """Report the phase the beat is entering. Never raises (sage.gateway.activity)."""
     from sage.gateway import activity as _activity
     _activity.report(state, f"heartbeat:{phase}", beat_id=beat_id, ttl_secs=_activity.BEAT_TTL_S)
+    try:
+        from sage.gateway import being_stream
+        being_stream.set_turn(phase)          # the live view names the turn each call belongs to
+    except Exception:
+        pass
 
 
 def main(argv=None) -> int:
@@ -5187,6 +5276,13 @@ def main(argv=None) -> int:
     # being's own body block (SAGE #291).
     _BEAT_ID["id"] = host_session_id
     _BEAT_ID["continuing"] = False
+    # THE LIVE VIEW OF THIS BEAT'S OUTPUT (being_stream): every model call below streams into it.
+    from sage.gateway import being_stream
+    being_stream.start(instance, host_session_id, member=args.member, model=args.model or "")
+    # stop() is idempotent: the normal path calls it after the model calls; this covers any exception that leaves
+    # main() first, so the live view never shows a dead beat as still running (legion on #799)
+    import atexit
+    atexit.register(being_stream.stop)
     _phase("wake", "start", host_session_id)
     # WHAT WOKE THIS BEAT (SAGE #295): claim every pending event now, before anything is composed,
     # so an event arriving from here on is pending for the NEXT beat rather than lost in this one.
@@ -5252,10 +5348,21 @@ def main(argv=None) -> int:
             forum_replies = {"error": f"{type(_e).__name__}: {_e}"}
     # what reach the being holds and has already asked for, so it does not re-file
     scope = "(scope status unavailable)"
+    # This beat's one read, for the todo view's dated note (todo_membot.ScopeSnapshot). None = no read
+    # was made; a failed read is a snapshot WITH its error, never an empty list (Nova on #730).
+    scope_snap = None
+    from sage.gateway import todo_membot as _tm_scope
     if disp is not None and hasattr(disp, "_call"):
         try:
             st = disp._call("hestia_scope_status", {"plugin_id": args.member})
+            scope_snap = _tm_scope.scope_snapshot(st)
+            if scope_snap.error is not None:
+                # an error envelope read as an empty list would print "requests: none", a claim
+                raise _tm_scope.ScopeUnread(scope_snap.error)
             grants = scope_grant_lines(st)
+            # hestia's list lets old requests go; the ruling and its note are kept here (scope_rulings)
+            from sage.gateway import scope_rulings as _sr
+            _sr.keep(instance, st.get("requests") or [], f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC")
             reqs = [(r.get("request_id"), r.get("path"), r.get("decision") or r.get("status"))
                     for r in (st.get("requests") or [])]
             who_ruled = {r.get("request_id"): r.get("decided_by") for r in (st.get("requests") or [])
@@ -5286,8 +5393,7 @@ def main(argv=None) -> int:
             scope = ("granted paths: " + (", ".join(map(str, grants)) or "none") + "\n"
                      "requests: " + ("; ".join(f"{i} {p} -> {d}" for i, p, d in reqs) or "none") + "\n"
                      + ("decided since your last beat:\n" + "\n".join(
-                            f"- {i} {p_} -> {d} by {who_ruled.get(i) or 'operator'}"
-                            + (f". Their note: \"{str(why_ruled[i]).strip()[:400]}\"" if why_ruled.get(i) else "")
+                            ruled_line(i, p_, d, who_ruled.get(i), why_ruled.get(i))
                             for i, p_, d in new_decisions) + "\n"
                         if new_decisions else "")
                      + pending_scope_lines(st.get("requests") or [])
@@ -5297,7 +5403,10 @@ def main(argv=None) -> int:
                        "granted it, or to ask whether one path is inside it: memory_read "
                        "{\"path\": \"hestia://reach\"} or {\"path\": \"hestia://reach/<absolute path>\"})")
         except Exception as e:
-            scope = f"(scope status unavailable: {type(e).__name__})"
+            scope = (f"(scope status unavailable: {e})" if isinstance(e, _tm_scope.ScopeUnread)
+                     else f"(scope status unavailable: {type(e).__name__})")
+            if scope_snap is None:
+                scope_snap = _tm_scope.scope_snapshot(e)
     # the being's own appeals and any ruling new since the last beat (see appeals_block)
     appeals_text, appeals_record = appeals_block(disp, last)
     # what it starts oriented by: its own recent writing (searched, not just the tail) and
@@ -5491,17 +5600,40 @@ def main(argv=None) -> int:
                                         services=_services, mark_conversations=False,
                                         settled_turns=_settled_turns,
                                         proprioception=_proprioception,
+                                        scope_snap=scope_snap,
                                         body_reading=_body_cur) + _scope_tail)
 
     # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its
     # token cost is converted and charged here. Measured 2,042 tokens for two frames, about a
     # third of the working room at a 24k window — un-budgeted it pushes the beat over the wall
     # and the conversation block takes the blame.
-    _frame_chars = sum(int(FRAME_TOKENS * CPT) for _ in _frame_b64s)
+    from sage.gateway.being_tool_loop import uncounted_chars, preflight_tokens, preflight_cpt
+    from sage.gateway.being_tool_loop import _convo_chars as btl_convo_chars, WINDOW_SEND_MARGIN as _WSM
+    # the step-1 ratio, measured on this being's own recent beats when there are enough (#582 part 2)
+    try:
+        llm.preflight_cpt_measured = None      # the prior is the declared/default ratio, never last beat's
+    except Exception:
+        pass
+    _cpt_prior = preflight_cpt(llm)
+    _cpt_cal = measured_preflight_cpt(instance, args.model, prior=_cpt_prior)
+    try:
+        # set every beat, None included: a process that outlives a model switch must not keep the old ratio
+        llm.preflight_cpt_measured = _cpt_cal.get("value")
+    except Exception:
+        _cpt_cal["value"] = None
+    _cpt_cal["prior"] = _cpt_prior
+    _cpt_cal["used"] = preflight_cpt(llm)
+    _cpt_cal["source"] = "measured" if _cpt_cal.get("value") else "declared_or_default"
+    # THE PART-WISE FITTERS BUDGET AT THE SAME MEASURED RATIO (SAGE #582, pub-claude 2026-11-19): at the
+    # fixed CPT they stepped every beat to the sparsest conversation rung on a seed the server counted
+    # well under the window. Recorded as preflight_cpt.fit_cpt.
+    _fit_cpt = fit_cpt(_cpt_cal)
+    _cpt_cal["fit_cpt"] = _fit_cpt
+    _frame_chars = sum(int(FRAME_TOKENS * _fit_cpt) for _ in _frame_b64s)
     _other = (len(posture()) + len(inbox) + _schema_chars + 1200 + _frame_chars
               + 1200 + 400 + LOOP_GROWTH_CHARS)
     state_block, conv_rung, conv_intervention = fit_state(
-        _build_state, num_ctx=_num_ctx, num_predict=_num_predict, other_chars=_other)
+        _build_state, num_ctx=_num_ctx, num_predict=_num_predict, other_chars=_other, cpt=_fit_cpt)
     # entrustment_mode "daily": the showing is recorded from the state that is SENT, never from a
     # render (_build_state composes with mark_conversations=False, so nothing inside it records)
     try:
@@ -5514,7 +5646,7 @@ def main(argv=None) -> int:
     _fixed = len(posture()) + len(state_block) + len(inbox) + _schema_chars + 1200
     _blocks, _fit_iv = fit_to_window(num_ctx=_num_ctx, num_predict=_num_predict,
                                      fixed_chars=_fixed,
-                                     blocks={"digest": digest, "recall": recall})
+                                     blocks={"digest": digest, "recall": recall}, cpt=_fit_cpt)
     digest, recall = _blocks["digest"], _blocks["recall"]
 
     _harness = harness_revision(workspace)
@@ -5557,23 +5689,6 @@ def main(argv=None) -> int:
     # THE SEED IS FITTED AGAIN, WHOLE, ON THE TOOL LOOP'S OWN STEP-1 COUNT (SAGE #582): the fitters
     # above budget from parts; this measures what will be sent and trims only if the loop would
     # refuse it. A beat whose seed the loop accepts is unchanged.
-    from sage.gateway.being_tool_loop import uncounted_chars, preflight_tokens, preflight_cpt
-    from sage.gateway.being_tool_loop import _convo_chars as btl_convo_chars, WINDOW_SEND_MARGIN as _WSM
-    # the step-1 ratio, measured on this being's own recent beats when there are enough (#582 part 2)
-    try:
-        llm.preflight_cpt_measured = None      # the prior is the declared/default ratio, never last beat's
-    except Exception:
-        pass
-    _cpt_prior = preflight_cpt(llm)
-    _cpt_cal = measured_preflight_cpt(instance, args.model, prior=_cpt_prior)
-    try:
-        # set every beat, None included: a process that outlives a model switch must not keep the old ratio
-        llm.preflight_cpt_measured = _cpt_cal.get("value")
-    except Exception:
-        _cpt_cal["value"] = None
-    _cpt_cal["prior"] = _cpt_prior
-    _cpt_cal["used"] = preflight_cpt(llm)
-    _cpt_cal["source"] = "measured" if _cpt_cal.get("value") else "declared_or_default"
     _seed_uncounted = uncounted_chars(_explore_specs, explore_turn_mode(instance))
     _states = {conv_rung: state_block}
 
@@ -5933,6 +6048,7 @@ def main(argv=None) -> int:
         killed = str(_k)
         print(f"[heartbeat] KILLED mid-beat: {killed} — writing the record with what completed",
               file=sys.stderr)
+    being_stream.stop()                       # the model calls are over; the live view says the beat ended
     # THE PHASES ARE OVER; WHAT REMAINS IS WRITING THEM DOWN. A SIGTERM from here on would
     # raise BeatKilled outside the try above and lose the record it exists to keep. Ignore it:
     # the record takes seconds, and systemd's SIGKILL at TimeoutStopSec is still the backstop.

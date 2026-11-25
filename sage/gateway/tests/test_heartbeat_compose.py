@@ -1,5 +1,6 @@
 """Hermetic: the heartbeat's two presentations of the one posture, and the per-model
 predicates that pick them. No model, no gate."""
+import collections
 import os
 import sys
 
@@ -314,3 +315,29 @@ def test_prompt_parts_divides_what_was_sent_into_its_parts():
         assert set(pp["state_sections"]) == {"Your own state", "Todo", "Journal (tail)"}
         assert sum(pp["state_sections"].values()) == len(state)
         assert list(pp["state_sections"])[0] == "Journal (tail)", "largest section first"
+
+
+def test_every_beat_system_prompt_says_its_turns_are_steps_not_a_person():
+    """dp, 2026-11-21: the model read its beat's own steps as "the user" asking. Every system prompt a beat
+    sends says who writes those turns, once, right after who the being is."""
+    from sage.gateway import heartbeat as hb
+    fill = dict(name="b", machine="m", member="b", posture="P", digest="", museum="")
+    for name in ("SYSTEM", "SYSTEM_ACT_FIRST", "ANSWER_SYSTEM", "REFLECT_SYSTEM", "ASK_SYSTEM"):
+        text = getattr(hb, name).format_map(collections.defaultdict(str, fill))
+        assert text.startswith("You are b, a SAGE being on the m machine, member id b. " + hb.STEPS), name
+        assert text.count(hb.STEPS) == 1, name
+
+
+def test_a_rulers_note_reaches_the_being_whole():
+    """sprout-being, 2026-11-21: notes of 455 and 461 characters were cut at 400, inside their last sentence."""
+    from sage.gateway import heartbeat as hb
+    note = ("A grant cannot make that change: the file belongs to root. " * 7 + "Nothing here needs that account.")
+    assert 400 < len(note) < hb.RULER_NOTE_MAX
+    line = hb.ruled_line("scope-1", "/f", "refused", "peer:claude-code", note)
+    assert line.endswith('Nothing here needs that account."'), line          # the last sentence arrives
+    assert line.startswith("- scope-1 /f -> refused by peer:claude-code. Their note: ")
+    long = "x" * (hb.RULER_NOTE_MAX + 10)
+    cut = hb.ruled_line("scope-1", "/f", "refused", None, long)
+    assert "[10 more characters" in cut and 'hestia://scope/scope-1' in cut and "by operator" in cut
+    assert cut.split('Their note: "', 1)[1].split('"', 1)[0] == "x" * hb.RULER_NOTE_MAX + "…"  # mark outside
+    assert hb.ruled_line("scope-1", "/f", "granted", None, "") == "- scope-1 /f -> granted by operator"
