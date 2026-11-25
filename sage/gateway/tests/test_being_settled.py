@@ -658,6 +658,203 @@ def test_the_plural_is_a_process_number_too(tmp_path):
     assert "(s1 names a process number." in st.render(tmp_path)
 
 
+def _conv(h, name, turns):
+    d = h / "conversations"
+    d.mkdir(exist_ok=True)
+    (d / f"{name}.jsonl").write_text("".join(json.dumps({"seq": s, "from": "x", "text": t}) + "\n" for s, t in turns))
+
+
+def test_a_quote_the_cited_seq_does_not_hold_is_named_with_the_line_that_is_there(tmp_path):
+    # cbp-being s476, 11-13: replaced citing the seat's run at seq 14735 for a loss that run never printed.
+    _conv(tmp_path, "seat", [(14735, "exit code 1.\n\nstdout:\nEpoch [1/3], Loss: 0.6627\nEpoch [3/3], Loss: 0.6000")])
+    ok, msg, changed = _s(tmp_path, question="Does the test widget script run?", answer="yes, loss 0.5553",
+                          evidence='seq 14735: "Epoch [3/3], Loss: 0.5553"')
+    assert ok and changed
+    assert '"Epoch [3/3], Loss: 0.5553" from seq 14735; no turn with that number contains that text' in msg
+    assert 'starts the same reads: "Epoch [3/3], Loss: 0.6000"' in msg
+    entries, _, _ = st.read(tmp_path)
+    assert entries[0]["evidence"] == 'seq 14735: "Epoch [3/3], Loss: 0.5553"'  # kept as written
+
+
+def test_a_quote_that_is_there_or_no_quote_adds_nothing(tmp_path):
+    _conv(tmp_path, "seat", [(7, "stdout:\nEpoch  [3/3],\nLoss: 0.6000")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="no",
+                   evidence='seq 7: "Epoch [3/3], Loss: 0.6000"')
+    assert "Your evidence" not in msg, msg
+    _, msg, _ = _s(tmp_path, question="Does the test gizmo script run?", answer="no", evidence="seq 7, the run")
+    assert "Your evidence" not in msg
+
+
+def test_a_cited_seq_no_conversation_has_is_named(tmp_path):
+    _conv(tmp_path, "seat", [(1, "hello")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 99: "it ran fine"')
+    assert "cites seq 99; no conversation of yours has a turn with that number" in msg
+
+
+# NOVA's HOLD on #704: a quote is checked against the one turn it cites, never against turns joined together.
+
+def test_s476_in_its_real_shape_seq_only_is_named_when_other_conversations_are_short(tmp_path):
+    # cbp-being cited the seat's run by seq alone; its dp conversation is far shorter, so seq 14735 is the seat's
+    _conv(tmp_path, "seat", [(14735, "exit code 1.\n\nstdout:\nEpoch [3/3], Loss: 0.6000")])
+    _conv(tmp_path, "dp", [(1, "hello"), (2, "Epoch [3/3], Loss: 0.5553")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes, loss 0.5553",
+                   evidence='seq 14735: "Epoch [3/3], Loss: 0.5553"')
+    assert '"Epoch [3/3], Loss: 0.5553" from seq 14735; no turn with that number contains that text.' in msg
+    assert 'Its line that starts the same reads: "Epoch [3/3], Loss: 0.6000".' in msg, msg
+
+
+def test_the_same_seq_in_another_conversation_does_not_count_as_a_match(tmp_path):
+    _conv(tmp_path, "seat", [(7, "stdout:\nEpoch [3/3], Loss: 0.6000")])
+    _conv(tmp_path, "dp", [(7, "Loss: 0.5553 is what I hope for")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "Loss: 0.5553 is what"')
+    assert ('quotes "Loss: 0.5553 is what" from seq 7, and 2 of your conversations have a turn with that number. '
+            "It is in the one in dp, not in seat.") in msg, msg
+
+
+def test_a_named_conversation_settles_which_turn_is_meant(tmp_path):
+    _conv(tmp_path, "seat", [(7, "stdout:\nEpoch [3/3], Loss: 0.6000")])
+    _conv(tmp_path, "dp", [(7, "Loss: 0.5553 is what I hope for")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seat seq 7: "Loss: 0.5553 is what"')
+    assert '"Loss: 0.5553 is what" from seq 7 in seat; no turn with that number contains that text.' in msg, msg
+    _, msg, _ = _s(tmp_path, question="Does the test gizmo script run?", answer="yes",
+                   evidence='conversation dp, seq 7: "Loss: 0.5553 is what"')
+    assert "Your evidence" not in msg, msg
+
+
+def test_a_named_conversation_that_is_not_there_never_widens_to_the_others(tmp_path):
+    # NOVA on #704 (e2bb864f): `conversation missing_name, seq 7: "foo"` with seat's seq 7 holding "foo"
+    _conv(tmp_path, "seat", [(7, "the run printed foo and bar")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='conversation missing_name, seq 7: "printed foo and"')
+    assert "names a conversation missing_name, and you have none by that name (yours are seat)" in msg, msg
+    assert "not checked against any other conversation" in msg
+    _, msg, _ = _s(tmp_path, question="Does the test gizmo script run?", answer="yes",
+                   evidence='missing_name.jsonl seq 7: "printed foo and"')
+    assert "missing_name, and you have none by that name" in msg, msg
+
+
+def test_a_quote_every_same_numbered_turn_holds_is_not_certified_as_from_one(tmp_path):
+    # NOVA on #704: preserving a quote is not certifying its provenance
+    _conv(tmp_path, "seat", [(7, "the plan: reach Loss: 0.5553")])
+    _conv(tmp_path, "dp", [(7, "you said reach Loss: 0.5553 earlier")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "reach Loss: 0.5553"')
+    assert ('2 of your conversations have a turn with that number holding it (dp, seat); it does not say which '
+            'one it means.') in msg, msg
+    _, msg, _ = _s(tmp_path, question="Does the test gizmo script run?", answer="yes",
+                   evidence='seat seq 7: "reach Loss: 0.5553"')
+    assert "Your evidence" not in msg, msg                                    # named: no ambiguity
+
+
+def test_each_citation_is_checked_in_the_conversation_it_names(tmp_path):
+    # NOVA on #704 (5d2dffd2): names were gathered over the whole evidence, so seq 7 could be checked in dp
+    _conv(tmp_path, "seat", [(7, "the run printed bar"), (8, "nothing")])
+    _conv(tmp_path, "dp", [(7, "you said printed foo here"), (8, "printed bar again")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='conversation seat seq 7: "printed foo"; conversation dp seq 8: "printed bar"')
+    assert '"printed foo" from seq 7 in seat; no turn with that number contains that text.' in msg, msg
+    assert '"printed bar"' not in msg, msg                                       # in dp seq 8, as cited
+    _, msg, _ = _s(tmp_path, question="Does the test gizmo script run?", answer="yes",
+                   evidence='conversation dp, seq 7: "printed foo" and seq 8: "printed bar"')
+    assert "Your evidence" not in msg, msg                                       # one name given: it holds for both
+
+
+
+def test_a_name_after_the_seq_binds_to_its_own_citation_not_the_next(tmp_path):
+    # legion on #704 (eca5d185): a name after the seq was counted for the next citation, and seq 8 passed in seat
+    _conv(tmp_path, "seat", [(7, "printed foo here"), (8, "printed bar here")])
+    _conv(tmp_path, "dp", [(7, "printed zzz here"), (8, "printed qqq here")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7 in conversation seat: "printed foo"; seq 8 in conversation dp: "printed bar"')
+    assert '"printed bar" from seq 8 in dp; no turn with that number contains that text.' in msg, msg
+    assert '"printed foo"' not in msg, msg                                       # in seat seq 7, as cited
+    for i, ev in enumerate(('seq 7 in conversation dp: "printed zzz"; seq 8 in conversation seat: "printed bar"',
+                            'seq 7 (dp.jsonl): "printed zzz"; seq 8 (seat.jsonl): "printed bar"')):
+        _, msg, _ = _s(tmp_path, question=f"Does the test gizmo{i} script run?", answer="yes", evidence=ev)
+        assert "Your evidence" not in msg, (ev, msg)                             # both true where they say
+
+
+def test_a_later_citations_name_is_not_borrowed_by_an_earlier_one(tmp_path):
+    _conv(tmp_path, "seat", [(7, "printed foo here"), (8, "printed bar here")])
+    _conv(tmp_path, "dp", [(7, "printed zzz here"), (8, "printed qqq here")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "printed foo"; conversation dp seq 8: "printed qqq"')
+    assert "from seq 7 in dp" not in msg, msg
+    assert "It is in the one in seat, not in dp." in msg, msg                   # unnamed: checked in both, said
+
+
+def test_two_names_for_one_citation_are_said_and_neither_picked(tmp_path):
+    _conv(tmp_path, "seat", [(7, "printed foo here")])
+    _conv(tmp_path, "dp", [(7, "printed zzz here")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='conversation dp seq 7 in conversation seat: "printed foo"')
+    assert 'names more than one conversation for seq 7 ("printed foo")' in msg, msg
+
+
+def test_one_bad_line_without_the_cited_seq_does_not_mark_the_file_unread(tmp_path):
+    _conv(tmp_path, "seat", [(7, "printed foo here")])
+    with (tmp_path / "conversations" / "seat.jsonl").open("a") as fh:
+        fh.write('{"seq": 1777, "text": "cut off\n')
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "printed foo"')
+    assert "Could not read" not in msg, msg
+
+def test_an_unread_file_is_said_even_when_the_quote_matched_in_a_read_one(tmp_path):
+    # NOVA on #704: a match in a file that was read is not the whole provenance when another was not read
+    _conv(tmp_path, "dp", [(7, "Epoch [3/3], Loss: 0.6000")])
+    (tmp_path / "conversations" / "seat.jsonl").mkdir()          # cannot be opened
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "Loss: 0.6000"')
+    assert "Could not read all of seat, so where the quote came from is not fully checked." in msg, msg
+    _, msg, _ = _s(tmp_path, question="Does the test gizmo script run?", answer="yes",
+                   evidence='dp seq 7: "Loss: 0.6000"')
+    assert "Your evidence" not in msg and "Could not read" not in msg, msg       # named, and that one was read
+
+
+def test_prose_after_the_word_conversation_is_not_taken_for_a_name(tmp_path):
+    _conv(tmp_path, "seat", [(7, "the run printed foo and bar")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='in the conversation with the seat, seq 7: "printed foo and"')
+    assert "Your evidence" not in msg, msg
+
+
+def test_a_quote_from_another_cited_seq_is_not_found_in_the_seq_it_follows(tmp_path):
+    _conv(tmp_path, "seat", [(7, "Epoch [3/3], Loss: 0.6000"), (8, "the plan: reach Loss: 0.5553")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "reach Loss: 0.5553"; seq 8: "the plan"')
+    assert '"reach Loss: 0.5553" from seq 7; no turn with that number contains that text.' in msg, msg
+    assert "It is in seq 8." in msg
+    assert '"the plan"' not in msg  # that one is in its turn
+
+
+def test_a_quote_split_across_two_turns_is_not_found(tmp_path):
+    _conv(tmp_path, "seat", [(7, "the run printed Epoch [3/3],"), (8, "Loss: 0.5553 was the target")])
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7 and seq 8: "Epoch [3/3], Loss: 0.5553"')
+    assert "no turn with that number contains that text" in msg, msg
+
+
+def test_a_malformed_transcript_is_said_and_not_read_as_absence_alone(tmp_path):
+    d = tmp_path / "conversations"
+    d.mkdir()
+    (d / "seat.jsonl").write_text('{"seq": 7, "text": "Epoch [3/3], Loss: 0.5553"\n')  # cut off mid-write
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "Epoch [3/3], Loss: 0.5553"')
+    assert "Could not read all of seat, so the quote may be there." in msg, msg
+
+
+def test_an_unreadable_transcript_is_said(tmp_path):
+    _conv(tmp_path, "dp", [(1, "hello")])
+    (tmp_path / "conversations" / "seat.jsonl").mkdir()  # a directory where a file should be: open() fails
+    _, msg, _ = _s(tmp_path, question="Does the test widget script run?", answer="yes",
+                   evidence='seq 7: "Epoch [3/3], Loss: 0.5553"')
+    assert "no conversation of yours has a turn with that number" in msg
+    assert "Could not read all of seat" in msg, msg
+
+
 def test_a_replace_quotes_the_sentences_the_new_answer_no_longer_says(tmp_path):
     q = "How should a failed test be reported?"
     _s(tmp_path, question=q, answer="Say which step failed and what it printed. Never write that something "
