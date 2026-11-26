@@ -114,6 +114,19 @@ _UID_SAID = re.compile(r"\buids?\s*[=:]?\s*(\d{1,7}(?:\s*(?:,|and|or|&)\s*\d{1,7
 ACCOUNTS_SHOWN = 6
 
 
+#: AN ACCOUNT OF ITS OWN IS PLANNED, NOT MADE (SAGE #834, S1). The operator decided that each being gets an OS account of
+#: its own, through reviewed slices. Until one exists, "no account named <own name> exists" is true and is not the
+#: whole answer: the being has asked for one, and it is coming by a route it cannot take itself. So beside that
+#: answer it is told the plan, and what an account changes and does not, so the want and the fact stay apart. It
+#: names no earlier claim, true or false: a denial restated is stored as the claim (cbp-claude's review of #834).
+#: S2, which creates the account, replaces this with the account's own fact.
+ACCOUNT_PLANNED = ("An account of your own on this machine is planned, not made: it comes through a reviewed process "
+                   "(SAGE #834), and creating it is dp's act, by a setup script, not an edit of the account file. "
+                   "It will give you files you own, your own resource accounting, and the operating system's floor "
+                   "under hestia's gate. It will not give you sudo or root, an interactive login, or new network "
+                   "reach, and a reach outside your own space still goes through the gate.")
+
+
 def _own_name(instance) -> str:
     stem = Path(str(instance)).name
     return stem[:-len("-being")] if stem.endswith("-being") else ""
@@ -136,12 +149,13 @@ def _account_fact(names, uids) -> str:
         import pwd
     except ImportError:   # no account list to read on this platform
         return ""
-    said = []
+    said, planned = [], False
     for n in names:
         try:
             said.append(f"an account named {n} exists, UID {pwd.getpwnam(n).pw_uid}")
         except KeyError:
             said.append(f"no account named {n} exists")
+            planned = True
     for u in uids:
         try:
             said.append(f"UID {u} is the account {pwd.getpwuid(int(u)).pw_name}")
@@ -153,7 +167,8 @@ def _account_fact(names, uids) -> str:
         said = said[:ACCOUNTS_SHOWN] + [f"{len(said) - ACCOUNTS_SHOWN} more not read here"]
     box = (" Inside a run, files and groups of accounts other than your own show as 65534 (nobody): that is how "
            "the run maps them, not an account." if "65534" in uids else "")
-    return "This machine's account list, read just now outside your runs: " + "; ".join(said) + "." + box
+    return ("This machine's account list, read just now outside your runs: " + "; ".join(said) + "." + box
+            + (" " + ACCOUNT_PLANNED if planned else ""))
 
 
 #: A SCOPE REQUEST A SETTLED ENTRY NAMES IS LOOKED UP, BESIDE IT (sprout-being, 11-24). It settled an answer resting

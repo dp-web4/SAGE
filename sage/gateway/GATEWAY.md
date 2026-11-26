@@ -100,13 +100,9 @@ sudo systemctl enable sage-daemon-thor
 sudo systemctl start sage-daemon-thor
 ```
 
-### Sprout (Jetson Orin Nano, 0.5B)
-```bash
-sudo cp sage/gateway/systemd/sage-daemon-sprout.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable sage-daemon-sprout
-sudo systemctl start sage-daemon-sprout
-```
+### Sprout (Jetson Orin Nano)
+Sprout's being runs as the operator's user units, not a system unit. Its old system unit named an account that was
+never created and was removed (#834).
 
 ## Design Decisions
 

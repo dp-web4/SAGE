@@ -65,10 +65,9 @@ kill %1
 
 ### 3. Stop and disable the Python systemd service
 
-```bash
-sudo systemctl stop sage-daemon-sprout
-sudo systemctl disable sage-daemon-sprout
-```
+On Sprout this is done: the Rust daemon runs as the operator's user unit `sage-daemon.service`, and the old
+system unit `sage-daemon-sprout.service` was removed from the tree (#835). On another machine, stop and disable
+whatever unit runs its Python daemon.
 
 ### 4. Install the Rust systemd service
 
