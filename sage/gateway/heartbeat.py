@@ -1245,11 +1245,10 @@ def reflect_prompt(optional=(), refused=True, failed=(), receipts=(), **kw) -> s
 
 
 def _read(p: Path, limit: int = 4000) -> str:
-    try:
-        t = p.read_text(errors="replace")
-        return t[-limit:] if len(t) > limit else t
-    except Exception:
-        return ""
+    """The last `limit` characters of `p`, read from its end (being_join._read: the whole-file read it replaced
+    cost ~1.1 GB at every beat start on a 179 MB heartbeats.jsonl)."""
+    from sage.gateway.being_join import _read as _tail
+    return _tail(p, limit)
 
 
 def letter_view(p: Path, limit: int, rel: str) -> str:

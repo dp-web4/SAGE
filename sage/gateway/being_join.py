@@ -50,9 +50,27 @@ ACCOUNT_ASK = (
 
 # ---------------------------------------------------------------------------
 # helpers
+#: UTF-8 spends at most this many bytes on a character, so the last limit * _MAX_UTF8 bytes hold the last
+#: `limit` characters whatever the text is.
+_MAX_UTF8 = 4
+
+
 def _read(p: Path, limit: int) -> str:
+    """The last `limit` characters of `p` (all of it when shorter), read from its END.
+
+    IT READ THE WHOLE FILE TO KEEP ITS TAIL (Sprout, 2026-11-24..26). Every beat starts by taking the last record
+    of heartbeats.jsonl, and this did it with read_text() and a slice: on a 179 MB log that is the bytes plus a str
+    of up to four times their size, about 1.1 GB for a few seconds at every beat start, measured with ps. Beside a
+    4 GB model on a 7.5 GB board, the kernel's out-of-memory killer took the model server 27 times in two days.
+    Now only the last limit * _MAX_UTF8 bytes are read; a character cut in half at that edge decodes to a
+    replacement mark, which falls outside the `limit` kept whenever the file is longer than that."""
     try:
-        t = p.read_text(errors="replace")
+        with open(p, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - limit * _MAX_UTF8))
+            t = f.read().decode("utf-8", errors="replace")
+        t = t.replace("\r\n", "\n").replace("\r", "\n")   # read_text's newline translation, kept
         return t[-limit:] if len(t) > limit else t
     except Exception:
         return ""
