@@ -5824,7 +5824,8 @@ def _run_note(rc: int, stderr: str, files: list, stdout: str = "", seatbelt: boo
     if rc == 0 and not said.strip():
         note += " " + _SILENT_NOTE
     if not seatbelt and _ACCOUNT_VIEW.search(said):
-        note += " " + _ACCOUNT_NOTE
+        from sage.gateway.being_settled import ACCOUNT_PLANNED
+        note += " " + _ACCOUNT_NOTE + " " + ACCOUNT_PLANNED
     return note
 
 

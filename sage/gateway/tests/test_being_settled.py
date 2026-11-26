@@ -912,6 +912,26 @@ def test_an_account_that_exists_is_said_to_exist(tmp_path):
     assert "65534" not in msg
 
 
+def test_an_own_account_not_made_is_told_it_is_planned_and_what_it_changes(tmp_path):
+    """SAGE #834 S1: beside "no account named <own name> exists", the plan, so the want and the fact stay apart."""
+    h = _being_home(tmp_path)
+    ok, msg, _ = _s(h, question="Do I have an account?", answer="the widget account is mine")
+    assert ok and "no account named widget exists" in msg and st.ACCOUNT_PLANNED in msg, msg
+    assert st.ACCOUNT_PLANNED in st.render(h)
+    for said in ("SAGE #834", "dp's act", "not an edit of the account file", "files you own",
+                 "not give you sudo or root", "still goes through the gate"):
+        assert said in st.ACCOUNT_PLANNED, said
+
+
+def test_the_plan_is_not_said_beside_an_account_that_exists_or_a_uid_alone(tmp_path):
+    import pwd
+    me = pwd.getpwuid(os.getuid())
+    h = _being_home(tmp_path)
+    _, msg, _ = _s(h, question="Who runs the test seat?", answer=f"the seat runs as UID {me.pw_uid}")
+    assert f"UID {me.pw_uid} is the account" in msg and st.ACCOUNT_PLANNED not in msg, msg   # a UID alone
+    assert st.ACCOUNT_PLANNED not in st._account_fact([me.pw_name], [])
+
+
 def test_prose_about_users_names_no_account(tmp_path):
     h = _being_home(tmp_path)
     for q, a in (("Who asks the test questions?", "its user asks them, through a non-root user session"),

@@ -738,6 +738,14 @@ def test_a_run_that_reports_on_accounts_is_told_the_box_maps_only_its_own():
     assert "nobody (65534)" not in _run_note(0, "", ["acct.py"], "groups=20(staff)", seatbelt=True)  # no userns
 
 
+def test_a_run_that_reports_on_accounts_is_told_its_own_account_is_planned():
+    """SAGE #834 S1: a run reaching for the account list is told the route an account of its own comes by."""
+    from sage.gateway.being_settled import ACCOUNT_PLANNED
+    from sage.gateway.hestia_dispatch import _run_note
+    assert ACCOUNT_PLANNED in _run_note(0, "", ["acct.py"], "useradd: cannot lock /etc/passwd")
+    assert ACCOUNT_PLANNED not in _run_note(0, "", ["plot.py"], "saved True")
+
+
 @needs_bwrap
 def test_a_run_reads_this_machines_user_database(tmp_path):
     """With /etc unbound, whoami failed and getent found no one, root included, and the being read that as the
