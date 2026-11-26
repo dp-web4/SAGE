@@ -83,7 +83,7 @@ pgrep -f "sage.*daemon"
 If you need the daemon stopped (for exclusive memory, reproducible benchmark), stop it gracefully:
 
 ```bash
-sudo systemctl stop sage-daemon-sprout       # Sprout, systemd
+systemctl --user stop sage-daemon           # Sprout: the operator's user unit (Rust daemon)
 # equivalent for other machines vary — check their runbook
 ```
 

@@ -5824,6 +5824,8 @@ def _run_note(rc: int, stderr: str, files: list, stdout: str = "", seatbelt: boo
     if rc == 0 and not said.strip():
         note += " " + _SILENT_NOTE
     if not seatbelt and _ACCOUNT_VIEW.search(said):
+        # Not looked up here, unlike _account_fact: true while no being has an account. S2 of #834, which runs the
+        # setup script, must change this in the same slice (legion's review of #835).
         from sage.gateway.being_settled import ACCOUNT_PLANNED
         note += " " + _ACCOUNT_NOTE + " " + ACCOUNT_PLANNED
     return note
