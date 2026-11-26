@@ -98,6 +98,131 @@ def _pid_fact(subject: str, numbers) -> str:
             "listing, it says nothing about a process on this machine, running or not.")
 
 
+#: AN ACCOUNT A SETTLED ENTRY NAMES IS READ FROM THIS MACHINE, BESIDE IT (sprout-being, 11-17..24). Inside a run only
+#: the being's own account is mapped, so root's files and its other groups show as 65534; before SAGE #816 the run had
+#: no account list at all. From that it concluded an account carrying its own name existed at UID 65534, and settled
+#: it, in 20 of the 250 entry versions in its log. On 11-23 it settled the opposite from a seat run that read the
+#: real list (s188), then retired the whole thread, true entry with the false ones, and settled the first belief
+#: again within the hour: the true answer had no fact under it that outlived the entry. This one is read every beat,
+#: outside the run, so it holds whichever entry stands, and changes when the machine does.
+#: What is read: every UID an entry names ("UID n", "uid=n", "UIDs n and m"), and the being's own name before
+#: "user"/"account". Any other name is not read, even beside a UID: "its user", "non-root user", "the sandbox user
+#: (UID 65534)" are prose, and the UID clause already says which account holds that number (legion's review of #823).
+#: At most ACCOUNTS_SHOWN clauses, the rest counted, so the head line cannot crowd out entries (#783's overrun).
+#: Evidence only; which entry holds stays the being's.
+_UID_SAID = re.compile(r"\buids?\s*[=:]?\s*(\d{1,7}(?:\s*(?:,|and|or|&)\s*\d{1,7})*)\b", re.I)
+ACCOUNTS_SHOWN = 6
+
+
+def _own_name(instance) -> str:
+    stem = Path(str(instance)).name
+    return stem[:-len("-being")] if stem.endswith("-being") else ""
+
+
+def _accounts_named(instance, text: str) -> Tuple[List[str], List[str]]:
+    """(names, uids) a text names, in order, each once."""
+    names = []
+    own = _own_name(instance)
+    if own and re.search(rf"\b{re.escape(own)}\s+(?:user|account)\b|\b(?:user|account)\s+(?:named\s+|called\s+)?"
+                         rf"[\"'`]?{re.escape(own)}\b", text, re.I):
+        names.append(own.lower())
+    uids = [u for run in _UID_SAID.findall(text) for u in re.findall(r"\d+", run)]
+    return list(dict.fromkeys(names)), list(dict.fromkeys(uids))
+
+
+def _account_fact(names, uids) -> str:
+    """What this machine's account list says, now, about `names` and `uids`; empty when it cannot be read."""
+    try:
+        import pwd
+    except ImportError:   # no account list to read on this platform
+        return ""
+    said = []
+    for n in names:
+        try:
+            said.append(f"an account named {n} exists, UID {pwd.getpwnam(n).pw_uid}")
+        except KeyError:
+            said.append(f"no account named {n} exists")
+    for u in uids:
+        try:
+            said.append(f"UID {u} is the account {pwd.getpwuid(int(u)).pw_name}")
+        except (KeyError, ValueError, OverflowError):
+            said.append(f"no account has UID {u}")
+    if not said:
+        return ""
+    if len(said) > ACCOUNTS_SHOWN:
+        said = said[:ACCOUNTS_SHOWN] + [f"{len(said) - ACCOUNTS_SHOWN} more not read here"]
+    box = (" Inside a run, files and groups of accounts other than your own show as 65534 (nobody): that is how "
+           "the run maps them, not an account." if "65534" in uids else "")
+    return "This machine's account list, read just now outside your runs: " + "; ".join(said) + "." + box
+
+
+#: A SCOPE REQUEST A SETTLED ENTRY NAMES IS LOOKED UP, BESIDE IT (sprout-being, 11-24). It settled an answer resting
+#: on a request id it said had been pending for a day, and on two grant ids. No request by that id was on record
+#: anywhere; every request it had filed for that path had been refused; no grant carries those ids. A seat it asked
+#: could not read scope status from its wake, so nothing contradicted the entry. The todo view already looks up the
+#: ids an open item names (todo_membot.scope_status_note); this is the same for a settled entry, which outlives the
+#: item. Its entries write the id without the hyphen too (after "scope", "scope request", or in parentheses), so
+#: twelve hex digits after "scope" are read, not only "scope-<id>".
+#: Looked up in this beat's hestia read first, then in the seat's kept rulings (scope_rulings): hestia lets ended
+#: requests go, the kept rulings hold them. Each source is named for what it is (NOVA on #827): a row from this
+#: beat's read is that read; a kept ruling is how the request stood when the seat last saw it end, not a reading
+#: now; and an id missing from what was looked at says which lists those were. hestia's list is only said to lack
+#: an id when it was read and the read did not fail; the settle receipt makes no read, so it says only what the
+#: kept rulings hold. "Not on record" only when hestia declares its list complete. Evidence only.
+#: Also read (legion on #827): "scope requests <id> and <id>", "scope request id <id>", "scope_<id>".
+_SCOPE_NAMED = re.compile(r"\bscope(?:[-_\s]+requests?)?(?:\s+ids?)?[-_\s:#(]{1,3}"
+                          r"([0-9a-f]{12}(?:\s*(?:,|and|or|&)\s*(?:scope[-_])?[0-9a-f]{12})*)\b", re.I)
+SCOPES_SHOWN = 4
+
+
+def _scopes_named(text: str) -> List[str]:
+    """`scope-<id>` for each scope request a text names, in order, each once."""
+    return list(dict.fromkeys(f"scope-{h.lower()}" for run in _SCOPE_NAMED.findall(text or "")
+                              for h in re.findall(r"[0-9a-f]{12}", run, re.I)))
+
+
+def _scope_fact(instance, ids: List[str], snap=None) -> str:
+    """What this beat's hestia read (`snap`, a todo_membot.ScopeSnapshot; None when no read was made, as in the
+    settle receipt) and the kept rulings say of each of `ids`; empty when there are none."""
+    if not ids:
+        return ""
+    from sage.gateway import scope_rulings as _sr
+    read_ok = snap is not None and snap.error is None
+    rows = (snap.rows or {}) if read_ok else {}
+    kept: Dict[str, dict] = {}
+    for r in _sr._rows(instance):   # one read; the last line for an id is how it last stood
+        kept[r["id"]] = r
+    since = min((str(r.get("seen") or "") for r in kept.values() if r.get("seen")), default="")
+    rulings = "your kept rulings" + (f" (kept since {since})" if since else "")
+    said = []
+    for rid in ids[:SCOPES_SHOWN]:
+        live, ruled = rows.get(rid), kept.get(rid)
+        status = (live or {}).get("status") or (live or {}).get("decision")
+        if status:
+            who = live.get("decided_by") if status != "pending" else ""
+            said.append(f"{rid} for {live.get('path')}: {status}" + (f" by {who}" if who else "")
+                        + ", in this beat's hestia read")
+        elif ruled:
+            said.append(f"{rid} for {ruled.get('path')}: {ruled.get('decision')}"
+                        + (f" by {ruled['by']}" if ruled.get("by") else "")
+                        + f", as your seat last saw it end ({ruled.get('seen')})")
+        elif read_ok and snap.complete:
+            said.append(f"{rid}: not on record for you")
+        elif read_ok:
+            said.append(f"{rid}: not in this beat's hestia read, and not in {rulings}")
+        else:
+            said.append(f"{rid}: not in {rulings}")
+    if len(ids) > SCOPES_SHOWN:
+        said.append(f"{len(ids) - SCOPES_SHOWN} more not looked up here")
+    if snap is None:
+        how = " hestia's list was not read here; only the kept rulings were looked at."
+    elif snap.error is not None:
+        how = f" hestia could not be read this beat ({snap.error}); only the kept rulings were looked at."
+    else:
+        how = ""
+    return "Your scope requests, looked up: " + "; ".join(said) + "." + how
+
+
 def _pid_entries(entries: List[dict]) -> Tuple[List[str], List[str]]:
     """(ids newest first, numbers) of the entries whose question, answer or evidence names a process number."""
     ids, nums = [], []
@@ -107,6 +232,213 @@ def _pid_entries(entries: List[dict]) -> Tuple[List[str], List[str]]:
             ids.append(e["id"])
             nums.extend(found)
     return ids, nums
+
+
+#: Evidence that quotes a conversation turn by its seq. MEASURED ON CBP-BEING, 10-30..11-13: 9 distinct settled
+#: entries cite a seq AND quote text from it. 6 of their 13 quotes do not appear in the turn they cite. The
+#: sharpest case was s476. It was settled at 05:09:26Z, 14 s after the being's own request_run, with evidence
+#: `seq 14729: "Epoch [3/3], Loss: 0.5553"`, and no run printed that. The seat ran the unchanged file at seq
+#: 14735: exit 1, third epoch "Epoch [3/3], Loss: 0.6000". The seat then asked for a reopen. At 05:17:12Z the
+#: being REPLACED s476 instead, now citing `seq 14735: "Epoch [3/3], Loss: 0.5553"`. It cited the seat's real run
+#: as evidence for a number that run does not contain. Nothing told it the quote was not there. The other
+#: misses are mostly paraphrases put inside quote marks. Like the PID fact above, this is evidence only:
+#: the entry is kept as written, and the receipt says what the cited turn holds.
+#: NOVA's HOLD on #704: each quote is checked against the one turn it cites, never against several turns joined
+#: together. A quote is bound to the seq it follows. Seqs restart at 1 in every conversation (sprout-being,
+#: 11-22: 465 of 3027 seq numbers are in more than one conversation). So a seq that more than one conversation
+#: carries, with no conversation named, is not taken as a match. The receipt names which conversation's turn
+#: holds the quote and which does not.
+_SEQ_CITED = re.compile(r"\bseqs?\b\W{0,3}(\d{1,9})", re.I)
+_QUOTED = re.compile(r"[\"“«]([^\"“”«»]{6,})[\"”»]")
+QUOTE_LINE_CHARS = 160
+
+
+def _ws(s: str) -> str:
+    return " ".join(s.split())
+
+
+def _turns_numbered(instance, seqs) -> Tuple[Dict[int, Dict[str, str]], List[str]]:
+    """seq -> {conversation: the text of its turn with that number}, and the conversations that could not be read
+    whole (an unreadable file, or a line naming a wanted seq that is not valid JSON). Read a line at a time."""
+    want, out, unread = set(seqs), {}, []
+    d = Path(instance) / "conversations"
+    if not want or not d.is_dir():
+        return out, unread
+    # legion on #704: a bare "7" is in most lines, so one bad line anywhere read as a file not read whole
+    wanted = re.compile(r'"seq"\s*:\s*(?:' + "|".join(str(s) for s in sorted(want)) + r")(?!\d)")
+    for f in sorted(d.glob("*.jsonl")):
+        try:
+            with f.open(encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    if not wanted.search(line):
+                        continue
+                    try:
+                        t = json.loads(line)
+                    except ValueError:
+                        if f.stem not in unread:
+                            unread.append(f.stem)
+                        continue
+                    if isinstance(t, dict) and t.get("seq") in want:
+                        out.setdefault(t["seq"], {})[f.stem] = str(t.get("text") or "")
+        except OSError:
+            if f.stem not in unread:
+                unread.append(f.stem)
+    return out, unread
+
+
+def _cited_quotes(evidence: str) -> List[Tuple[int, str, int, int]]:
+    """(seq, quote, where that seq is cited, where the quote ends) for each quote, bound to the seq cited before it;
+    a quote ahead of every seq goes to the first."""
+    marks = [(m.start(), int(m.group(1))) for m in _SEQ_CITED.finditer(evidence)]
+    out = []
+    for m in _QUOTED.finditer(evidence) if marks else ():
+        q = _ws(m.group(1))
+        if q:
+            before = [(p, s) for p, s in marks if p < m.start()]
+            p, s = before[-1] if before else marks[0]
+            out.append((s, q, p, m.end()))
+    return out
+
+
+#: NOVA on #704 (e2bb864f): a conversation the evidence names that the being does not have used to drop out of
+#: `named`, and the check fell back to every conversation with that seq, so a quote in another one passed as if
+#: from the named one. A name is now read from the evidence itself ("conversation X", "X.jsonl") and held against
+#: the files on disk. The words below follow "conversation" in ordinary prose and are not taken as names.
+_CLAIMED_NAME = re.compile(r"\b(?:conversation|convo)\s*[:=]?\s+([\w.-]+)|(?<![\w.-])([\w.-]+)\.jsonl\b", re.I)
+_NOT_A_NAME = {"with", "about", "the", "a", "an", "in", "on", "from", "to", "between", "where", "that", "this",
+               "i", "my", "our", "your", "its", "and", "or", "of", "at", "is", "was", "which", "when"}
+
+
+def _conversation_names(instance) -> set:
+    d = Path(instance) / "conversations"
+    return {f.stem for f in d.glob("*.jsonl")} if d.is_dir() else set()
+
+
+def _name_marks(evidence: str, have) -> List[Tuple[int, str]]:
+    """(position, name) of every conversation the evidence names outright, in order, whether or not it exists:
+    "conversation X", "X.jsonl", and for a name the being has, "X conversation" and "X seq 7"."""
+    out = []
+    for m in _CLAIMED_NAME.finditer(evidence):
+        n = (m.group(1) or m.group(2) or "").rstrip(".,;:")
+        if n.lower().endswith(".jsonl"):
+            n = n[:-len(".jsonl")]
+        if n and n.lower() not in _NOT_A_NAME and not n.isdigit():
+            out.append((m.start(), next((h for h in have if h.casefold() == n.casefold()), n)))
+    for n in have:
+        for m in re.finditer(rf"(?<![\w.-]){re.escape(n)}\s+(?:conversation|convo|seq)\b", evidence, re.I):
+            out.append((m.start(), n))
+    return sorted(set(out))
+
+
+#: Two or more names in one citation's window: said, and none of them picked.
+CONFLICTING = object()
+
+
+def _named_for(marks: List[Tuple[int, str]], lo: int, hi: int, first_at: int):
+    """THE CONVERSATION A CITATION NAMES, ITS OWN (NOVA on #704, 5d2dffd2; legion, eca5d185): its window runs from
+    the end of the citation before it to the end of its own quote, so the name counts on either side of the seq
+    ("conversation dp seq 7: ..." and "seq 7 in conversation dp: ...") and a name between two citations belongs to
+    one. Two different names there: CONFLICTING. None there: the one name the evidence gives, if it gives exactly
+    one and gives it before the first citation ("conversation dp, seq 7 and seq 8"), never one borrowed from a later
+    citation; else None, and the citation is checked against every conversation with that seq."""
+    own = {n for p, n in marks if lo < p <= hi}
+    if own:
+        return own.pop() if len(own) == 1 else CONFLICTING
+    names = {n for _, n in marks}
+    if len(names) == 1 and all(p < first_at for p, _ in marks):
+        return next(iter(names))
+    return None
+
+
+def _line_like(text: str, qn: str) -> str:
+    best, best_len = "", 0
+    for line in text.splitlines():
+        ln = _ws(line)
+        n = len(os.path.commonprefix([ln, qn]))
+        if n > best_len:
+            best, best_len = ln, n
+    return best[:QUOTE_LINE_CHARS] if best_len >= 8 else ""
+
+
+def _quote_fact(instance, evidence: str) -> str:
+    """For each quote in `evidence`, checked against the turn of the seq it follows, in the conversation that
+    citation names: one fact when that turn does not hold it, when the seq is in more than one conversation and
+    the citation names none, when a named conversation is not there, or when a conversation that could hold the
+    turn could not be read. Empty when there is no cited seq, no quote, or every quote is in its one turn."""
+    pairs = _cited_quotes(evidence or "")
+    if not pairs:
+        return ""
+    turns, unread = _turns_numbered(instance, {s for s, _, _, _ in pairs})
+    have = _conversation_names(instance) | {c for convs in turns.values() for c in convs} | set(unread)
+    marks = _name_marks(evidence, have)
+    ends: Dict[int, int] = {}
+    for _, _, at, end in pairs:
+        ends[at] = max(end, ends.get(at, end))
+    seq_marks = sorted(ends)
+    facts, missing, absent, unchecked = [], [], [], False
+    for s, qn, at, _ in pairs:
+        lo = max([ends[p] for p in seq_marks if p < at] or [-1])
+        name = _named_for(marks, lo, ends[at], seq_marks[0])
+        if name is CONFLICTING:
+            facts.append(f'Your evidence names more than one conversation for seq {s} ("{qn}"), so it does not '
+                         f'say which one it means.')
+            name = None
+        if name is not None and name not in have:
+            # A NAMED CONVERSATION THAT IS NOT THERE IS SAID, AND NEVER WIDENS TO ALL (NOVA on #704).
+            if name not in absent:
+                absent.append(name)
+            continue
+        convs = {c: t for c, t in turns.get(s, {}).items() if name is None or c == name}
+        # A FILE NOT READ WHOLE IS SAID WHENEVER IT COULD HOLD THE CITED TURN (NOVA on #704): a match in a file
+        # that was read is not the whole provenance when another could have the same seq.
+        if unread and (name is None or name in unread):
+            unchecked = True
+        if not convs:
+            if (s, name) not in missing:
+                missing.append((s, name))
+            continue
+        holds = sorted(c for c, t in convs.items() if qn in _ws(t))
+        if holds and len(holds) == len(convs):
+            if len(convs) > 1:
+                # PRESERVED IS NOT PROVENANCE (NOVA on #704): the quote is there, but which turn it came from is not
+                # said, and the citation names no conversation to tell them apart.
+                facts.append(f'Your evidence quotes "{qn}" from seq {s}, and {len(convs)} of your conversations '
+                             f'have a turn with that number holding it ({", ".join(holds)}); it does not say which '
+                             f'one it means.')
+            continue
+        if holds:
+            fact = (f'Your evidence quotes "{qn}" from seq {s}, and {len(convs)} of your conversations have a turn '
+                    f'with that number. It is in the one in {", ".join(holds)}, not in '
+                    f'{", ".join(c for c in sorted(convs) if c not in holds)}.')
+        else:
+            fact = (f'Your evidence quotes "{qn}" from seq {s}' + (f" in {name}" if name else "")
+                    + "; no turn with that number contains that text.")
+            for c in sorted(convs):
+                line = _line_like(convs[c], qn)
+                if line:
+                    where = f" In {c}, its" if len(convs) > 1 else " Its"
+                    fact += f'{where} line that starts the same reads: "{line}".'
+            elsewhere = sorted({o for o, _, _, _ in pairs if o != s
+                                for c, t in turns.get(o, {}).items() if (name is None or c == name) and qn in _ws(t)})
+            if elsewhere:
+                fact += f" It is in seq {', '.join(str(o) for o in elsewhere)}."
+        facts.append(fact)
+    head = []
+    if absent:
+        head.append(f"Your evidence names {'conversations' if len(absent) > 1 else 'a conversation'} "
+                    f"{', '.join(absent)}, and you have none by that name"
+                    + (f" (yours are {', '.join(sorted(have))})" if have else "")
+                    + ", so its quotes were not checked against any other conversation.")
+    for named in (False, True):
+        seqs = [str(s) for s, n in missing if (n is not None) == named]
+        if seqs:
+            head.append(f"Your evidence cites seq {', '.join(seqs)}; no conversation of yours "
+                        f"{'by the name it gives ' if named else ''}has a turn with that number.")
+    facts = head + facts
+    if unchecked:
+        facts.append(f"Could not read all of {', '.join(unread)}, so "
+                     + ("the quote may be there." if facts else "where the quote came from is not fully checked."))
+    return " ".join(facts)
 
 
 def _norm(s: str) -> str:
@@ -199,6 +531,52 @@ def seat_notes(instance, entries: List[dict]) -> Dict[str, List[dict]]:
     return out
 
 
+#: A sentence of the old answer counts as gone from the new one when fewer than half its words of four letters or more
+#: are still there; sentences with fewer than three such words are not judged. Words match on their first
+#: _STEM letters, so "reports"/"report" and "failing"/"failed" are one word (legion on #821: a rewording in other
+#: forms of the same words was quoted as lost). Replayed over the 52 replaces: 67 quoted sentences became 65, and both
+#: that fell away were restatements.
+_GONE_SHARE = 0.5
+_STEM = 5
+_WORD = re.compile(r"[^\W_]+(?:'[^\W_]+)*")
+
+
+def _words(s: str) -> set:
+    return {w[:_STEM] for w in _WORD.findall(s.casefold()) if len(w) > 3}
+
+
+def _dropped_sentences(old: str, new: str) -> str:
+    """A REPLACE SAYS WHAT IT TOOK OUT (sprout-being, 2026-11-23). An answer about reporting honestly was reworded
+    twice in five minutes; the second rewording, with no reason given, left out the sentence naming the one thing to
+    avoid. The receipt said only what the entry now read, so the loss went by unseen. Measured over its 52 replaces
+    since 10-27: 29 gave no reason and 36 left out a whole sentence, some of them false facts rightly dropped. This
+    judges none of them; it quotes what the new answer no longer says, once, where the change is made."""
+    kept = _words(new)
+    gone = [s for s in re.split(r"(?<=[.!?])\s+", str(old or "").strip())
+            if len(_words(s)) >= 3 and len(_words(s) & kept) / len(_words(s)) < _GONE_SHARE]
+    if not gone:
+        return ""
+    return " No longer in the answer: " + " ".join(f'"{_flat(s)}"' for s in gone)
+
+
+def _dropped_notes(instance, target: dict) -> str:
+    """The seat's notes on an entry that is being reopened or settled again, which stop being shown from now.
+
+    A NOTE THAT VANISHES AS IT IS ACTED AGAINST. sprout-being, 2026-11-22 21:08Z: s185 said an account it wanted
+    "should be ready by now"; its seat noted that no such account existed and nothing was creating one. The beat
+    reopened s185 with the reason that the seat had "confirmed the account is running", and the receipt said only
+    "reopened". The note was dropped there without a word. It is quoted here once, in the receipt for the act that
+    drops it; which answer holds stays the being's."""
+    notes = seat_notes(instance, [target]).get(target["id"]) or []
+    if not notes:
+        return ""
+    said = "; ".join(f"{n['by']} at seq {n['seq']} ({_said_day(n)}): {_flat(n['says'])}"
+                     for n in notes[-SEAT_NOTES_SHOWN:])
+    # the newest are quoted; the rest are counted, so the quoted ones are not read as all (legion on #817)
+    more = (f" ({len(notes) - SEAT_NOTES_SHOWN} earlier not quoted)" if len(notes) > SEAT_NOTES_SHOWN else "")
+    return (f" Your seat's note{'s' if len(notes) > 1 else ''} on {target['id']}, not shown from now on: {said}{more}")
+
+
 def seat_note(instance, entry_id: str, by: str, seq: int, says: str, conv_id: Optional[str] = None,
               now: Optional[float] = None) -> dict:
     """Attach to a settled entry a pointer to the seat's own later turn that disagrees with it. The entry is not
@@ -271,6 +649,15 @@ def settle(instance, args: Dict, now: Optional[float] = None) -> Tuple[bool, str
         nums = _PID_SAID.findall(" ".join(a.get(k, "") for k in ("question", "answer", "evidence")))
         if nums:
             msg += " " + _pid_fact("This answer names", nums)
+        quoted = _quote_fact(instance, a.get("evidence", ""))
+        if quoted:
+            msg += " " + quoted
+        fact = _account_fact(*_accounts_named(instance, " ".join(a.get(k, "") for k in ("question", "answer", "evidence"))))
+        if fact:
+            msg += " " + fact
+        fact = _scope_fact(instance, _scopes_named(" ".join(a.get(k, "") for k in ("question", "answer", "evidence"))))
+        if fact:
+            msg += " " + fact
     return ok, msg, changed
 
 
@@ -329,10 +716,11 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
     if _truthy(a.get("reopen", "")):
         if target is None:
             return False, "to reopen one, give its id (settle with no arguments lists them). Nothing was changed."
+        dropped = _dropped_notes(instance, target)
         entries = [e for e in entries if e is not target]
         return _commit(instance, entries, nxt, {"op": "reopen", "id": target["id"], "from": target, "why": why},
                        now, f"reopened {target['id']} ({target['question'][:120]!r}); it is no longer shown as "
-                            "settled. The earlier answer is kept in settled_log.jsonl.")
+                            "settled. The earlier answer is kept in settled_log.jsonl." + dropped)
 
     question = a.get("question") or (target or {}).get("question", "")
     other = next((e for e in entries if e is not target and _norm(e["question"]) == _norm(question)), None)
@@ -377,11 +765,13 @@ def _settle(instance, a: Dict[str, str], now) -> Tuple[bool, str]:
         if (target.get("answer"), target.get("evidence", ""), target["question"]) == (answer, new["evidence"], question):
             return True, f"{_UNCHANGED}{target['id']} already says exactly that; nothing changed."
         # A re-settled entry moves to the end: newest first is the order the beat shows.
+        dropped = _dropped_notes(instance, target)
         entries = [e for e in entries if e is not target] + [new]
         return _commit(instance, entries, nxt, {"op": "replace", "id": new["id"], "from": target, "to": new,
                                                 "why": why}, now,
-                       f"{new['id']} now reads: {_copyable(question)} -> {answer[:200]!r}. The earlier answer is "
-                       "kept in settled_log.jsonl. It is shown to you at the start of every beat.")
+                       f"{new['id']} now reads: {_copyable(question)} -> {answer[:200]!r}."
+                       + _dropped_sentences(target.get("answer"), answer) + " The earlier answer is "
+                       "kept in settled_log.jsonl. It is shown to you at the start of every beat." + dropped)
     close = _close_to(entries, question)
     if len(entries) >= MAX_ENTRIES:
         # sprout-being, 2026-10-30: four refusals here in its first hour at the cap, and no reopen or fold. Two of
@@ -704,8 +1094,9 @@ def _short(e: dict, cap: int, near: Optional[Dict[str, List[str]]] = None,
     return pre + _cut(q, qn) + arrow + _cut(a, body - qn) + tail
 
 
-def render(instance) -> str:
+def render(instance, scope_snap=None) -> str:
     """The beat's block: every settled entry, newest first, within RENDER_CHARS. Empty until there is one.
+    `scope_snap` is this beat's hestia read (todo_membot.ScopeSnapshot), for the scope ids entries name.
 
     No entry leaves the block. The newest are shown whole; once the rest would not fit, they are shown as
     id, question and day. Dropping the oldest instead dropped the conclusion settled once and never
@@ -749,6 +1140,27 @@ def render(instance) -> str:
     if pid_ids:
         shown = ", ".join(pid_ids[:4]) + (f" +{len(pid_ids) - 4}" if len(pid_ids) > 4 else "")
         head += "\n(" + _pid_fact(f"{shown} name{'s' if len(pid_ids) == 1 else ''}", pid_nums) + ")"
+    acc_ids, acc_names, acc_uids = [], [], []
+    for e in reversed(entries):
+        ns, us = _accounts_named(instance, " ".join(str(e.get(k, "")) for k in ("question", "answer", "evidence")))
+        if ns or us:
+            acc_ids.append(e["id"])
+            acc_names += [n for n in ns if n not in acc_names]
+            acc_uids += [u for u in us if u not in acc_uids]
+    acc_fact = _account_fact(acc_names, acc_uids) if acc_ids else ""
+    if acc_fact:
+        shown = ", ".join(acc_ids[:4]) + (f" +{len(acc_ids) - 4}" if len(acc_ids) > 4 else "")
+        head += f"\n({shown} name{'s' if len(acc_ids) == 1 else ''} an account. {acc_fact})"
+    sc_ids, sc_named = [], []
+    for e in reversed(entries):
+        ns = _scopes_named(" ".join(str(e.get(k, "")) for k in ("question", "answer", "evidence")))
+        if ns:
+            sc_ids.append(e["id"])
+            sc_named += [n for n in ns if n not in sc_named]
+    sc_fact = _scope_fact(instance, sc_named, scope_snap)
+    if sc_fact:
+        shown = ", ".join(sc_ids[:4]) + (f" +{len(sc_ids) - 4}" if len(sc_ids) > 4 else "")
+        head += f"\n({shown} name{'s' if len(sc_ids) == 1 else ''} a scope request. {sc_fact})"
     foot = "- (entries shortened with …: settle with no arguments shows them whole)"
     newest = list(reversed(entries))
     # room for the newest whole, then an equal share for each of the rest

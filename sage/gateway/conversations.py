@@ -450,6 +450,28 @@ def awaiting(instance: Path, conv_id: str, me: str) -> list[dict]:
     return turns[last_mine + 1:]
 
 
+def open_turns(turns: list, me: str) -> list[dict]:
+    """Other speakers' turns that no turn of `me` has answered, oldest first, regardless of age.
+
+    A turn of `me` with an `answers` list closes exactly the seqs it names ([] closes none); a turn
+    without the field closes everything said before it, which is how every turn before the field
+    existed was read."""
+    tail: list[dict] = []
+    for t in turns:
+        if not isinstance(t, dict):
+            continue
+        if t.get("from") != me:
+            tail.append(t)
+            continue
+        named = t.get("answers")
+        if not isinstance(named, list):
+            tail = []
+            continue
+        closed = {s for s in named if is_seq(s)}
+        tail = [o for o in tail if o.get("seq") not in closed]
+    return tail
+
+
 def unanswered(instance: Path, conv_id: str, me: str, max_age_h: float = 24.0,
                dead_s_of=None) -> list[dict]:
     """Turns after `me` last spoke, when the last word is someone else's and RECENT.
@@ -468,14 +490,16 @@ def unanswered(instance: Path, conv_id: str, me: str, max_age_h: float = 24.0,
     not live through (beat_health.dead_seconds_since: beats whose model never answered), and
     they are subtracted. A week-long outage is not a week of choosing not to answer: on 11-09
     dp's turn, selected for an answer in 163 mute beats, aged out in the first live one.
+
+    WHAT A TURN OF `me` ANSWERS IS WHAT IT SAYS IT ANSWERS (NOVA's hold on #675). Stretching the
+    window to live time keeps an old question open longer, so a later turn that is not about it
+    must not be what closes it. A turn of `me` carrying `answers` (a list of seqs, written by
+    `say`) closes exactly those turns; `answers: []`, a status update, closes none. A turn with no
+    `answers` field (every turn written before the field existed, and turns from paths that do
+    not set it) keeps the old reading: speaking closes everything said before it.
     """
     from datetime import datetime, timezone, timedelta
-    turns = recent(instance, conv_id, limit=200)
-    turns = [t for t in turns if isinstance(t, dict)]
-    if not turns or turns[-1].get("from") == me:
-        return []
-    last_mine = max((i for i, t in enumerate(turns) if t.get("from") == me), default=-1)
-    tail = turns[last_mine + 1:]
+    tail = open_turns(recent(instance, conv_id, limit=200), me)
     if not tail:
         return []
     try:
@@ -1167,7 +1191,7 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
         # and transcriber noise. It is shown as what it is: something the mic picked up.
         music = _music_notes(turns)
         lines = [(f"- **the mic picked up** ({t['ts']}){music.get(t.get('seq'), '')}" if t.get("via") == "voice" else
-                  f"- **{t['from']}{' (you)' if t.get('from') == me else ''}** ({t['ts']})"
+                  f"- **{t['from']}{' (you)' if t.get('from') == me else ''}** (seq {t.get('seq')}, {t['ts']})"
                   + _provenance_tag(t))
                  + (_refuted_mark(t.get("text", ""), refuted) if t.get("from") == me else "")
                  + f": {_shown_text(t, _cap_for(t, me, answered_upto, turn_chars, answered_cap), m['id'])}"
@@ -1201,6 +1225,16 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
             lines.append(f"\n_The last word here is {last['from']}'s (seq {last.get('seq')}, "
                          f"{last['ts']}); you have not spoken since. Already shown to you — "
                          f"still yours to answer or to leave._")
+        elif turns and [t for t in open_turns(turns, me) if t.get("via") != "voice"]:
+            # YOUR LAST WORD DID NOT ANSWER THEM (#675). The being spoke last, but its turns named
+            # no answer to these, so "nothing here is owed by you" below would be false.
+            still = [t for t in open_turns(turns, me) if t.get("via") != "voice"]
+            seqs = ", ".join("seq " + str(t.get("seq")) for t in still)
+            who = ", ".join(sorted({t["from"] for t in still}))
+            lines.append(f"\n_You spoke last here, but no turn of yours named {seqs} ({who}) as "
+                         f"answered. If you answered "
+                         f"it, nothing more is needed in words: the next say can carry answers. "
+                         f"Otherwise it is still yours to answer or to leave._")
         elif turns:
             # THE LAST WORD IS THE BEING'S OWN, and nothing used to say so. Without this line
             # the being read a transcript ending in an unanswered question and supplied the

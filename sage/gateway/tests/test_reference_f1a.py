@@ -705,6 +705,36 @@ def test_a_missed_edit_anchor_says_where_it_stopped_matching():
     assert f.read_text() == before
 
 
+def test_a_todo_view_since_suffix_in_old_is_named_as_the_windows_not_the_files():
+    """#282: todo_view shows `- [ ] <text> (since <date> UTC)`; the file holds `- [ ] <text>`.
+    mcnugget-being sent the shown line as old= in 24 of 124 memory_edits (16 refused, none
+    changed the file). The refusal says the suffix is the window's and names the real line."""
+    disp, root = _disp()
+    f = Path(root) / "todo.md"
+    before = ("# todo\n- [ ] Await next instructions or new items in inbox.\n"
+              "- [ ] Verify that the three contradictions are resolved\n")
+    f.write_text(before)
+    shown = "- [ ] Verify that the three contradictions are resolved (since 2026-11-22 07:37 UTC)"
+    r = disp(BeingIntent("memory_edit", {"path": "todo.md", "old": shown,
+                                         "new": "- [x] Verify that the three contradictions are resolved"}),
+             _ALLOW)
+    assert not r.ok and "not in 'todo.md'" in r.error, r.error
+    assert "(since 2026-11-22 07:37 UTC)" in r.error and "todo window adds" in r.error, r.error
+    assert "your first line is line 3: '- [ ] Verify" in r.error, r.error
+    assert f.read_text() == before
+    # Indented in the window, or with the Z form: still named.
+    r = disp(BeingIntent("memory_edit", {"path": "todo.md",
+                                         "old": "  - [ ] Await next instructions or new items in inbox. (since 2026-11-22T07:37Z)",
+                                         "new": "x"}), _ALLOW)
+    assert not r.ok and "your first line is line 2" in r.error, r.error
+    # A suffix on a line the file does not hold at all falls back to the ordinary hint.
+    r = disp(BeingIntent("memory_edit", {"path": "todo.md",
+                                         "old": "- [ ] Something never written (since 2026-11-22 07:37 UTC)",
+                                         "new": "x"}), _ALLOW)
+    assert not r.ok and "todo window adds" not in r.error, r.error
+    assert f.read_text() == before
+
+
 def test_memory_edit_by_line_number_deletes_the_lines_it_names():
     """2026-09-21 19:01Z: cbp-being called memory_edit with `old_line: "411"`, by line number,
     the way it reads files and the way every seat answer names a fix. Text mode asked it to

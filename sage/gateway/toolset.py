@@ -252,6 +252,7 @@ LEAN_KEEP = frozenset({("run", "data"), ("request_run", "rerun"), ("memory_read"
     ("retire_thread", "settled"),  # picks which settled entries leave with the thread; 'all' takes every one named
     # CARRIER (legion/mission-artifact) parameters main does not have, classified by the same rule:
     ("memory_write", "mode"),      # 'replace' overwrites the file; a closed set written as prose
+    ("say", "answers"),            # closes the turns it names; a misfilled seq closes a question nobody answered
 })
 # Every other optional parameter was REVIEWED and its prose may go: free text the being writes in
 # its own words, or a read-only selector whose misfill costs a re-read, not a change. A parameter

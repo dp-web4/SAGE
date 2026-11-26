@@ -53,7 +53,9 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 # record. Refusing is not distrust: it may disagree anywhere else, and that record is wanted.
 # settled_seat_notes.jsonl is the seat's later word beside the being's settled entries (being_settled.SEAT_NOTES):
 # a being that could write it could make its seat appear to have said something, or erase that it did.
-SEAT_OWNED = ("entrustment.md", "settled_seat_notes.jsonl")
+# scope_rulings.jsonl is how its scope requests were ruled, kept after hestia's list drops them (scope_rulings): the
+# ruler's word, which a being that could edit it could rewrite.
+SEAT_OWNED = ("entrustment.md", "settled_seat_notes.jsonl", "scope_rulings.jsonl")
 # output_stream.jsonl (and its one older copy) is the harness's live record of what the model produced (being_stream):
 # what dp and the seat watch the being say as it says it, so it is the harness's to write, not the being's.
 STREAM_OWNED = ("output_stream.jsonl", "output_stream.jsonl.1")
@@ -706,6 +708,42 @@ def _which_copy(text: str, line: int) -> str:
     return note
 
 
+def _splice_note(text: str, idx: int, old: str) -> str:
+    """For an old= matched at text[idx:] that is only part of its line: what stays around the new
+    text, for a refusal when the spliced line does not parse. "" when old is the whole line (past
+    its indentation), or ends in a newline.
+
+    THE REFUSAL BLAMED TEXT THE BEING NEVER WROTE. cbp-being, 2026-11-16 22:54Z: a one-line old
+    matched the start of a longer line, so that line's tail stayed after the new text and the
+    result did not parse. The refusal said Python could not read line 1 of its text and quoted
+    the spliced line. A second try with a multi-line new was refused the same way; then it
+    stored a memory concluding that memory_edit takes only single-line edits. The cause was the
+    rest of the line its old matched, not its text.
+
+    WHERE IN THE LINE (NOVA's HOLD on #746): old can match the middle of a line too, and
+    "matched the start" is then false. The start wording is used only when everything before
+    the match is indentation; otherwise the note gives the column and both sides."""
+    if old.endswith("\n") or "\n" in old.strip("\n"):
+        return ""
+    ls = text.rfind("\n", 0, idx) + 1
+    end = idx + len(old)
+    before, rest = text[ls:idx], text[end:].split("\n", 1)[0]
+    at = text.count("\n", 0, idx) + 1
+    fix = (f"your new text was not the problem, and memory_edit does take several lines. To "
+           f"replace the whole line, call memory_edit with start_line={at} end_line={at}, old "
+           f"set to that line, and new set to the line you want. ")
+    if not before.strip():
+        if not rest:
+            return ""
+        return (f"Your old text matched only the start of line {at}, so the rest of that line, "
+                f"{rest!r}, stayed after your new text. That spliced line is what Python could not "
+                f"read; " + fix)
+    col = idx - ls + 1
+    kept = f"{before!r} stayed before your new text" + (f" and {rest!r} after it" if rest else "")
+    return (f"Your old text matched part of line {at}, starting at column {col}, not the whole "
+            f"line: {kept}. That spliced line is what Python could not read; " + fix)
+
+
 def _defs_removed(removed: str) -> str:
     """Name every def/class line a removal took, since a quote can be cut but a name list is short."""
     names = [ln.strip().split("(")[0].rstrip(":") for ln in removed.splitlines()
@@ -967,6 +1005,23 @@ def _where_it_diverged(text: str, old: str, width: int = 160) -> str:
         import difflib
         import re
         bare = [line.strip() for line in have]
+        # THE TODO VIEW'S SUFFIX IS NOT FILE TEXT (#282). todo_view shows each open item as
+        # `- [ ] <text> (since <date> UTC)`; the file holds `- [ ] <text>`. A being that edits
+        # the line it was shown sends the suffix too. Measured on mcnugget-being 2026-09-28 to
+        # 2026-11-22: 24 of its 124 memory_edits carried it, 16 were refused, none changed the
+        # file. The closest-line hint showed both strings, but the difference was ~27 chars at
+        # the end of a long line, and the refusal never said where they came from. Say it.
+        since = re.compile(r"\s*\(since 20\d\d-\d\d-\d\d[ T]\d\d:\d\d(?: ?UTC|Z)?\)\s*$")
+        if since.search(want[0]):
+            plain = since.sub("", want[0])
+            hits = [i for i, line in enumerate(have) if line == plain] or \
+                   [i for i, b in enumerate(bare) if b and b == plain.strip()]
+            if hits:
+                n = hits[0] + 1
+                return (f" Your first line ends in {since.search(want[0]).group(0).strip()!r}. "
+                        f"Your todo window adds that when it shows an item; it is not in the file. "
+                        f"Without it, your first line is line {n}: {cut(have[n - 1])!r}. Send old "
+                        f"without the '(since ...)' ending on any of its lines.")
         # A def/class line is anchored by its NAME, which is the few characters difflib weighs
         # least. Measured 2026-10-08 on cbp-being: it sent 'def main(latent_dim: int = 100):',
         # the closest line was 'def create_decoder(latent_dim: int = 100):' (line 28), and its
@@ -1638,6 +1693,12 @@ class ReferenceF1aDispatcher:
                 f"{p.name} is yours to read and not to edit: the harness writes into it what your "
                 "model calls produce, as they produce it, and others watch it to see you working. "
                 "Nothing was changed")
+        if _home and p.name == "scope_rulings.jsonl":
+            raise ValueError(
+                "scope_rulings.jsonl is yours to read and not to edit: it is how your scope "
+                "requests were ruled, kept by your seat in the ruler's own words. Nothing was "
+                "changed. If you disagree with a ruling, say so in your journal, in a "
+                "conversation, or in a new request with your reason")
         if _home and p.name in SEAT_OWNED:
             raise ValueError(
                 f"{p.name} is yours to read and not to edit: it is what you were entrusted "
@@ -2581,7 +2642,9 @@ class ReferenceF1aDispatcher:
                         f"range, and appears there once)")
                 if str(p).endswith(".py"):
                     what += _which_copy(text, s0 + removed[:removed.find(old)].count("\n"))
-                return self._commit_edit(p, path, text, new_text, what, "", replacement=new)
+                splice = _splice_note(text, len("".join(lines[:s0 - 1])) + removed.find(old), old)
+                return self._commit_edit(p, path, text, new_text, what, "", replacement=new,
+                                         splice=splice)
             if old and inner > 1:
                 where = f"line {s0}" if s0 == s1 else f"lines {s0}-{s1}"
                 return ResultEnvelope(ok=False, error=(
@@ -2760,8 +2823,12 @@ class ReferenceF1aDispatcher:
         what = f"replaced 1 occurrence, on line {at}"
         if str(p).endswith(".py"):
             what += _which_copy(text, at)
+        # A SINGLE-LINE OLD THAT STOPS MID-LINE IS LEFT ALONE ABOVE (it can be a token swap),
+        # but if the spliced line then fails to parse, the refusal must say the splice did
+        # it (see _splice_note).
+        splice = _splice_note(text, text.index(old), old)
         return self._commit_edit(p, path, text, text.replace(old, new, 1),
-                                 what, "", replacement=new)
+                                 what, "", replacement=new, splice=splice)
 
     def _earlier_edit(self, path: str, new: str) -> Optional[str]:
         """When the being's own landed memory_edit of `path` carried `new` (stripped, as all or part
@@ -2779,7 +2846,8 @@ class ReferenceF1aDispatcher:
         return None
 
     def _commit_edit(self, p, path: str, text: str, new_text: str, what: str,
-                     gone: str, replacement: Optional[str] = None) -> ResultEnvelope:
+                     gone: str, replacement: Optional[str] = None,
+                     splice: str = "") -> ResultEnvelope:
         """Write an edit atomically and say what it did. Shared by the text and line modes.
 
         THE SAME CHECK AS THE APPEND PATH, BECAUSE THE PATTERN WALKED TO THIS DOOR. Guarding
@@ -2810,6 +2878,15 @@ class ReferenceF1aDispatcher:
             # SAGE #427). Only text Python reads as invalid, not as unfinished, is refused.
             if why and _is_unfinished_code(_changed_lines(text, new_text) or replacement):
                 why = ""
+            if why and splice:
+                # Not `why`: it says "line 1 of your text" and quotes the spliced line as if the
+                # being wrote it, the very reading this note replaces. Show the result as the
+                # file's lines instead.
+                after = _changed_lines(text, new_text).rstrip("\n")
+                after = after if len(after) <= 400 else after[:400] + "..."
+                return ResultEnvelope(ok=False, error=(
+                    f"memory_edit refused, nothing was changed in {p.name}. {splice}With the "
+                    f"splice, the file would have read:\n{after}"))
             if why:
                 return ResultEnvelope(ok=False, error=(
                     f"memory_edit refused, nothing was changed in {p.name}. {why} A note about "

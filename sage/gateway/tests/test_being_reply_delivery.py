@@ -69,6 +69,47 @@ def test_a_say_into_the_conversation_or_an_acting_explore_marks_it():
     assert out2["explore_acted"] is True and out2["marked"]
 
 
+def _late_turn():
+    """A turn that arrives after the beat took its shown snapshot, selected at reflect."""
+    inst = _instance_with_dp_question()
+    shown = conv.latest_seqs(inst, "cbp-being")
+    conv.append(inst, "dp", speaker="dp", text="and what did you find?")
+    return inst, shown, SimpleNamespace(cid="dp", seq=shown["dp"] + 1)
+
+
+def test_a_late_turn_answered_at_reflect_is_not_listed_as_unanswered_again():
+    inst, shown, sel = _late_turn()
+    say = _res(("say", {"to": "dp", "text": "this"}, True))
+    out = mark_conversations_after_beat(inst, "cbp-being", shown, _res(), [None, say, None],
+                                        selected=sel, answering=(say, None))
+    assert out["marked"] == {"dp": sel.seq}
+    assert conv.awaiting(inst, "dp", "cbp-being") == []
+
+
+def test_a_turn_arriving_after_the_selection_stays_unseen():
+    inst, shown, sel = _late_turn()
+    say = _res(("say", {"to": "dp", "text": "this"}, True))
+    conv.append(inst, "dp", speaker="dp", text="one more thing")
+    mark_conversations_after_beat(inst, "cbp-being", shown, _res(), [None, say, None],
+                                  selected=sel, answering=(say, None))
+    assert [t["text"] for t in conv.awaiting(inst, "dp", "cbp-being")] == ["one more thing"]
+
+
+def test_a_late_turn_stays_waiting_unless_an_answering_phase_spoke_into_its_conversation():
+    for answering in ((_res(), None),                                                 # silent
+                      (_res(("say", {"to": "other", "text": "x"}, True)),),            # elsewhere
+                      (_res(("say", {"to": "dp", "text": "x"}, False)),)):             # refused
+        inst, shown, sel = _late_turn()
+        mark_conversations_after_beat(inst, "cbp-being", shown, _res(), [None], selected=sel, answering=answering)
+        assert [t["seq"] for t in conv.awaiting(inst, "dp", "cbp-being")][-1] == sel.seq, answering
+    # An explore say came before the selection, so it answers nothing the selection named.
+    inst, shown, sel = _late_turn()
+    early = _res(("say", {"to": "dp", "text": "x"}, True))
+    out = mark_conversations_after_beat(inst, "cbp-being", shown, early, [None], selected=sel, answering=(None,))
+    assert out["marked"] == shown
+    assert [t["seq"] for t in conv.awaiting(inst, "dp", "cbp-being")] == [sel.seq]
+
+
 def test_a_stale_outage_claim_meets_the_beings_own_successful_remember():
     inst = Path(tempfile.mkdtemp(prefix="contra-"))
     (inst / "todo.md").write_text("2026-09-15 05:02 UTC\n- [ ] Determine root cause of MCP server at "
@@ -342,6 +383,24 @@ def test_the_beat_shows_a_new_ruling_verbatim_once():
     assert appeals_block(old, {}) == ("", {}), "a daemon without the tool renders nothing"
 
 
+def test_an_appeal_rulers_reason_reaches_the_being_whole():
+    from sage.gateway.heartbeat import appeals_block, RULER_NOTE_MAX
+
+    def block(rationale):
+        rows = {"appeals": [{"deny_hash": "c29e24e65f21aaaa", "status": "ruled",
+                             "ruling": {"verdict": "deny stands", "adjudicator": "claude-code",
+                                        "ruled_at": "2026-09-16T04:38:30Z", "rationale": rationale}}]}
+        return appeals_block(SimpleNamespace(_call=lambda name, args: rows), {})[0]
+
+    reason = "Deny stands. " + "The file is not on this machine. " * 30
+    assert 700 < len(reason.strip()) < RULER_NOTE_MAX
+    assert reason.strip() in block(reason), "a reason under the cap arrives whole, not cut at 700"
+    long_ = "y" * (RULER_NOTE_MAX + 7)
+    text = block(long_)
+    assert text.split('Their reason: "', 1)[1].split('"', 1)[0] == "y" * RULER_NOTE_MAX + "…"  # mark outside
+    assert '[7 more characters: memory_read {"path": "hestia://appeal/c29e24e65f21aaaa"}' in text
+
+
 def test_a_pointer_read_uses_the_exact_lookup_first():
     mine = {"appeals": [{"deny_hash": "c29e24e65f21aaaa", "appeal_entry": "e1", "status": "ruled",
                          "ruling": {"verdict": "deny stands", "adjudicator": "claude-code",
@@ -352,6 +411,26 @@ def test_a_pointer_read_uses_the_exact_lookup_first():
     assert "DENY STANDS" in out and "the path does not exist" in out
     assert "still open" in d._resolve_pointer("hestia://appeal/0000aaaa1111")
     assert "no appeal about deny" in d._resolve_pointer("hestia://appeal/ffffffffffff")
+
+
+def test_a_capped_appeal_list_never_says_none_was_filed():
+    """#814: hestia_my_appeals clamps to 100 rows with no offset or hash filter. A miss on a full
+    page is not evidence that no appeal was filed; it falls through to the history scan."""
+    page = {"appeals": [{"deny_hash": f"{i:016x}", "appeal_entry": f"e{i}", "status": "ruled",
+                         "ruling": {"verdict": "deny stands"}} for i in range(100)]}
+    old = "abcdef0123456789"
+    ruling = {"entries": [{"eventType": "adjudication", "timestamp": "2026-09-16T01:20:00Z",
+                           "eventData": {"about_deny_hash": old, "upheld": False,
+                                         "adjudicator": "codex", "rationale": "an older ruling"}}]}
+    found = _disp_with({"hestia_my_appeals": page, "hestia_query_history": ruling})
+    out = found._resolve_pointer(f"hestia://appeal/{old}#ruled")
+    assert "DENY STANDS" in out and "an older ruling" in out, out
+    missing = _disp_with({"hestia_my_appeals": page, "hestia_query_history": {"entries": []}})
+    out = missing._resolve_pointer(f"hestia://appeal/{old}")
+    assert "none was filed" not in out and "does NOT mean" in out, out
+    # one short of the cap is the whole list, so the definite answer stays
+    short = _disp_with({"hestia_my_appeals": {"appeals": page["appeals"][:99]}})
+    assert "none was filed" in short._resolve_pointer(f"hestia://appeal/{old}")
 
 
 def _disp_with_resource(body, member="cbp-being"):

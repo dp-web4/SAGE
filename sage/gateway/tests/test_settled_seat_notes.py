@@ -57,6 +57,30 @@ def test_settled_again_or_reopened_the_being_has_answered_and_the_note_goes(tmp_
     assert "disagreed" not in st.render(tmp_path)
 
 
+def test_the_act_that_drops_a_note_quotes_it_once(tmp_path):
+    """sprout-being, 2026-11-22: an entry with a seat note was reopened with a reason the note contradicted, and the
+    receipt said only "reopened". The note goes from the beat at that act, so its receipt quotes it, once."""
+    seq = _home(tmp_path)
+    st.seat_note(tmp_path, "s1", SEAT, seq, SAYS)
+    ok, msg, _ = st.settle(tmp_path, {"id": "s1", "reopen": "true", "why": "the seat confirmed it"}, now=60)
+    assert ok and msg.startswith("reopened s1") and f"{SEAT} at seq {seq}" in msg and SAYS in msg, msg
+    assert "not shown from now on" in msg, msg
+    st.settle(tmp_path, FALSE_WORLD, now=120)                         # s2, no note
+    ok, msg, _ = st.settle(tmp_path, {"id": "s2", "reopen": "true"}, now=180)
+    assert ok and SAYS not in msg and "seat's note" not in msg, "a note bound to the old s1 is not s2's"
+    seq2 = _home(tmp_path / "b")
+    st.seat_note(tmp_path / "b", "s1", SEAT, seq2, SAYS)
+    ok, msg, _ = st.settle(tmp_path / "b", {"id": "s1", "question": FALSE_WORLD["question"],
+                                            "answer": "the operator's account"}, now=60)
+    assert ok and "now reads" in msg and SAYS in msg, "settled again, the note it answered is quoted too"
+    seq3 = _home(tmp_path / "c")
+    for i in range(st.SEAT_NOTES_SHOWN + 2):
+        st.seat_note(tmp_path / "c", "s1", SEAT, seq3, f"note {i}")
+    ok, msg, _ = st.settle(tmp_path / "c", {"id": "s1", "reopen": "true"}, now=60)
+    assert "note 0" not in msg and f"note {st.SEAT_NOTES_SHOWN + 1}" in msg, msg     # the newest are quoted
+    assert "(2 earlier not quoted)" in msg, msg                                       # and the rest are counted
+
+
 def test_without_a_note_nothing_is_added(tmp_path):
     _home(tmp_path)
     block = st.render(tmp_path)

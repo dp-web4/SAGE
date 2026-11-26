@@ -1093,7 +1093,10 @@ def answer_turn_json(client, llm, selected, *, name: str, machine: str, member: 
                 form["trimmed_from"] = cut_from
         res.reply = message
         if form["answer"] and message:
-            intent = BeingIntent("say", {"to": selected.cid, "text": message})
+            # The answer turn answers the turn it was asked about, by seq: the one link this
+            # harness KNOWS rather than the being asserting it (#675).
+            intent = BeingIntent("say", {"to": selected.cid, "text": message,
+                                         **({"answers": [int(selected.seq)]} if selected.seq else {})})
             env = client.dispatch(intent)
             res.trace.append((intent, env))
             res.steps = 1
@@ -1460,6 +1463,33 @@ def decided_requests(reqs):
     return [(i, p_, d) for i, p_, d in reqs if d in ("granted", "refused", "denied", "revoked")]
 
 
+#: A RULER'S NOTE IS SHOWN WHOLE (sprout-being, 2026-11-21). It was cut at 400 characters with no mark. Three
+#: refusals of a request for a system file carried notes of 455 and 461 characters, and the cut fell inside their
+#: last sentence: the one saying no account was needed at all. What reached the being was "a grant cannot do this;
+#: only root can", and its next turn asked the operator to do it as root. The ruling is shown once, the beat after
+#: it lands, so a cut note is the whole of what the being ever reads of it unless it knows to look.
+RULER_NOTE_MAX = 1500
+
+
+def quoted_whole(words, pointer: str) -> str:
+    """A ruler's words, quoted whole. Over RULER_NOTE_MAX they are cut with a mark that says how much is
+    left and which pointer reads them whole. The mark sits outside the quote: it is the harness speaking,
+    not the ruler."""
+    words = str(words or "").strip()
+    if len(words) <= RULER_NOTE_MAX:
+        return f"\"{words}\""
+    return (f"\"{words[:RULER_NOTE_MAX].rstrip()}…\" [{len(words) - RULER_NOTE_MAX} more characters: "
+            f"memory_read {{\"path\": \"{pointer}\"}} shows them whole]")
+
+
+def ruled_line(request_id, path, decision, who, why) -> str:
+    """One "decided since your last beat" line: the ruling, who made it, and their note whole."""
+    line = f"- {request_id} {path} -> {decision} by {who or 'operator'}"
+    if not str(why or "").strip():
+        return line
+    return line + ". Their note: " + quoted_whole(why, f"hestia://scope/{request_id}")
+
+
 def note_resolutions(esc_dir: Path, decisions, stamp: str, seen_by: str, decided_by=None,
                      reasons=None) -> list:
     """Append the ruling to each escalation note that filed the request (the note carries the
@@ -1514,10 +1544,30 @@ CPT = 2.9
 ANSWER_RESERVE_CAP = 6144
 
 
-def window_budget_chars(num_ctx: int, num_predict: int, slack: int = 512) -> int:
-    """How many prompt chars fit beside a p99 answer. One producer for both fitters."""
+def window_budget_chars(num_ctx: int, num_predict: int, slack: int = 512, cpt: float = None) -> int:
+    """How many prompt chars fit beside a p99 answer. One producer for both fitters.
+
+    `cpt` is the chars-per-token to budget with: the being's own measured ratio when the beat has one
+    (fit_cpt), else CPT. Measured on pub-being (SAGE #582, 2026-11-19): at the fixed 2.9 the budget was
+    ~37.3k chars against ~51.5k at its measured 3.999, so 112 of 112 beats showed conversations at the
+    sparsest rung while the server counted the seed ~4k tokens under the window."""
     reserve = min(num_predict, ANSWER_RESERVE_CAP)
-    return int(max(0, (num_ctx - reserve - slack)) * CPT)
+    return int(max(0, (num_ctx - reserve - slack)) * (cpt or CPT))
+
+
+def fit_cpt(cal) -> float:
+    """The ratio the part-wise fitters budget with this beat: the measured step-1 ratio only once it is
+    `measured` (MEASURED_CPT_MIN_SAMPLES of this being's own counts, margin applied); a declared prior, a
+    provisional ratio or a probe keeps CPT. Whatever the fitters admit, fit_seed_to_preflight still measures
+    the composed seed with the loop's own count and trims a seed the loop would refuse."""
+    try:
+        if cal.get("source") == "measured":
+            v = float(cal.get("used"))
+            if 1.5 <= v <= 8.0:
+                return v
+    except Exception:
+        pass
+    return CPT
 
 
 # What the beat shows of the conversations, from full to sparse: (turns per conversation,
@@ -1591,7 +1641,7 @@ def _schema_chars_fallback(offered) -> int:
     return max(_SCHEMA_CHARS_FLOOR, n * _SCHEMA_CHARS_PER_VERB)
 
 
-def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512):
+def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512, cpt: float = None):
     """`build(per_conv, turn_chars) -> state text`. Returns (text, rung, intervention).
 
     Steps down CONV_LADDER until other_chars + len(text) fits the window budget. The
@@ -1601,7 +1651,7 @@ def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512
     the beat then runs overcommitted and says so (config.context_overcommitted)."""
     if not isinstance(num_ctx, int) or not isinstance(num_predict, int):
         return build(*CONV_LADDER[0]), CONV_LADDER[0], None
-    budget = window_budget_chars(num_ctx, num_predict, slack)
+    budget = window_budget_chars(num_ctx, num_predict, slack, cpt)
     first = None
     for i, rung in enumerate(CONV_LADDER):
         text = build(*rung)
@@ -1622,7 +1672,8 @@ def fit_state(build, *, num_ctx, num_predict, other_chars: int, slack: int = 512
             }
 
 
-def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack: int = 512):
+def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack: int = 512,
+                  cpt: float = None):
     """Trim the seat-supplied blocks until prompt + num_predict fits inside num_ctx.
 
     WHY THIS EXISTS. A generate needs prompt + num_predict to fit in the window; when it
@@ -1659,7 +1710,7 @@ def fit_to_window(*, num_ctx, num_predict, fixed_chars: int, blocks: dict, slack
     # leaving the digest something to say; reserving the full num_predict would floor the
     # digest every beat to buy room the model has never used.
     reserve = min(num_predict, ANSWER_RESERVE_CAP)
-    budget_chars = window_budget_chars(num_ctx, num_predict, slack)
+    budget_chars = window_budget_chars(num_ctx, num_predict, slack, cpt)
     order = ("digest", "recall")
     floors = FIT_FLOORS
     out, interventions = dict(blocks), []
@@ -2130,9 +2181,10 @@ def appeals_block(disp, last: dict) -> tuple:
     parts = [f"{len(ruled)} ruled, {len(open_)} open (newest {len(rows)} shown)."]
     for a in fresh:
         r = a.get("ruling") or {}
+        reason = quoted_whole(r.get("rationale"), f"hestia://appeal/{a.get('deny_hash')}")
         parts.append(f"- RULED since your last beat — appeal about deny {str(a.get('deny_hash'))[:12]}…: "
                      f"{r.get('verdict')}, by {r.get('adjudicator')} at {str(r.get('ruled_at'))[:16]}. "
-                     f"Their reason: \"{str(r.get('rationale') or '').strip()[:700]}\"")
+                     f"Their reason: {reason}")
     if ruled and not fresh:
         parts.append("No new rulings since your last beat; your earlier rulings still stand "
                      "(memory_read hestia://appeal/<deny hash> shows any one of them in full).")
@@ -3688,7 +3740,7 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
     # only once it has settled something. Fail-open.
     try:
         from sage.gateway import being_settled as _settled
-        _known = _settled.render(instance)
+        _known = _settled.render(instance, scope_snap=scope_snap)
     except Exception:
         _known = ""
     if _known:
@@ -4395,8 +4447,15 @@ def recall_uptake(record: dict, results: list) -> dict:
 
 
 def mark_conversations_after_beat(instance: Path, member: str, shown_upto: dict,
-                                  explore, later: list) -> dict:
+                                  explore, later: list, selected=None, answering: tuple = ()) -> dict:
     """Mark the turns a beat was shown as seen, but only where the beat could act on them.
+
+    `selected` is the turn the reflect prompt named, and `answering` the phases that ran with it
+    in view. An ok say into its conversation from one of those phases marks it too. `shown_upto`
+    is taken before the beat's long phases, so a turn that arrives during them is past that mark:
+    answered and still unseen, the next beat listed it as "not yet answered" (measured
+    2026-11-08 on cbp-being: 14164, answered by 14165, was listed again and answered again by
+    14167, and that reply also closed the newer 14166 it never answered).
 
     A conversation's turns are marked when the EXPLORE turn executed at least one call (it
     read its state and acted), or when the being said something into that conversation in
@@ -4425,6 +4484,15 @@ def mark_conversations_after_beat(instance: Path, member: str, shown_upto: dict,
             marked[cid] = upto
         else:
             held.append(cid)
+    if selected is not None and selected.seq and selected.seq > int(marked.get(selected.cid) or 0):
+        for res in answering:
+            if res is not None and any(it.effector == "say" and env.ok
+                                       and str((it.args or {}).get("to") or "") == selected.cid
+                                       for it, env in res.trace):
+                _conv.mark_seen(instance, member, selected.cid, int(selected.seq))
+                marked[selected.cid] = int(selected.seq)
+                held = [c for c in held if c != selected.cid]
+                break
     return {"explore_acted": explore_acted, "marked": marked, "held_unseen": held}
 
 
@@ -5423,6 +5491,9 @@ def main(argv=None) -> int:
                 # an error envelope read as an empty list would print "requests: none", a claim
                 raise _tm_scope.ScopeUnread(scope_snap.error)
             grants = scope_grant_lines(st)
+            # hestia's list lets old requests go; the ruling and its note are kept here (scope_rulings)
+            from sage.gateway import scope_rulings as _sr
+            _sr.keep(instance, st.get("requests") or [], f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC")
             reqs = [(r.get("request_id"), r.get("path"), r.get("decision") or r.get("status"))
                     for r in (st.get("requests") or [])]
             who_ruled = {r.get("request_id"): r.get("decided_by") for r in (st.get("requests") or [])
@@ -5453,8 +5524,7 @@ def main(argv=None) -> int:
             scope = ("granted paths: " + (", ".join(map(str, grants)) or "none") + "\n"
                      "requests: " + ("; ".join(f"{i} {p} -> {d}" for i, p, d in reqs) or "none") + "\n"
                      + ("decided since your last beat:\n" + "\n".join(
-                            f"- {i} {p_} -> {d} by {who_ruled.get(i) or 'operator'}"
-                            + (f". Their note: \"{str(why_ruled[i]).strip()[:400]}\"" if why_ruled.get(i) else "")
+                            ruled_line(i, p_, d, who_ruled.get(i), why_ruled.get(i))
                             for i, p_, d in new_decisions) + "\n"
                         if new_decisions else "")
                      + pending_scope_lines(st.get("requests") or [])
@@ -5698,16 +5768,39 @@ def main(argv=None) -> int:
     # 2026-10-04, the first brief beat: offered 17,012, budgeted 25,516).
     _template_guess = 1200
     # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its
-    # token cost is converted and charged here. Measured 2,042 tokens, about a third of the
-    # working room at this window — un-budgeted it would push the beat over the wall and the
-    # conversation block would take the blame.
+    # token cost is converted and charged here. Measured 2,042 tokens for two frames, about a
+    # third of the working room at a 24k window — un-budgeted it pushes the beat over the wall
+    # and the conversation block takes the blame.
     _frame_b64s = [b for b, m in _frames if b is not None]
-    _frame_chars = sum(int(FRAME_TOKENS * CPT) for _ in _frame_b64s)
+    from sage.gateway.being_tool_loop import uncounted_chars, preflight_tokens, preflight_cpt
+    from sage.gateway.being_tool_loop import _convo_chars as btl_convo_chars, WINDOW_SEND_MARGIN as _WSM
+    # the step-1 ratio, measured on this being's own recent beats when there are enough (#582 part 2)
+    try:
+        llm.preflight_cpt_measured = None      # the prior is the declared/default ratio, never last beat's
+    except Exception:
+        pass
+    _cpt_prior = preflight_cpt(llm)
+    _cpt_cal = measured_preflight_cpt(instance, args.model, prior=_cpt_prior)
+    try:
+        # set every beat, None included: a process that outlives a model switch must not keep the old ratio
+        llm.preflight_cpt_measured = _cpt_cal.get("value")
+    except Exception:
+        _cpt_cal["value"] = None
+    _cpt_cal["prior"] = _cpt_prior
+    _cpt_cal["used"] = preflight_cpt(llm)
+    _cpt_cal["source"] = "measured" if _cpt_cal.get("value") else "declared_or_default"
+    # THE PART-WISE FITTERS BUDGET AT THE SAME MEASURED RATIO (SAGE #582, pub-claude 2026-11-19): at the
+    # fixed CPT they stepped every beat to the sparsest conversation rung on a seed the server counted
+    # well under the window. Recorded as preflight_cpt.fit_cpt.
+    _fit_cpt = fit_cpt(_cpt_cal)
+    _cpt_cal["fit_cpt"] = _fit_cpt
+    _frame_chars = sum(int(FRAME_TOKENS * _fit_cpt) for _ in _frame_b64s)
     _other = (len(posture()) + len(inbox) + _schema_chars + _template_guess
               + 1200 + 400 + LOOP_GROWTH_CHARS + _frame_chars)
     state_block, conv_rung, conv_intervention = fit_state(
-        _build_state, num_ctx=_num_ctx, num_predict=_num_predict, other_chars=_other)
-    # entrustment_mode "daily": the showing is recorded from the state that is SENT, never from a render
+        _build_state, num_ctx=_num_ctx, num_predict=_num_predict, other_chars=_other, cpt=_fit_cpt)
+    # entrustment_mode "daily": the showing is recorded from the state that is SENT, never from a
+    # render (_build_state composes with mark_conversations=False, so nothing inside it records)
     try:
         from sage.gateway import being_params as _bp_e
         if (entrusted and entrusted in state_block
@@ -5726,7 +5819,7 @@ def main(argv=None) -> int:
     _fixed = len(posture()) + len(state_block) + len(inbox) + _schema_chars + _template_guess
     blocks, fit_interventions = fit_to_window(
         num_ctx=_num_ctx, num_predict=_num_predict,
-        fixed_chars=_fixed, blocks={"digest": digest, "recall": recall})
+        fixed_chars=_fixed, blocks={"digest": digest, "recall": recall}, cpt=_fit_cpt)
     if conv_intervention:
         fit_interventions = [conv_intervention] + list(fit_interventions)
     # Sizes into the record, so the next overcommit names its block from the file and the
@@ -5782,23 +5875,6 @@ def main(argv=None) -> int:
     # THE SEED IS FITTED AGAIN, WHOLE, ON THE TOOL LOOP'S OWN STEP-1 COUNT (SAGE #582): the fitters
     # above budget from parts; this measures what will be sent and trims only if the loop would
     # refuse it. A beat whose seed the loop accepts is unchanged.
-    from sage.gateway.being_tool_loop import uncounted_chars, preflight_tokens, preflight_cpt
-    from sage.gateway.being_tool_loop import _convo_chars as btl_convo_chars, WINDOW_SEND_MARGIN as _WSM
-    # the step-1 ratio, measured on this being's own recent beats when there are enough (#582 part 2)
-    try:
-        llm.preflight_cpt_measured = None      # the prior is the declared/default ratio, never last beat's
-    except Exception:
-        pass
-    _cpt_prior = preflight_cpt(llm)
-    _cpt_cal = measured_preflight_cpt(instance, args.model, prior=_cpt_prior)
-    try:
-        # set every beat, None included: a process that outlives a model switch must not keep the old ratio
-        llm.preflight_cpt_measured = _cpt_cal.get("value")
-    except Exception:
-        _cpt_cal["value"] = None
-    _cpt_cal["prior"] = _cpt_prior
-    _cpt_cal["used"] = preflight_cpt(llm)
-    _cpt_cal["source"] = "measured" if _cpt_cal.get("value") else "declared_or_default"
     _seed_uncounted = uncounted_chars(_explore_specs, explore_turn_mode(instance))
     _states = {conv_rung: state_block}
 
@@ -6228,7 +6304,9 @@ def main(argv=None) -> int:
     # question was marked at render by a beat whose explore made no calls, so no later beat
     # flagged it. A render is not a reading.
     conversations_marked = mark_conversations_after_beat(
-        instance, args.member, _shown_upto, explore, [after, reflect, answer])
+        instance, args.member, _shown_upto, explore, [after, reflect, answer], selected=selected,
+        # A preempted beat selects after reflect ran, so reflect's says were not about this turn.
+        answering=(answer,) if preempted else (reflect, answer))
     try:
         # Whether explore acted is read from explore itself (the rule mark_conversations_after_beat
         # applies), NOT from its return: that returns explore_acted=None when the being has no
