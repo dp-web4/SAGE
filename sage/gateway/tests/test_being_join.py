@@ -124,3 +124,38 @@ if __name__ == "__main__":
         if name.startswith("test_") and callable(fn):
             fn(); n += 1; print(f"PASS {name}")
     print(f"\n{n} passed")
+
+
+def test_read_keeps_the_last_characters_exactly_as_the_whole_file_read_did(tmp_path):
+    """being_join._read and heartbeat._read read from the end now; what they return is unchanged, for multi-byte
+    text (the cut can fall inside a character), CRLF and lone CR lines, short files and an absent file."""
+    from sage.gateway import being_join as bj
+    from sage.gateway import heartbeat as hb
+    text = ("ascii line\r\n" + "é ü 漢字 🌱 mixed\n" * 300 + "old mac\rlast line 🌱\n") * 20
+    p = tmp_path / "log.txt"
+    p.write_bytes(text.encode("utf-8"))
+    whole = p.read_text(errors="replace")
+    for limit in (1, 7, 100, 4000, 200000, len(whole) - 1, len(whole), len(whole) + 5):
+        want = whole[-limit:] if len(whole) > limit else whole
+        assert bj._read(p, limit) == want, limit
+        assert hb._read(p, limit) == want, limit
+    assert bj._read(tmp_path / "absent", 10) == "" and hb._read(tmp_path / "absent") == ""
+
+
+def test_read_does_not_load_the_whole_file(tmp_path):
+    """The beat takes the last record of heartbeats.jsonl at every start; on Sprout that file is 179 MB and the
+    whole-file read peaked at ~1.1 GB. A 20 MB file read for its last 200000 characters stays near 1 MB."""
+    import tracemalloc
+    from sage.gateway import being_join as bj
+    p = tmp_path / "heartbeats.jsonl"
+    with open(p, "wb") as f:
+        line = (b'{"t0": 1, "pad": "' + b"x" * 1000 + b'"}\n')
+        for _ in range(20_000):
+            f.write(line)
+        f.write(b'{"t0": 2, "last": true}\n')
+    tracemalloc.start()
+    out = bj._read(p, 200000)
+    peak = tracemalloc.get_traced_memory()[1]
+    tracemalloc.stop()
+    assert out.endswith('{"t0": 2, "last": true}\n')
+    assert peak < 4 * 1024 * 1024, peak
