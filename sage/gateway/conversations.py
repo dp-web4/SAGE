@@ -472,6 +472,88 @@ def open_turns(turns: list, me: str) -> list[dict]:
     return tail
 
 
+# AN ANSWER ARRIVES WITH THE QUESTION IT ANSWERS. Measured on cbp-being 2026-11-26: it asked the operator
+# four questions in one turn (seq 1248, 787 chars), then followed up five times, the last a one-line pointer
+# asking for the answer to seq 1248 (seq 1256). The operator answered at seq 1257, handing the decisions back
+# to the being. That beat ran at the sparsest context-fit rung (2 turns per conversation), so the being saw
+# its own pointer and the answer, and NOT the four questions. The reflect line said, correctly, that the
+# turn "replied to what you asked for" (answers_the_being), but what it had asked was a pointer to a turn
+# it could no longer see. Its reply did not take up the questions, and the next three beats went to an
+# unrelated script. So the turn an answer replies to, and the turns that ask cites by seq, travel WITH the
+# answer, capped, wherever the answer is shown.
+CITED_TURN_CHARS = 900       # per turn; the full turn stays readable (memory_read conversations/<id>.jsonl)
+CITED_MAX = 2                # turns the ask may pull in by seq, newest first
+_SEQ_REF = re.compile(r"(?:\b([A-Za-z][\w.-]*)\s+)?\bseq\s*#?(\d+)\b", re.I)
+
+
+def what_it_answers(instance: Path, conv_id: str, me: str, turn: dict, asks) -> list[dict]:
+    """The being's own ask that `turn` replies to, then up to CITED_MAX earlier turns of THIS
+    conversation that the ask names by seq ("... the answer to dp seq 1248?"). [] when `turn` is
+    the being's own, is a [request_run] result (the seat's reply by construction, often to an older
+    request: see heartbeat.answers_the_being), or follows a being turn that asked nothing.
+
+    `asks(text) -> bool` is heartbeat.turn_expects_reply, passed in so the one place that decides
+    "this asks for something" stays the one place, and this module does not import the heartbeat.
+    A seq prefixed by ANOTHER conversation's id ("cbp-claude seq 17753") is not resolved here."""
+    try:
+        if not isinstance(turn, dict) or turn.get("from") == me:
+            return []
+        if str(turn.get("text") or "").startswith("[request_run]"):
+            return []
+        seq = int(turn.get("seq") or 0)
+        # The last 200 turns hold the ask (answers_the_being looks at 40); the whole record is read only
+        # when the ask cites a seq older than that, since the ladder renders this up to five times a beat.
+        history = [t for t in recent(instance, conv_id, limit=200) if isinstance(t, dict)]
+        mine = [t for t in history if t.get("from") == me and int(t.get("seq") or 0) < seq]
+        if not mine:
+            return []
+        ask = mine[-1]
+        text = str(ask.get("text") or "")
+        if not (text.startswith("[request_run]") or asks(text)):
+            return []
+        other_ids = {m.get("id") for m in listing(instance)} - {conv_id}
+        ask_seq = int(ask.get("seq") or 0)
+        wanted: list[int] = []
+        for m in _SEQ_REF.finditer(text):
+            if m.group(1) and m.group(1) in other_ids:
+                continue
+            n = int(m.group(2))
+            if 0 < n < ask_seq and n not in wanted:
+                wanted.append(n)
+        by_seq = {int(t.get("seq") or 0): t for t in history}
+        if any(n not in by_seq for n in wanted):
+            by_seq = {int(t.get("seq") or 0): t for t in recent(instance, conv_id, limit=10 ** 6)
+                      if isinstance(t, dict)}
+        cited = [n for n in wanted if n in by_seq]
+        cited = sorted(cited, reverse=True)[:CITED_MAX]
+        return [ask] + [by_seq[n] for n in cited]
+    except Exception:
+        return []
+
+
+def render_what_it_answers(ctx: list, me: str, conv_id: str, reply_seq, skip=()) -> str:
+    """Lines for what_it_answers' turns, in the conversation block's own speaker form, so the being's
+    words are labelled as its own (a 4B does not resolve a bare third-person name to "me"). The lead
+    names the whole chain; turns whose seq is in `skip` (already shown above) are not repeated."""
+    if not ctx or all(t.get("seq") in skip for t in ctx):
+        return ""
+    ask = ctx[0]
+    lead = f"seq {reply_seq} replies to your seq {ask.get('seq')}"
+    if len(ctx) > 1:
+        lead += ", which pointed at " + ", ".join(f"seq {t.get('seq')}" for t in ctx[1:])
+    lines = [f"_{lead}:_"]
+    for t in ctx:
+        if t.get("seq") in skip:
+            continue
+        txt = " ".join(str(t.get("text") or "").split())
+        if len(txt) > CITED_TURN_CHARS:
+            txt = (txt[:CITED_TURN_CHARS].rstrip() + f" …[{len(txt) - CITED_TURN_CHARS} more chars: "
+                   f"memory_read conversations/{conv_id}.jsonl]")
+        who = f"{t.get('from')}{' (you)' if t.get('from') == me else ''}"
+        lines.append(f"  - **{who}** (seq {t.get('seq')}, {t.get('ts')}): {txt}")
+    return "\n".join(lines)
+
+
 def unanswered(instance: Path, conv_id: str, me: str, max_age_h: float = 24.0,
                dead_s_of=None) -> list[dict]:
     """Turns after `me` last spoke, when the last word is someone else's and RECENT.
@@ -1107,7 +1189,7 @@ def _refuted_mark(text: str, refuted) -> str:
 def render_for_being(instance: Path, me: str, per_conv: int = 12,
                      turn_chars: Optional[int] = None, *, mark: bool = True,
                      refuted=None, settled_turns: Optional[int] = None,
-                     answered_cap: Optional[int] = None) -> str:
+                     answered_cap: Optional[int] = None, asks=None) -> str:
     """The conversations block in a beat: every conversation the being is in, its recent
     turns, and what is unanswered — marked, because 'someone spoke and I have not replied'
     is the single fact that should never require inference.
@@ -1198,6 +1280,15 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
                  + (_refuted_mark(t.get("text", ""), refuted) if t.get("from") == me else "")
                  + f": {_shown_text(t, _cap_for(t, me, answered_upto, turn_chars, answered_cap), m['id'])}"
                  for t in turns]
+        # THE ASK AN ANSWER REPLIES TO, when the window no longer shows it (what_it_answers). Only for a
+        # conversation whose last word is someone else's, and only the turns above the window, so a
+        # full rung pays nothing. `asks` is heartbeat.turn_expects_reply; absent, nothing is added.
+        if asks is not None and turns and turns[-1].get("from") != me and turns[-1].get("via") != "voice":
+            shown = {t.get("seq") for t in turns}
+            ctx = what_it_answers(instance, m["id"], me, turns[-1], asks)
+            extra = render_what_it_answers(ctx, me, m["id"], turns[-1].get("seq"), skip=shown)
+            if extra:
+                lines.append(extra)
         pend = pend_before
         if turns and mark:
             mark_seen(instance, me, m["id"], max(int(t.get("seq", 0)) for t in turns))

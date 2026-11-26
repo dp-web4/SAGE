@@ -3742,7 +3742,8 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
                                        turn_chars=turn_chars, mark=mark_conversations,
                                        refuted=refuted_claims(services) + files_refuted,
                                        settled_turns=settled_turns,
-                                       answered_cap=_bp.value(instance, "answered_turn_chars"))
+                                       answered_cap=_bp.value(instance, "answered_turn_chars"),
+                                       asks=turn_expects_reply)
         if convs.strip():
             parts.append(conversation_header(instance, member) + "\n" + convs.strip())
     if services.strip():
@@ -3948,7 +3949,7 @@ class SelectedTurn:
     frozen when rendered. Anything that arrives mid-beat waits for the next beat; it must never
     change who an already-rendered context is addressed to.
     """
-    __slots__ = ("cid", "seq", "speaker", "text", "asks", "answers_ask", "expects_reply", "woke")
+    __slots__ = ("cid", "seq", "speaker", "text", "asks", "answers_ask", "expects_reply", "woke", "context")
 
     def __init__(self, cid: str, turn: dict, answers_ask: bool = False, woke: bool = False):
         self.cid = cid
@@ -3965,13 +3966,18 @@ class SelectedTurn:
         # statement. Offline on dp's six most recent statements, offered the JSON answer turn the being
         # replied 11/12 and chose silence 1/12, 0 echoes; silence stays a real choice.
         self.woke = woke
+        # What this turn replies to, rendered (conversations.render_what_it_answers); set by
+        # pending_selection, "" when the turn answers no ask of the being's.
+        self.context = ""
 
     def render(self) -> str:
         """Only THIS turn — for the answer phase, which sends to exactly one conversation. It
         used to be shown the whole multi-conversation pending block while addressing one
-        target, which is a second way to splice one conversation's words into another."""
+        target, which is a second way to splice one conversation's words into another. The ask
+        it replies to is the same conversation's, so it travels with it."""
         txt = " ".join(self.text.split())[:PENDING_CHARS]
-        return f'In "{self.cid}", {self.speaker} said: {txt}'
+        out = f'In "{self.cid}", {self.speaker} said: {txt}'
+        return out + ("\n" + self.context if self.context else "")
 
 
 def conversation_header(instance: Path, member: str) -> str:
@@ -4256,6 +4262,15 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
             # filled with ".." (seq 52, 56, 58). A turn that asks nothing is not a debt.
             who = t.get("from")
             sel = SelectedTurn(cid, t, answers_the_being(instance, cid, member, t), woke=woke_hit)
+            # THE ASK IT ANSWERS, beside it (conversations.what_it_answers). The reflect turn's context is
+            # compact by design and carries no conversation block, so "dp replied to what you asked for"
+            # was the whole of what it knew about the ask: on 2026-11-26 the ask was a pointer to an earlier
+            # turn of questions (seq 1248) that was nowhere in view.
+            from sage.gateway import conversations as _cv
+            sel.context = _cv.render_what_it_answers(
+                _cv.what_it_answers(instance, cid, member, t, turn_expects_reply), member, cid, sel.seq)
+            if sel.context:
+                block += "\n" + sel.context
             if sel.woke and not sel.asks:
                 first = (f'FIRST, before the numbered writes below: {who} just wrote to you, and that is '
                          f'what woke you. If you have something to say back, call say with to set to '
