@@ -482,7 +482,10 @@ def open_turns(turns: list, me: str) -> list[dict]:
 # unrelated script. prior_ask finds that ask; SG4 below lists it beside the newest turn.
 CITED_TURN_CHARS = 900       # per turn; the full turn stays readable (memory_read conversations/<id>.jsonl)
 CITED_MAX = 2                # turns the ask may pull in by seq, newest first
-_SEQ_REF = re.compile(r"(?:\b([A-Za-z][\w.-]*)\s+)?\bseq\s*#?(\d+)\b", re.I)
+# The optional prefix is a conversation id in the store's own grammar (ID_RE: lowercase letters, digits and
+# hyphens, digit-leading allowed, e.g. "4-lab"), matched case-insensitively. NOVA on #836: an alphabetic-only
+# prefix let "4-lab seq 1" fall through to THIS conversation's seq 1.
+_SEQ_REF = re.compile(r"(?:\b([A-Za-z0-9][A-Za-z0-9-]{0,40})\s+)?\bseq\s*#?(\d+)\b", re.I)
 
 
 def prior_ask(instance: Path, conv_id: str, me: str, turn: dict, asks) -> Optional[dict]:
@@ -591,13 +594,51 @@ def directory_arm(mode: Optional[str], seq) -> Optional[str]:
 
 def _cited_seqs(text: str, conv_id: str, other_ids: set, below: int) -> list[int]:
     out: list[int] = []
+    others = {str(o).lower() for o in other_ids if o}
     for m in _SEQ_REF.finditer(str(text or "")):
-        if m.group(1) and m.group(1) in other_ids:
+        if m.group(1) and m.group(1).lower() in others:
             continue
         n = int(m.group(2))
         if 0 < n < below and n not in out:
             out.append(n)
     return out
+
+
+def physical_lines(instance: Path, conv_id: str, seqs) -> dict:
+    """{seq: its line in conversations/<id>.jsonl, numbered as memory_read numbers them (1-based, every line)}.
+
+    SEQ IS IDENTITY, NOT POSITION (NOVA on #836). The store keeps its seq high-water mark across a rollback
+    (next_seq), so after a truncation the file can hold seqs [1, 6, 7, 8] on lines 1-4, and a read of
+    start_line 6 is past the end. A directory line's read names the turn's actual line, found here."""
+    want = {int(n) for n in seqs if is_seq(n)}
+    if not want:
+        return {}
+    log, _ = _paths(instance, conv_id)
+    try:
+        raw = log.read_text(errors="replace").splitlines(keepends=True)
+    except Exception:
+        return {}
+    out: dict = {}
+    for i, line in enumerate(raw, start=1):
+        if not line.strip():
+            continue
+        try:
+            val = json.loads(line)
+        except Exception:
+            continue
+        if is_turn(val):
+            n = int(val.get("seq") or 0)
+            if n in want and n not in out:
+                out[n] = i
+    return out
+
+
+def attach_lines(instance: Path, conv_id: str, entries: list) -> list:
+    """Each entry with its physical `line`; an entry whose turn can't be found in the file is dropped, since
+    a line the being can't open is not worth listing."""
+    lines = physical_lines(instance, conv_id, [e["turn"].get("seq") for e in entries])
+    return [dict(e, line=lines[int(e["turn"].get("seq") or 0)]) for e in entries
+            if int(e["turn"].get("seq") or 0) in lines]
 
 
 def directory_entries(instance: Path, conv_id: str, me: str, shown: list, asks) -> list[dict]:
@@ -641,21 +682,23 @@ def directory_entries(instance: Path, conv_id: str, me: str, shown: list, asks) 
             if t.get("via") == "voice":
                 continue
             add(int(t.get("seq") or 0), f"from {t.get('from')}; no turn of yours has answered it", "unanswered")
-        return out
+        return attach_lines(instance, conv_id, out)
     except Exception:
         return []
 
 
-def open_handle(conv_id: str, seq) -> str:
-    """The exact read a directory line ends with; also how delivery is checked (mark_delivered)."""
-    return f"memory_read path conversations/{conv_id}.jsonl start_line {seq} end_line {seq}"
+def open_handle(conv_id: str, line) -> str:
+    """The exact read a directory line ends with; also how delivery is checked (mark_delivered). `line` is the
+    turn's physical line in the file (physical_lines), not its seq: the two differ after a rollback."""
+    return f"memory_read path conversations/{conv_id}.jsonl start_line {line} end_line {line}"
 
 
 def mark_delivered(convs: Optional[list], sent_text: str) -> list:
     """LAST_DIRECTORY's record for one rung, each listed entry marked `delivered`: whether its line's
     open handle is in the text actually sent. An exposure is what reached the prompt, not what was
     selected (NOVA on #836)."""
-    return [dict(c, listed=[dict(e, delivered=open_handle(c["cid"], e["seq"]) in (sent_text or ""))
+    return [dict(c, listed=[dict(e, delivered=bool(e.get("line")) and
+                                 open_handle(c["cid"], e["line"]) in (sent_text or ""))
                             for e in c.get("listed") or []]) for c in (convs or [])]
 
 
@@ -677,9 +720,13 @@ def render_directory(entries: list, me: str, conv_id: str, arm: Optional[str],
         txt = " ".join(str(t.get("text") or "").split())
         gist = txt if len(txt) <= GIST_CHARS else txt[:GIST_CHARS].rstrip() + "…"
         lines.append(f"- seq {seq} · {who} · {str(t.get('ts') or '')[:16].replace('T', ' ')} · {e['why']} · "
-                     f"\"{gist}\" · {open_handle(conv_id, seq)}")
+                     f"\"{gist}\" · {open_handle(conv_id, e['line'])}")
         raw = str(t.get("text") or "")
-        if arm == "full" and verbatim_cap > 0 and e["kind"] in ("prior_ask", "cited") and len(txt) > GIST_CHARS:
+        # Verbatim whenever the gist lost anything: a long turn, or a short one whose line breaks or inner
+        # spacing were collapsed (NOVA on #836: a short multiline ask showed only its gist under a header
+        # promising verbatim text).
+        if (arm == "full" and verbatim_cap > 0 and e["kind"] in ("prior_ask", "cited")
+                and (len(txt) > GIST_CHARS or raw.strip() != txt)):
             body = raw if len(raw) <= verbatim_cap else (
                 raw[:verbatim_cap] + f"\n…[cut here: {len(raw) - verbatim_cap} more chars]")
             lines.append("\n".join("    " + ln for ln in body.split("\n")))
@@ -1422,7 +1469,8 @@ def render_for_being(instance: Path, me: str, per_conv: int = 12,
             if entries:
                 lines.append(render_directory(entries, me, m["id"], arm))
             _dir_rec.append({"cid": m["id"], "arm": arm, "reply_seq": turns[-1].get("seq"),
-                             "listed": [{"seq": e["turn"].get("seq"), "kind": e["kind"]} for e in entries]})
+                             "listed": [{"seq": e["turn"].get("seq"), "line": e["line"], "kind": e["kind"]}
+                                        for e in entries]})
         pend = pend_before
         if turns and mark:
             mark_seen(instance, me, m["id"], max(int(t.get("seq", 0)) for t in turns))

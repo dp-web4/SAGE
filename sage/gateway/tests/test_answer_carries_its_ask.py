@@ -224,10 +224,12 @@ def test_reflect_context_is_held_under_its_ceiling():
 
 
 def test_delivery_is_what_reached_the_prompt():
-    rec = [{"cid": "dp", "arm": "gist", "listed": [{"seq": 7, "kind": "cited"}, {"seq": 9, "kind": "unanswered"}]}]
-    sent = "... " + conv.open_handle("dp", 7) + " ..."
+    rec = [{"cid": "dp", "arm": "gist", "listed": [{"seq": 7, "line": 3, "kind": "cited"},
+                                                   {"seq": 9, "line": 5, "kind": "unanswered"}]}]
+    sent = "... " + conv.open_handle("dp", 3) + " ..."
     marked = conv.mark_delivered(rec, sent)
     assert [e["delivered"] for e in marked[0]["listed"]] == [True, False]
+    assert [e["delivered"] for e in conv.mark_delivered(rec, "")[0]["listed"]] == [False, False]
 
 
 def test_a_seq_named_for_another_conversation_is_not_resolved_here():
@@ -250,3 +252,91 @@ def test_a_seq_older_than_the_recent_window_is_still_found():
     _say(inst, ME, f"What is the answer to seq {q}?")
     _say(inst, "dp", "your call")
     assert f"- seq {q} " in _render(inst)
+
+
+# ---- NOVA's third review of #836 ----------------------------------------------------------------------
+
+def _rolled_back_case():
+    """Seqs 1-5, the file truncated to its first line (the store keeps its seq high-water mark), then the
+    being's questions, its pointer and the operator's answer: physical seqs [1, 6, 7, 8] on lines 1-4."""
+    inst = _inst("gist")
+    for i in range(5):
+        _say(inst, "dp" if i % 2 == 0 else ME, f"turn {i}")
+    log = inst / "conversations" / "dp.jsonl"
+    log.write_text(log.read_text().splitlines(keepends=True)[0])
+    _say(inst, ME, QUESTIONS)
+    _say(inst, ME, "What is the answer to dp seq 6?")
+    _say(inst, "dp", "your call")
+    return inst, log
+
+
+def test_a_read_handle_names_the_physical_line_after_a_rollback():
+    inst, log = _rolled_back_case()
+    seqs = [t["seq"] for t in conv.recent(inst, "dp", 100)]
+    if seqs != [1, 6, 7, 8]:
+        import pytest
+        pytest.skip(f"this store build did not keep the high-water mark here: {seqs}")
+    out = _render(inst)
+    assert "- seq 6 " in out, out
+    assert conv.open_handle("dp", 2) in out, "seq 6 is on line 2"
+    assert "start_line 6" not in out, "a seq is not a line: line 6 is past the end of a 4-line file"
+    lines = log.read_text().splitlines()
+    assert json.loads(lines[2 - 1])["seq"] == 6
+    rec = conv.LAST_DIRECTORY[(2, 700)]
+    assert rec[0]["listed"][0]["seq"] == 6 and rec[0]["listed"][0]["line"] == 2
+
+
+def test_the_reflect_block_handle_is_the_physical_line_too():
+    inst, _log = _rolled_back_case()
+    if [t["seq"] for t in conv.recent(inst, "dp", 100)] != [1, 6, 7, 8]:
+        import pytest
+        pytest.skip("no high-water mark in this build")
+    from sage.gateway import heartbeat as hb
+    _line, _block, _f, _t, sel = pending_selection(inst, ME)
+    assert conv.open_handle("dp", 3) in sel.context, "the being's pointer (seq 7) is on line 3"
+    assert hb.LAST_ANSWER_CONTEXT["listed"][0] == {"seq": 7, "line": 3, "kind": "prior_ask"}
+
+
+def test_a_digit_leading_foreign_conversation_id_is_not_resolved_here():
+    assert conv._cited_seqs("What did 4-lab seq 1 mean?", "dp", {"4-lab"}, 10) == []
+    assert conv._cited_seqs("What did 4-Lab seq 1 mean?", "dp", {"4-lab"}, 10) == [], "case-insensitive"
+    assert conv._cited_seqs("What did cbp-claude seq 1 mean?", "dp", {"cbp-claude"}, 10) == []
+    assert conv._cited_seqs("the answer to dp seq 1?", "dp", {"4-lab"}, 10) == [1], "this conversation's own"
+    inst = _inst()
+    conv.create(inst, "4-lab", title="lab", participants=["lab", ME], writable_by=["lab", ME], summary="")
+    _say(inst, "dp", "first")
+    _say(inst, ME, "What did 4-lab seq 1 mean?")
+    _say(inst, "dp", "ask the lab")
+    assert _pa(inst)["cited"] == []
+
+
+def test_a_short_multiline_ask_is_verbatim_in_the_full_arm():
+    inst = _inst()
+    body = "Before I continue:\n  1. Which folder?\n\n  2. Which   script?"
+    _say(inst, ME, body)
+    _say(inst, ME, "x")
+    _say(inst, ME, "Answer to seq 1?")
+    _say(inst, "dp", "decide")
+    out = _render(inst, directory="full")
+    stored = conv.recent(inst, "dp", 10)[0]["text"]
+    assert len(" ".join(stored.split())) <= conv.GIST_CHARS, "short enough to fit the gist"
+    assert "\n".join("    " + ln for ln in stored.split("\n")) in out, "its line breaks and spacing kept"
+    flat = "Before I continue: 1. Which folder? 2. Which script? done"
+    inst2 = _inst()
+    _say(inst2, ME, flat)
+    _say(inst2, ME, "x")
+    _say(inst2, ME, "Answer to seq 1?")
+    _say(inst2, "dp", "decide")
+    out2 = _render(inst2, directory="full")
+    assert "    " + flat not in out2, "a short one-line turn loses nothing in the gist, so it isn't repeated"
+
+
+def test_prompt_reached_model_is_what_the_server_answered():
+    from types import SimpleNamespace as NS
+    from sage.gateway.heartbeat import prompt_reached_model as reached
+    assert not reached(None), "a phase that never ran"
+    assert not reached(NS(seed_measured=None, generates=[])), "yielded before its first generate"
+    assert not reached(NS(seed_measured=None, generates=[{"window_full": "preflight", "estimated_prompt": 9}]))
+    assert not reached(NS(seed_measured=None, generates=[{"window_full": "server_cut", "prompt_eval_count": 4000}]))
+    assert reached(NS(seed_measured=(9000, 30000), generates=[]))
+    assert reached(NS(seed_measured=None, generates=[{"done_reason": "stop", "prompt_eval_count": None}]))

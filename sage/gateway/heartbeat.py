@@ -4285,7 +4285,7 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
             if _dmode and sel.answers_ask:
                 _arm = _cv.directory_arm(_dmode, sel.seq)
                 _pa = _cv.prior_ask(instance, cid, member, t, turn_expects_reply)
-                _ents = _cv.prior_ask_entries(_pa, sel.seq)
+                _ents = _cv.attach_lines(instance, cid, _cv.prior_ask_entries(_pa, sel.seq))
                 _cap_used = None
                 if _ents:
                     # ITS OWN BUDGET: the reflect prompt is not fitted by the explore ladder, and on cbp-being
@@ -4299,8 +4299,8 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
                     block += "\n" + sel.context
                 LAST_ANSWER_CONTEXT = {"turn": f"{cid}:{sel.seq}", "arm": _arm,
                                        "linked": bool(_pa and _pa["linked"]),
-                                       "listed": [{"seq": int(e["turn"].get("seq") or 0), "kind": e["kind"]}
-                                                  for e in _ents],
+                                       "listed": [{"seq": int(e["turn"].get("seq") or 0), "line": e["line"],
+                                                   "kind": e["kind"]} for e in _ents],
                                        "chars": len(sel.context), "verbatim_cap": _cap_used,
                                        "delivered_reflect": False, "delivered_answer": False}
             if sel.woke and not sel.asks:
@@ -4348,6 +4348,23 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
 LAST_SELECTION_ERROR: Optional[str] = None
 LAST_PENDING_SCAN: Optional[list] = None    # [[cid, seq]] the last selection saw, not the member's own
 LAST_ANSWER_CONTEXT: Optional[dict] = None  # SG4: what the selected turn was shown beside it, and in which arm
+
+
+def prompt_reached_model(res) -> bool:
+    """SG4: DELIVERED MEANS THE MODEL READ IT (NOVA on #836). True when the phase sent a prompt the server
+    answered whole: a counted seed (seed_measured), or a generate that came back with a count or a done
+    reason and was neither refused before sending (preflight, over_window) nor cut by the server. A phase
+    that never ran (None), was skipped, yielded before its first generate, or was refused delivered nothing.
+    Every later step of a tool turn re-sends the phase's first prompt, so one answered generate covers it."""
+    if res is None:
+        return False
+    if getattr(res, "seed_measured", None) is not None:
+        return True
+    for g in getattr(res, "generates", None) or []:
+        if (isinstance(g, dict) and "window_full" not in g
+                and (g.get("done_reason") or g.get("prompt_eval_count") or g.get("eval_count"))):
+            return True
+    return False
 ANSWER_CONTEXT_CHARS = 1800                 # SG4: ceiling on that block in the reflect and answer prompts
 
 
@@ -5781,14 +5798,17 @@ def main(argv=None) -> int:
         llm, _cpt_cal)
     if _seed_rung != conv_rung:
         conv_rung, state_block = _seed_rung, _states[_seed_rung]
+    _conv_dir_plan = None
     if _convs.directory_mode(instance_config(instance)):
-        # SG4: an exposure is a line that is IN the seed sent, not one that was selected (NOVA on #836)
+        # SG4: an exposure is a line the model READ, not one that was selected or prepared (NOVA on #836). The
+        # record starts with every line undelivered; it is marked after explore/posture, from what they sent.
         try:
-            _sent_text = "\n".join(str(m_.get("content") or "") for m_ in seed) + str(posture_turn or "")
+            _conv_dir_plan = (_convs.LAST_DIRECTORY.get(tuple(conv_rung)),
+                              "\n".join(str(m_.get("content") or "") for m_ in seed), str(posture_turn or ""))
         except Exception:
-            _sent_text = ""
-        _conv_dir_rec = {"rung": list(conv_rung),
-                         "convs": _convs.mark_delivered(_convs.LAST_DIRECTORY.get(tuple(conv_rung)), _sent_text)}
+            _conv_dir_plan = (_convs.LAST_DIRECTORY.get(tuple(conv_rung)), "", "")
+        _conv_dir_rec = {"rung": list(conv_rung), "seed_sent": False, "posture_sent": False,
+                         "convs": _convs.mark_delivered(_conv_dir_plan[0], "")}
     # CALIBRATION IS EVIDENCE, NOT A SILENT CHANGE (NOVA on #774): the sent seed's estimate at the ratio used
     # and at the prior, so a beat the measured ratio admitted (or a cut it caused) is visible against the
     # server's own count of the same prompt, explore.generates[0].prompt_eval_count.
@@ -5916,6 +5936,14 @@ def main(argv=None) -> int:
             preempted["selected"] = f"{sel[4].cid}:{sel[4].seq}" if sel[4] is not None else None
             return sel
 
+        if _conv_dir_plan is not None:
+            # Posture's prompt carries the whole seed, so either phase reaching the model delivered the seed.
+            _seed_sent = prompt_reached_model(explore) or prompt_reached_model(after)
+            _posture_sent = prompt_reached_model(after)
+            _conv_dir_rec = {"rung": list(conv_rung), "seed_sent": _seed_sent, "posture_sent": _posture_sent,
+                             "convs": _convs.mark_delivered(
+                                 _conv_dir_plan[0], (_conv_dir_plan[1] if _seed_sent else "")
+                                 + (_conv_dir_plan[2] if _posture_sent else ""))}
         _check_preempt("explore" if explore is not None and explore.yielded else
                        "posture" if after is not None and after.yielded else "before account")
         _phase("wake", "account", host_session_id)
@@ -5996,12 +6024,12 @@ def main(argv=None) -> int:
             say_line, pending_block, say_first, target, selected = pending_selection(instance, args.member, _woke)
             # Immediately before the instruction, so the smallest model does not have to hold it
             # across a turn boundary to use it.
+            _ctx_in_reflect = False
             if pending_block:
                 convo.append({"role": "user", "content": pending_block})
-                # SG4: an exposure is what reached a prompt, not what was selected (NOVA on #836)
-                if (LAST_ANSWER_CONTEXT is not None and selected is not None and selected.context
-                        and selected.context in pending_block):
-                    LAST_ANSWER_CONTEXT["delivered_reflect"] = True
+                # SG4: marked delivered only once the reflect turn's prompt reaches the model (below)
+                _ctx_in_reflect = bool(selected is not None and selected.context
+                                       and selected.context in pending_block)
             # THE MOMENT A SKILL FORMS (dp, 2026-10-28: "once it figures something out, to retain it as a skill"):
             # an act that failed and then worked on the same target this beat. Said here, beside the instruction,
             # because this being uses what a step names (settle, 8 uses) and not what is only offered (skill, 0
@@ -6029,6 +6057,8 @@ def main(argv=None) -> int:
             reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
                                            tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"),
                                            should_yield=_yield_for_a_person)
+            if _ctx_in_reflect and LAST_ANSWER_CONTEXT is not None and prompt_reached_model(reflect):
+                LAST_ANSWER_CONTEXT["delivered_reflect"] = True
             _check_preempt("reflect")
             if preempted:
                 say_line, pending_block, say_first, target, selected = _take_late()
@@ -6042,9 +6072,6 @@ def main(argv=None) -> int:
         # Preempted: the person who spoke is answered even if reflection said something elsewhere.
         if selected is not None and selected.expects_reply and (preempted or not _said_in(reflect)):
             _phase("wrap-up", "answer", host_session_id)
-            # SG4: both answer forms send selected.render(), which carries selected.context
-            if LAST_ANSWER_CONTEXT is not None and selected.context:
-                LAST_ANSWER_CONTEXT["delivered_answer"] = True
             if answer_turn_mode(instance) == "json":
                 # Opt-in (instance.json "answer_turn": "json"). The selected turn and the ask; the
                 # beat's acts only for a seat's question when the beat acted (answer_turn_json).
@@ -6081,6 +6108,10 @@ def main(argv=None) -> int:
                      {"role": "user", "content": _beat_record_text(explore, after) + "\n\n" + ANSWER_ASK.format(
                          pending=selected.render(), target=selected.cid, words=_prior_words(reflect))}],
                     max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
+            # SG4: both answer forms send selected.render(), which carries selected.context; delivered only
+            # once that prompt reached the model (NOVA on #836)
+            if LAST_ANSWER_CONTEXT is not None and selected.context and prompt_reached_model(answer):
+                LAST_ANSWER_CONTEXT["delivered_answer"] = True
             # NO RE-ASK HERE. Two were tried and both are reverted; the reasons are recorded as
             # SMALL_MODEL_LEGIBILITY 1.14, and the short form is: a prompt written in the harness's
             # voice, about the harness's mechanics, becomes the being's MESSAGE at this scale.
