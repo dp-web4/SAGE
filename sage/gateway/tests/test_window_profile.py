@@ -305,4 +305,4 @@ def test_on_the_profile_offers_verb_lists_the_todo_and_records_delivery(beat):
     assert wpr["state"] and any(x["section"].startswith("todo.md") for x in wpr["state"]["listed"])
     assert "memory_read path todo.md" in sent[0][0]
     assert wpr["delivered"] is True, "the seed was counted whole by the server (seed_measured)"
-    assert wpr["not_managed"]["posture"] > 0
+    assert "posture" in wpr and "posture" not in wpr["not_managed"], "posture is managed from step 1b"

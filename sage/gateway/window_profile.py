@@ -27,22 +27,44 @@ WHAT IT DOES, given the window budget (`window_budget_chars`, the one producer b
    that shows them. Nothing else in the state is cut by the profile: the body, what the being is entrusted
    with, who it says it is, its conversations (SG4's directory handles those, SAGE #836), letters from dp and
    the seat, its services and account. The todo's run-box duplicate is folded into the todo lines it repeats.
-3. NOT IN THIS STEP. Posture and framing text (the being's standing context) are left alone and reported as
-   the remaining gap; the inbox is reported, not listed (SG4's inbox half is its own slice).
+3. POSTURE (step 1b). dp's posture (BEING_POSTURE.md) is never edited, trimmed or summarized. When it fits its
+   share it is sent whole every beat, as before. When it doesn't, it goes on a schedule, like the entrustment's
+   "daily" mode: whole on the first beat of each UTC day and whenever its text changes, and on other beats one
+   line saying it is unchanged, not repeated, and how to read it whole. "Whole today" is recorded only once a
+   prompt carrying it reached the model. The way to read it is a harness-kept copy in the home
+   (`standing_posture.md`, seat-owned: the being reads it and cannot write it). BEING_POSTURE.md itself lives in
+   the SAGE checkout, which a being's grants don't reach. A pointer is sent only when that copy holds the same
+   text, so the line never points at something missing or stale.
+4. FRAMING (step 1b). The system prompt's affordances say twice what the beat already says elsewhere in two
+   places. The home bullet repeats the header's home lines, and the `witness` bullet repeats the line the
+   profile's tool offer already gives it. Under the profile those two go, keeping what only they say ("scratch/ is
+   yours alone"). Every other bullet stays: request_scope, appeal, recall/remember, peer_ask/mesh and run carry
+   meaning that their one-line offers don't (measured 2026-11-27 against the lean specs). If the bullets' text
+   changes upstream, nothing is compacted and the record says so.
+5. NOT IN THIS STEP. The inbox is reported, not listed (SG4's inbox half is its own slice).
 
 Per instance (RESEARCH_GENERALIZATION_RULE): measured on one being; the shares below are a starting point
 from that measurement, not a law.
 """
+import hashlib
 import json
 import re
+import time
 from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 MODE_KEY = "window_profile"
 
-# Shares of the window budget (chars). Posture and framing are not managed in this step.
-SHARES = {"tool_schemas": 0.20, "state": 0.40}
+# Shares of the window budget (chars). Posture's share decides only WHETHER it goes on its schedule: a posture
+# within its share is sent whole every beat (at cbp-being's real 20k window it is: 5,046 <= 6,798).
+SHARES = {"tool_schemas": 0.20, "state": 0.40, "posture": 0.15}
+
+# The harness-kept copy of the posture in the being's home (seat-owned: reference_f1a refuses writes to it),
+# and the record of the last whole showing. Named so as not to collide with a being's own notes: cbp-being keeps
+# several posture*.md files of its own.
+POSTURE_COPY = "standing_posture.md"
+POSTURE_SEEN = ".posture_seen.json"
 
 # Listable state sections, by heading prefix (after "## "): share of the STATE budget, which end to keep,
 # and the read that shows what was not shown (None: a measurement made fresh each beat, not stored).
@@ -308,3 +330,118 @@ def fit_state(state: str, budget: int, instance) -> Tuple[str, dict]:
     return text, {"budget": budget, "before": len(state), "after": len(text), "todo_folded": folded,
                   "listed": listed, "not_managed_chars": exempt,
                   "over_budget_by": max(0, len(text) - budget)}
+
+
+# ---------------------------------------------------------------- posture (step 1b)
+
+def _day(now: float) -> str:
+    return time.strftime("%Y-%m-%d", time.gmtime(now))
+
+
+def _sha(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()[:16]
+
+
+def ensure_posture_copy(instance, text: str) -> bool:
+    """Keep `standing_posture.md` in the home equal to the posture. Written only when it differs. True when the
+    copy holds exactly `text` afterwards; False on any failure, and then no pointer may name it."""
+    p = Path(instance) / POSTURE_COPY
+    try:
+        if not p.exists() or p.read_text(encoding="utf-8") != text:
+            p.write_text(text, encoding="utf-8")
+        return p.read_text(encoding="utf-8") == text
+    except OSError:
+        return False
+
+
+def posture_pointer(chars: int) -> str:
+    """The one line sent instead of the posture on a scheduled beat. It says what is not here, why, and the read
+    that shows it whole. It does not paraphrase the posture."""
+    return (f"(dp's standing posture for every being is unchanged since you read it whole earlier today, so it "
+            f"isn't repeated this beat. All {chars:,} chars of it, in dp's words, are in {POSTURE_COPY} in your "
+            f"home, kept by the harness: memory_read path {POSTURE_COPY} reads it whole. It is shown whole again on "
+            f"the first beat of each day, and as soon as it changes.)")
+
+
+def posture_shown(instance, text: str, budget: int, now: Optional[float] = None) -> Tuple[str, dict]:
+    """(posture text to send, record). Whole when it fits its share of `budget`; otherwise whole on the first
+    beat of the UTC day, when its text changed since the last whole showing, or when no faithful copy can be
+    kept; otherwise the pointer. Reads the seen record, never writes it (record_posture_seen does, after the
+    prompt carrying the whole text reached the model)."""
+    now = time.time() if now is None else now
+    share = share_chars(budget, "posture")
+    rec = {"chars": len(text), "share": share, "sha": _sha(text), "day": _day(now)}
+    if len(text) <= share:
+        return text, dict(rec, mode="whole", why="fits its share", scheduled=False, sent=len(text))
+    try:
+        seen = json.loads((Path(instance) / POSTURE_SEEN).read_text())
+    except Exception:
+        seen = {}
+    if seen.get("sha") != rec["sha"]:
+        why = "changed since last shown whole" if seen.get("sha") else "not yet shown whole under the profile"
+    elif seen.get("day") != rec["day"]:
+        why = "first beat of the UTC day"
+    elif not ensure_posture_copy(instance, text):
+        why = f"{POSTURE_COPY} could not be kept, so there is nothing to point at"
+    else:
+        line = posture_pointer(len(text))
+        return line, dict(rec, mode="pointer", why="shown whole earlier today, unchanged", scheduled=True,
+                          sent=len(line))
+    ensure_posture_copy(instance, text)          # so the next beat's pointer has its copy
+    return text, dict(rec, mode="whole", why=why, scheduled=True, sent=len(text))
+
+
+def record_posture_seen(instance, text: str, now: Optional[float] = None) -> bool:
+    """Record that `text` was read WHOLE today. Called once, after a prompt carrying it reached the model."""
+    now = time.time() if now is None else now
+    try:
+        (Path(instance) / POSTURE_SEEN).write_text(json.dumps({"day": _day(now), "sha": _sha(text)}) + "\n")
+        return True
+    except OSError:
+        return False
+
+
+# ---------------------------------------------------------------- framing (step 1b)
+
+HOME_BULLET = "- Your home is your instance directory."
+HOME_BULLET_KEEP = "- scratch/ is yours alone; no one edits it."
+WITNESS_BULLET = "- witness: "
+
+
+def compact_affordances(text: str, offered: set) -> Tuple[str, dict]:
+    """(affordances, record). Drops the two bullets the beat already says elsewhere: the home bullet (the header
+    gives the home and the bare-name rule; only "scratch/ is yours alone" is kept) and the `witness` bullet when
+    `offered` (verbs with a spec or a router line this beat) includes witness. Unchanged, with the reason, if
+    either bullet is not found as expected."""
+    lines = text.split("\n")
+    out, dropped = [], []
+    for ln in lines:
+        if ln.startswith(HOME_BULLET):
+            out.append(HOME_BULLET_KEEP)
+            dropped.append("home")
+            continue
+        if ln.startswith(WITNESS_BULLET) and "witness" in offered:
+            dropped.append("witness")
+            continue
+        out.append(ln)
+    if "home" not in dropped:
+        return text, {"before": len(text), "after": len(text), "saved": 0, "dropped": [],
+                      "why": "home bullet not found: affordances changed upstream, nothing compacted"}
+    new = "\n".join(out)
+    return new, {"before": len(text), "after": len(new), "saved": len(text) - len(new), "dropped": dropped}
+
+
+def offered_with_text(specs) -> set:
+    """Verbs this beat offers with some description: their own spec, or a line in the `verb` listing (when the
+    listing carries lines). Names-only listing entries don't count."""
+    out = set()
+    for t in specs or ():
+        fn = (t or {}).get("function") or {}
+        name = fn.get("name")
+        if name != ROUTER:
+            out.add(str(name))
+            continue
+        listed = listed_behind([t]) or set()
+        desc = str(fn.get("description") or "")
+        out |= {n for n in listed if f"{n}: " in desc}
+    return out

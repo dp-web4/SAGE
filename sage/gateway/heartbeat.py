@@ -30,6 +30,7 @@ from typing import Any, Dict, List, Optional
 
 from sage.gateway.fleet_paths import forum_dir as _fleet_forum_dir
 import argparse
+import functools
 import json
 import os
 import re
@@ -4997,8 +4998,16 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
             header: str, state: str, recall: str, inbox: str, digest: str,
             frame: Optional[str] = None, frames: Optional[list] = None,
             frame_metas: Optional[list] = None, museum: str = "",
-            tools: Optional[list] = None, posture_framing: Optional[str] = None):
+            tools: Optional[list] = None, posture_framing: Optional[str] = None,
+            profile: Optional[dict] = None):
     """The explore turn(s) of a beat: (seed messages, second user turn or None).
+
+    WINDOW PROFILE ONLY (window_profile.py, step 1b): `profile` None is the beat as it was. Its `affordances`
+    replaces the system prompt's AFFORDANCES block (the compacted form); its `posture_pointer` says `posture_text`
+    is the one-line pointer, not the posture, so the standing-guidance frame drops "given to you each beat",
+    which that beat would make untrue. main binds it with functools.partial rather than adding a keyword to its
+    compose call: that call is pinned from its bytecode (test_frame_producer, the vision join), and one more
+    keyword makes CPython 3.12 compile it through a dict (CALL_FUNCTION_EX), which the pin cannot read.
 
     Posture-first: posture in the system prompt; one user turn with state, inbox, recall,
     digest, and the tool names last. Act-first: the system prompt carries no posture; the
@@ -5030,9 +5039,15 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
         _metas = [dict(m, carried=False, why=(m.get("why") or "not attached to this turn"))
                   for m in _metas]
     header = header + "\n" + vision_line(_metas)
+    affordances = (profile or {}).get("affordances")
+    posture_pointer = bool((profile or {}).get("posture_pointer"))
+    _system_t, _system_af_t = SYSTEM, SYSTEM_ACT_FIRST
+    if affordances is not None:
+        _system_t = SYSTEM.replace(AFFORDANCES, affordances)
+        _system_af_t = SYSTEM_ACT_FIRST.replace(AFFORDANCES, affordances)
     if not act_first:
-        system = SYSTEM.format(name=name, machine=machine, member=member,
-                               posture=posture_text, museum=_museum_block(museum))
+        system = _system_t.format(name=name, machine=machine, member=member,
+                                  posture=posture_text, museum=_museum_block(museum))
         user = (header + state + f"## Your inbox\n{inbox}\n\n## Long-term recall\n{recall}\n\n"
                 f"# What moved in the fleet\n\n{digest}\n\n" + ASK + tools_line)
         user_msg = {"role": "user", "content": user}
@@ -5042,8 +5057,8 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
             # of "you CAN see" with nothing attached.
             user_msg["images"] = _frames
         return [{"role": "system", "content": system}, user_msg], None
-    system = SYSTEM_ACT_FIRST.format(name=name, machine=machine, member=member,
-                                     museum=_museum_block(museum))
+    system = _system_af_t.format(name=name, machine=machine, member=member,
+                                 museum=_museum_block(museum))
     # The inbox rides the ACT turn, not the posture turn. Measured on Sprout over 85 beats
     # (2026-09-17): the posture turn acted in 1 of 85, the first turn in 25 — and a peer's
     # reply addressed to the being sat unopened in the posture turn for 85 beats. Mail is the
@@ -5053,6 +5068,8 @@ def compose(act_first: bool, *, name: str, machine: str, member: str, posture_te
             + ASK_ACT_FIRST + tools_line)
     # posture_framing: per-instance (posture_framing_for); same posture, digest and tools either way.
     _turn = POSTURE_TURN_STANDING if posture_framing == "standing_guidance" else POSTURE_TURN
+    if posture_pointer:
+        _turn = _turn.replace(", given to you each beat.", ".", 1)
     second = _turn.format(posture=posture_text, digest=digest, tools=", ".join(tools))
     user_msg = {"role": "user", "content": user}
     if _frames:
@@ -5739,11 +5756,33 @@ def main(argv=None) -> int:
     _fit_cpt = fit_cpt(_cpt_cal)
     _cpt_cal["fit_cpt"] = _fit_cpt
     _frame_chars = sum(int(FRAME_TOKENS * _fit_cpt) for _ in _frame_b64s)
+    _posture_view = [None]              # window profile: the posture as this beat sends it (None: posture())
+    _posture_full = [None]              # ... and the whole text it stands for, for the seen record
+    _affordances = None                 # window profile: the compacted affordances (None: AFFORDANCES)
+
+    def _posture() -> str:
+        return _posture_view[0] if _posture_view[0] is not None else posture()
+
     if _wp_rec is not None and "tools" in _wp_rec:
         _wp_budget = window_budget_chars(_num_ctx, _num_predict, cpt=_fit_cpt)
         _wp_state_budget[0] = _wp.share_chars(_wp_budget, "state")
         _wp_rec.update(budget=_wp_budget, cpt=_fit_cpt, state_budget=_wp_state_budget[0])
-    _other = (len(posture()) + len(inbox) + _schema_chars + 1200 + _frame_chars
+        # STEP 1b: posture on a schedule when it doesn't fit its share (dp's words, never altered), and the two
+        # affordance bullets the beat says elsewhere. A failure here costs nothing: the beat as it was.
+        try:
+            _pf = posture()
+            _posture_view[0], _wp_rec["posture"] = _wp.posture_shown(instance, _pf, _wp_budget)
+            _posture_full[0] = _pf
+        except Exception as _e:
+            _posture_view[0] = None
+            _wp_rec["posture"] = {"error": f"{type(_e).__name__}: {_e}"[:200]}
+        try:
+            _affordances, _wp_rec["framing"] = _wp.compact_affordances(
+                AFFORDANCES, _wp.offered_with_text(_explore_specs))
+        except Exception as _e:
+            _affordances = None
+            _wp_rec["framing"] = {"error": f"{type(_e).__name__}: {_e}"[:200]}
+    _other = (len(_posture()) + len(inbox) + _schema_chars + 1200 + _frame_chars
               + 1200 + 400 + LOOP_GROWTH_CHARS)
     state_block, conv_rung, conv_intervention = fit_state(
         _build_state, num_ctx=_num_ctx, num_predict=_num_predict, other_chars=_other, cpt=_fit_cpt)
@@ -5756,7 +5795,7 @@ def main(argv=None) -> int:
             record_entrustment_seen(instance, entrusted)
     except Exception:
         pass
-    _fixed = len(posture()) + len(state_block) + len(inbox) + _schema_chars + 1200
+    _fixed = len(_posture()) + len(state_block) + len(inbox) + _schema_chars + 1200
     _blocks, _fit_iv = fit_to_window(num_ctx=_num_ctx, num_predict=_num_predict,
                                      fixed_chars=_fixed,
                                      blocks={"digest": digest, "recall": recall}, cpt=_fit_cpt)
@@ -5768,9 +5807,17 @@ def main(argv=None) -> int:
     if (_alarm := harness_alarm(_harness)):
         print(f"[heartbeat] {_alarm}", file=sys.stderr)
     _clock = clock_sense(now, instance, args.member, instance_config(instance), since_beat_h=hours)
+    # WINDOW PROFILE, step 1b: compose itself (the beat as it was) unless the profile set either part, which is
+    # then bound here, not passed as one more keyword below (see compose's docstring: the call is bytecode-pinned)
+    _compose = compose
+    if _affordances is not None or ((_wp_rec or {}).get("posture") or {}).get("mode") == "pointer":
+        _compose = functools.partial(compose, profile={
+            "affordances": _affordances,
+            "posture_pointer": ((_wp_rec or {}).get("posture") or {}).get("mode") == "pointer"})
+
     def _compose_seed(state_text, recall_text, digest_text):
-        return compose(
-            act_first, name=name, machine=machine, member=args.member, posture_text=posture(),
+        return _compose(
+            act_first, name=name, machine=machine, member=args.member, posture_text=_posture(),
             museum=museum_line, frames=_frame_b64s, frame_metas=_frame_metas, tools=_explore_tools,
             posture_framing=posture_framing_for(instance_config(instance)),
             header=(f"Heartbeat at {now:%Y-%m-%d %H:%M} UTC. Window since your last beat: about {hours:.1f}h.\n"
@@ -5830,7 +5877,7 @@ def main(argv=None) -> int:
     if _wp_rec is not None and "tools" in _wp_rec:
         # what the profile did in the render that is SENT; delivered once explore/posture reaches the model
         _wp_rec.update(rung=list(conv_rung), state=_wp_state_recs.get(tuple(conv_rung)),
-                       not_managed={"posture": len(posture()), "inbox": len(inbox)}, delivered=False)
+                       not_managed={"inbox": len(inbox)}, delivered=False)
     _conv_dir_plan = None
     if _convs.directory_mode(instance_config(instance)):
         # SG4: an exposure is a line the model READ, not one that was selected or prepared (NOVA on #836). The
@@ -5855,7 +5902,7 @@ def main(argv=None) -> int:
     except Exception:
         pass
     try:
-        _prompt_parts = prompt_parts(seed=seed, posture_turn=posture_turn, posture=posture(),
+        _prompt_parts = prompt_parts(seed=seed, posture_turn=posture_turn, posture=_posture(),
                                      state=state_block, recall=recall, inbox=inbox, digest=digest,
                                      museum=museum_line, tool_schema_chars=_schema_chars)
     except Exception as e:          # a measurement never costs the being its beat
@@ -5980,6 +6027,15 @@ def main(argv=None) -> int:
         if _wp_rec is not None and "delivered" in _wp_rec:
             # the profile's listings and tool offer travel in the seed (and posture's prompt carries the seed)
             _wp_rec["delivered"] = prompt_reached_model(explore) or prompt_reached_model(after)
+            # STEP 1b: "read it whole today" only once a prompt carrying the whole posture reached the model: the
+            # posture turn act-first, the system prompt (so either phase) posture-first. A scheduled whole showing
+            # that never reached it is shown whole again next beat.
+            _pr = _wp_rec.get("posture") or {}
+            if _pr.get("scheduled") and _pr.get("mode") == "whole" and _posture_full[0] is not None:
+                _p_delivered = (prompt_reached_model(after) if posture_turn is not None
+                                else _wp_rec["delivered"])
+                _pr["delivered"] = bool(_p_delivered)
+                _pr["seen_recorded"] = bool(_p_delivered and _wp.record_posture_seen(instance, _posture_full[0]))
         _check_preempt("explore" if explore is not None and explore.yielded else
                        "posture" if after is not None and after.yielded else "before account")
         _phase("wake", "account", host_session_id)
