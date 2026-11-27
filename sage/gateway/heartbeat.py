@@ -3742,7 +3742,9 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
                                        turn_chars=turn_chars, mark=mark_conversations,
                                        refuted=refuted_claims(services) + files_refuted,
                                        settled_turns=settled_turns,
-                                       answered_cap=_bp.value(instance, "answered_turn_chars"))
+                                       answered_cap=_bp.value(instance, "answered_turn_chars"),
+                                       asks=turn_expects_reply,
+                                       directory=_conv.directory_mode(_conv_cfg(instance)))
         if convs.strip():
             parts.append(conversation_header(instance, member) + "\n" + convs.strip())
     if services.strip():
@@ -3895,6 +3897,15 @@ _QUESTION_OPENER = re.compile(
     re.I)
 
 
+def _conv_cfg(instance: Path) -> dict:
+    """instance.json, for the conversation settings own_state and pending_selection read (fail-open)."""
+    try:
+        from sage.gateway.governed_turn import instance_config as _icfg
+        return _icfg(instance) or {}
+    except Exception:
+        return {}
+
+
 def turn_expects_reply(text: str) -> bool:
     """True when a turn asks the being for something. The ONE place this is decided, used by
     both the reflect line and the answer-phase gate so they cannot disagree."""
@@ -3948,7 +3959,7 @@ class SelectedTurn:
     frozen when rendered. Anything that arrives mid-beat waits for the next beat; it must never
     change who an already-rendered context is addressed to.
     """
-    __slots__ = ("cid", "seq", "speaker", "text", "asks", "answers_ask", "expects_reply", "woke")
+    __slots__ = ("cid", "seq", "speaker", "text", "asks", "answers_ask", "expects_reply", "woke", "context")
 
     def __init__(self, cid: str, turn: dict, answers_ask: bool = False, woke: bool = False):
         self.cid = cid
@@ -3965,13 +3976,18 @@ class SelectedTurn:
         # statement. Offline on dp's six most recent statements, offered the JSON answer turn the being
         # replied 11/12 and chose silence 1/12, 0 echoes; silence stays a real choice.
         self.woke = woke
+        # What this turn replies to, rendered (conversations.render_directory, SG4); set by
+        # pending_selection, "" when the turn answers no ask of the being's.
+        self.context = ""
 
     def render(self) -> str:
         """Only THIS turn — for the answer phase, which sends to exactly one conversation. It
         used to be shown the whole multi-conversation pending block while addressing one
-        target, which is a second way to splice one conversation's words into another."""
+        target, which is a second way to splice one conversation's words into another. The ask
+        it replies to is the same conversation's, so it travels with it."""
         txt = " ".join(self.text.split())[:PENDING_CHARS]
-        return f'In "{self.cid}", {self.speaker} said: {txt}'
+        out = f'In "{self.cid}", {self.speaker} said: {txt}'
+        return out + ("\n" + self.context if self.context else "")
 
 
 def conversation_header(instance: Path, member: str) -> str:
@@ -4208,9 +4224,10 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
       * conversations exist, nothing waiting -> the generic form, ids listed.
       * something waiting -> the person's name, the real id, and WHAT THEY SAID.
     """
-    global LAST_SELECTION_ERROR, LAST_PENDING_SCAN
+    global LAST_SELECTION_ERROR, LAST_PENDING_SCAN, LAST_ANSWER_CONTEXT
     LAST_SELECTION_ERROR = None     # describes THIS selection, the one whose result the beat records
     LAST_PENDING_SCAN = None
+    LAST_ANSWER_CONTEXT = None
     try:
         ids, pend = pending_turns(instance, member)
         LAST_PENDING_SCAN = [[cid, t.get("seq")] for cid, t in pend if isinstance(t, dict) and t.get("from") != member]
@@ -4256,6 +4273,36 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
             # filled with ".." (seq 52, 56, 58). A turn that asks nothing is not a debt.
             who = t.get("from")
             sel = SelectedTurn(cid, t, answers_the_being(instance, cid, member, t), woke=woke_hit)
+            # THE BEING'S LAST ASK, beside the turn (SG4; conversations.prior_ask, the same predicate the
+            # conversation block uses). The reflect turn's context is compact by design and carries no
+            # conversation block, so "dp replied to what you asked for" was the whole of what it knew about
+            # the ask: on 2026-11-26 the ask was a pointer to an earlier turn of questions (seq 1248) that was
+            # nowhere in view. Only where answers_the_being already framed the turn as following the being's
+            # ask (NOVA on #836), worded as adjacency unless the turn names the ask. Off unless the instance
+            # sets `conversation_directory`; the arm, the cap used and what was delivered are recorded.
+            from sage.gateway import conversations as _cv
+            _dmode = _cv.directory_mode(_conv_cfg(instance))
+            if _dmode and sel.answers_ask:
+                _arm = _cv.directory_arm(_dmode, sel.seq)
+                _pa = _cv.prior_ask(instance, cid, member, t, turn_expects_reply)
+                _ents = _cv.attach_lines(instance, cid, _cv.prior_ask_entries(_pa, sel.seq))
+                _cap_used = None
+                if _ents:
+                    # ITS OWN BUDGET: the reflect prompt is not fitted by the explore ladder, and on cbp-being
+                    # it reached 19,818 of 20,480 tokens (prompt + generation, 2026-11-19..26; p99 9,387). So the
+                    # block is held under ANSWER_CONTEXT_CHARS, the verbatim cut stepping down before any line goes.
+                    for _cap in (_cv.CITED_TURN_CHARS, 500, 250, 0):
+                        sel.context = _cv.render_directory(_ents, member, cid, _arm, verbatim_cap=_cap)
+                        _cap_used = _cap
+                        if len(sel.context) <= ANSWER_CONTEXT_CHARS:
+                            break
+                    block += "\n" + sel.context
+                LAST_ANSWER_CONTEXT = {"turn": f"{cid}:{sel.seq}", "arm": _arm,
+                                       "linked": bool(_pa and _pa["linked"]),
+                                       "listed": [{"seq": int(e["turn"].get("seq") or 0), "line": e["line"],
+                                                   "kind": e["kind"]} for e in _ents],
+                                       "chars": len(sel.context), "verbatim_cap": _cap_used,
+                                       "delivered_reflect": False, "delivered_answer": False}
             if sel.woke and not sel.asks:
                 first = (f'FIRST, before the numbered writes below: {who} just wrote to you, and that is '
                          f'what woke you. If you have something to say back, call say with to set to '
@@ -4300,6 +4347,25 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
 
 LAST_SELECTION_ERROR: Optional[str] = None
 LAST_PENDING_SCAN: Optional[list] = None    # [[cid, seq]] the last selection saw, not the member's own
+LAST_ANSWER_CONTEXT: Optional[dict] = None  # SG4: what the selected turn was shown beside it, and in which arm
+
+
+def prompt_reached_model(res) -> bool:
+    """SG4: DELIVERED MEANS THE MODEL READ IT (NOVA on #836). True when the phase sent a prompt the server
+    answered whole: a counted seed (seed_measured), or a generate that came back with a count or a done
+    reason and was neither refused before sending (preflight, over_window) nor cut by the server. A phase
+    that never ran (None), was skipped, yielded before its first generate, or was refused delivered nothing.
+    Every later step of a tool turn re-sends the phase's first prompt, so one answered generate covers it."""
+    if res is None:
+        return False
+    if getattr(res, "seed_measured", None) is not None:
+        return True
+    for g in getattr(res, "generates", None) or []:
+        if (isinstance(g, dict) and "window_full" not in g
+                and (g.get("done_reason") or g.get("prompt_eval_count") or g.get("eval_count"))):
+            return True
+    return False
+ANSWER_CONTEXT_CHARS = 1800                 # SG4: ceiling on that block in the reflect and answer prompts
 
 
 def reconcile_recall(record: dict, scan: Optional[list], selected) -> dict:
@@ -5544,6 +5610,7 @@ def main(argv=None) -> int:
     # per instance (RESEARCH_GENERALIZATION_RULE): "brief" shortens available verbs' descriptions
     _tool_desc_mode = _toolset.tool_descriptions_mode(instance_config(instance))
     _prompt_parts = None            # set once the seed is composed (SAGE #708)
+    _conv_dir_rec = None            # SG4: set once the sent rung is known
     _explore_specs = _toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief",
                                     lean=_tool_desc_mode == "lean",
                                     cfg=instance_config(instance))
@@ -5608,6 +5675,8 @@ def main(argv=None) -> int:
     # PER-INSTANCE (RESEARCH_GENERALIZATION_RULE): absent means the default rendering.
     _settled_turns = settled_turns_for(instance_config(instance))
     _proprioception = proprioception_for(instance_config(instance))
+
+    _convs.LAST_DIRECTORY.clear()       # SG4: per-rung listings for THIS beat; the record keeps the rung sent
 
     def _build_state(per_conv, turn_chars):
         return (_state_head + own_state(instance, args.member, entrusted,
@@ -5729,6 +5798,17 @@ def main(argv=None) -> int:
         llm, _cpt_cal)
     if _seed_rung != conv_rung:
         conv_rung, state_block = _seed_rung, _states[_seed_rung]
+    _conv_dir_plan = None
+    if _convs.directory_mode(instance_config(instance)):
+        # SG4: an exposure is a line the model READ, not one that was selected or prepared (NOVA on #836). The
+        # record starts with every line undelivered; it is marked after explore/posture, from what they sent.
+        try:
+            _conv_dir_plan = (_convs.LAST_DIRECTORY.get(tuple(conv_rung)),
+                              "\n".join(str(m_.get("content") or "") for m_ in seed), str(posture_turn or ""))
+        except Exception:
+            _conv_dir_plan = (_convs.LAST_DIRECTORY.get(tuple(conv_rung)), "", "")
+        _conv_dir_rec = {"rung": list(conv_rung), "seed_sent": False, "posture_sent": False,
+                         "convs": _convs.mark_delivered(_conv_dir_plan[0], "")}
     # CALIBRATION IS EVIDENCE, NOT A SILENT CHANGE (NOVA on #774): the sent seed's estimate at the ratio used
     # and at the prior, so a beat the measured ratio admitted (or a cut it caused) is visible against the
     # server's own count of the same prompt, explore.generates[0].prompt_eval_count.
@@ -5856,6 +5936,14 @@ def main(argv=None) -> int:
             preempted["selected"] = f"{sel[4].cid}:{sel[4].seq}" if sel[4] is not None else None
             return sel
 
+        if _conv_dir_plan is not None:
+            # Posture's prompt carries the whole seed, so either phase reaching the model delivered the seed.
+            _seed_sent = prompt_reached_model(explore) or prompt_reached_model(after)
+            _posture_sent = prompt_reached_model(after)
+            _conv_dir_rec = {"rung": list(conv_rung), "seed_sent": _seed_sent, "posture_sent": _posture_sent,
+                             "convs": _convs.mark_delivered(
+                                 _conv_dir_plan[0], (_conv_dir_plan[1] if _seed_sent else "")
+                                 + (_conv_dir_plan[2] if _posture_sent else ""))}
         _check_preempt("explore" if explore is not None and explore.yielded else
                        "posture" if after is not None and after.yielded else "before account")
         _phase("wake", "account", host_session_id)
@@ -5936,8 +6024,12 @@ def main(argv=None) -> int:
             say_line, pending_block, say_first, target, selected = pending_selection(instance, args.member, _woke)
             # Immediately before the instruction, so the smallest model does not have to hold it
             # across a turn boundary to use it.
+            _ctx_in_reflect = False
             if pending_block:
                 convo.append({"role": "user", "content": pending_block})
+                # SG4: marked delivered only once the reflect turn's prompt reaches the model (below)
+                _ctx_in_reflect = bool(selected is not None and selected.context
+                                       and selected.context in pending_block)
             # THE MOMENT A SKILL FORMS (dp, 2026-10-28: "once it figures something out, to retain it as a skill"):
             # an act that failed and then worked on the same target this beat. Said here, beside the instruction,
             # because this being uses what a step names (settle, 8 uses) and not what is only offered (skill, 0
@@ -5965,6 +6057,8 @@ def main(argv=None) -> int:
             reflect = run_ollama_tool_turn(client, llm, convo, max_steps=_reflect_steps,
                                            tools=ollama_tools(REFLECT_TOOLS), on_generate=_on_generate("reflect"),
                                            should_yield=_yield_for_a_person)
+            if _ctx_in_reflect and LAST_ANSWER_CONTEXT is not None and prompt_reached_model(reflect):
+                LAST_ANSWER_CONTEXT["delivered_reflect"] = True
             _check_preempt("reflect")
             if preempted:
                 say_line, pending_block, say_first, target, selected = _take_late()
@@ -6014,6 +6108,10 @@ def main(argv=None) -> int:
                      {"role": "user", "content": _beat_record_text(explore, after) + "\n\n" + ANSWER_ASK.format(
                          pending=selected.render(), target=selected.cid, words=_prior_words(reflect))}],
                     max_steps=1, tools=ollama_tools(["say"]), on_generate=_on_generate("answer"))
+            # SG4: both answer forms send selected.render(), which carries selected.context; delivered only
+            # once that prompt reached the model (NOVA on #836)
+            if LAST_ANSWER_CONTEXT is not None and selected.context and prompt_reached_model(answer):
+                LAST_ANSWER_CONTEXT["delivered_answer"] = True
             # NO RE-ASK HERE. Two were tried and both are reverted; the reasons are recorded as
             # SMALL_MODEL_LEGIBILITY 1.14, and the short form is: a prompt written in the harness's
             # voice, about the harness's mechanics, becomes the being's MESSAGE at this scale.
@@ -6199,6 +6297,10 @@ def main(argv=None) -> int:
         "conversation_settled_turns": _settled_turns,
         "tool_descriptions": _tool_desc_mode,
         "prompt_parts": _prompt_parts,
+        # SG4 uptake rung "listed": the off-window conversation turns this beat's sent state gave a line, and
+        # what the selected turn was shown it answers (null when the instance has conversation_directory off)
+        "conv_directory": _conv_dir_rec,
+        "answer_context": LAST_ANSWER_CONTEXT,
         "tool_offer": {"mode": "by_use", "by_name": list(_by_name)} if _by_name else None,
         "decline_closing": decline_closing_for(instance_config(instance)),
         "no_result_line": no_result_line_for(instance_config(instance)),
