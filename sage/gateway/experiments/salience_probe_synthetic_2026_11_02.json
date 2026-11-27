@@ -1,0 +1,11 @@
+{
+  "records": [
+    {"text": "The garden_policy.md states that the garden gate is open."},
+    {"text": "The garden_policy.md states that the garden gate is not open."},
+    {"text": "A watercolor painting depicts a blue sailboat."}
+  ],
+  "queries": [
+    {"text": "Is the garden gate open according to garden_policy.md?"},
+    {"text": "We talked earlier today; what did we discuss?"}
+  ]
+}
