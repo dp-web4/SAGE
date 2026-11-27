@@ -56,6 +56,10 @@ SEAT_OWNED_NOTES = ("from-dp.md", "from-the-seat.md")
 # scope_rulings.jsonl is how its scope requests were ruled, kept after hestia's list drops them (scope_rulings): the
 # ruler's word, which a being that could edit it could rewrite.
 SEAT_OWNED = ("entrustment.md", "settled_seat_notes.jsonl", "scope_rulings.jsonl")
+# standing_posture.md is the harness's copy of dp's fleet-wide posture (window_profile.POSTURE_COPY), kept in the home
+# of a being whose window profile shows the posture on a schedule, so the being can read it whole on beats where it
+# isn't repeated. A being that could write it would read back its own words as dp's.
+POSTURE_COPY = "standing_posture.md"
 # output_stream.jsonl (and its one older copy) is the harness's live record of what the model produced (being_stream):
 # what dp and the seat watch the being say as it says it, so it is the harness's to write, not the being's.
 STREAM_OWNED = ("output_stream.jsonl", "output_stream.jsonl.1")
@@ -1550,6 +1554,12 @@ class ReferenceF1aDispatcher:
                     "requests were ruled, kept by your seat in the ruler's own words. Nothing was "
                     "changed. If you disagree with a ruling, say so in your journal, in a "
                     "conversation, or in a new request with your reason")
+            if _home and _named(p, (POSTURE_COPY,)):
+                raise ValueError(
+                    f"{POSTURE_COPY} is yours to read and not to edit: it is dp's standing posture for "
+                    "every being, copied into your home by the harness so you can read it whole. Nothing "
+                    "was changed. Your own reading of it belongs in your notes or your journal, which "
+                    "are entirely yours")
             if _home and p.name in SEAT_OWNED:
                 raise ValueError(
                     f"{p.name} is yours to read and not to edit: it is what you were entrusted "
