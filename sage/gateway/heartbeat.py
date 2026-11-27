@@ -4273,25 +4273,36 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
             # filled with ".." (seq 52, 56, 58). A turn that asks nothing is not a debt.
             who = t.get("from")
             sel = SelectedTurn(cid, t, answers_the_being(instance, cid, member, t), woke=woke_hit)
-            # THE ASK IT ANSWERS, beside it (SG4; conversations.directory_entries). The reflect turn's context is
-            # compact by design and carries no conversation block, so "dp replied to what you asked for" was
-            # the whole of what it knew about the ask: on 2026-11-26 the ask was a pointer to an earlier turn
-            # of questions (seq 1248) that was nowhere in view. Off unless the instance sets
-            # `conversation_directory`; the arm (gist line or verbatim) is recorded per case.
+            # THE BEING'S LAST ASK, beside the turn (SG4; conversations.prior_ask, the same predicate the
+            # conversation block uses). The reflect turn's context is compact by design and carries no
+            # conversation block, so "dp replied to what you asked for" was the whole of what it knew about
+            # the ask: on 2026-11-26 the ask was a pointer to an earlier turn of questions (seq 1248) that was
+            # nowhere in view. Only where answers_the_being already framed the turn as following the being's
+            # ask (NOVA on #836), worded as adjacency unless the turn names the ask. Off unless the instance
+            # sets `conversation_directory`; the arm, the cap used and what was delivered are recorded.
             from sage.gateway import conversations as _cv
             _dmode = _cv.directory_mode(_conv_cfg(instance))
-            if _dmode:
+            if _dmode and sel.answers_ask:
                 _arm = _cv.directory_arm(_dmode, sel.seq)
-                _chain = _cv.what_it_answers(instance, cid, member, t, turn_expects_reply)
-                if _chain:
-                    _ents = [{"turn": c, "kind": "reply_chain",
-                              "why": (f"your ask that seq {sel.seq} replies to" if k == 0
-                                      else f"your seq {_chain[0].get('seq')} names it")}
-                             for k, c in enumerate(_chain)]
-                    sel.context = _cv.render_directory(_ents, member, cid, _arm)
+                _pa = _cv.prior_ask(instance, cid, member, t, turn_expects_reply)
+                _ents = _cv.prior_ask_entries(_pa, sel.seq)
+                _cap_used = None
+                if _ents:
+                    # ITS OWN BUDGET: the reflect prompt is not fitted by the explore ladder, and on cbp-being
+                    # it reached 19,818 of 20,480 tokens (prompt + generation, 2026-11-19..26; p99 9,387). So the
+                    # block is held under ANSWER_CONTEXT_CHARS, the verbatim cut stepping down before any line goes.
+                    for _cap in (_cv.CITED_TURN_CHARS, 500, 250, 0):
+                        sel.context = _cv.render_directory(_ents, member, cid, _arm, verbatim_cap=_cap)
+                        _cap_used = _cap
+                        if len(sel.context) <= ANSWER_CONTEXT_CHARS:
+                            break
                     block += "\n" + sel.context
                 LAST_ANSWER_CONTEXT = {"turn": f"{cid}:{sel.seq}", "arm": _arm,
-                                       "listed": [int(c.get("seq") or 0) for c in _chain]}
+                                       "linked": bool(_pa and _pa["linked"]),
+                                       "listed": [{"seq": int(e["turn"].get("seq") or 0), "kind": e["kind"]}
+                                                  for e in _ents],
+                                       "chars": len(sel.context), "verbatim_cap": _cap_used,
+                                       "delivered_reflect": False, "delivered_answer": False}
             if sel.woke and not sel.asks:
                 first = (f'FIRST, before the numbered writes below: {who} just wrote to you, and that is '
                          f'what woke you. If you have something to say back, call say with to set to '
@@ -4336,7 +4347,8 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
 
 LAST_SELECTION_ERROR: Optional[str] = None
 LAST_PENDING_SCAN: Optional[list] = None    # [[cid, seq]] the last selection saw, not the member's own
-LAST_ANSWER_CONTEXT: Optional[dict] = None  # SG4: what the selected turn was shown it answers, and in which arm
+LAST_ANSWER_CONTEXT: Optional[dict] = None  # SG4: what the selected turn was shown beside it, and in which arm
+ANSWER_CONTEXT_CHARS = 1800                 # SG4: ceiling on that block in the reflect and answer prompts
 
 
 def reconcile_recall(record: dict, scan: Optional[list], selected) -> dict:
@@ -5770,7 +5782,13 @@ def main(argv=None) -> int:
     if _seed_rung != conv_rung:
         conv_rung, state_block = _seed_rung, _states[_seed_rung]
     if _convs.directory_mode(instance_config(instance)):
-        _conv_dir_rec = {"rung": list(conv_rung), "convs": _convs.LAST_DIRECTORY.get(tuple(conv_rung))}
+        # SG4: an exposure is a line that is IN the seed sent, not one that was selected (NOVA on #836)
+        try:
+            _sent_text = "\n".join(str(m_.get("content") or "") for m_ in seed) + str(posture_turn or "")
+        except Exception:
+            _sent_text = ""
+        _conv_dir_rec = {"rung": list(conv_rung),
+                         "convs": _convs.mark_delivered(_convs.LAST_DIRECTORY.get(tuple(conv_rung)), _sent_text)}
     # CALIBRATION IS EVIDENCE, NOT A SILENT CHANGE (NOVA on #774): the sent seed's estimate at the ratio used
     # and at the prior, so a beat the measured ratio admitted (or a cut it caused) is visible against the
     # server's own count of the same prompt, explore.generates[0].prompt_eval_count.
@@ -5980,6 +5998,10 @@ def main(argv=None) -> int:
             # across a turn boundary to use it.
             if pending_block:
                 convo.append({"role": "user", "content": pending_block})
+                # SG4: an exposure is what reached a prompt, not what was selected (NOVA on #836)
+                if (LAST_ANSWER_CONTEXT is not None and selected is not None and selected.context
+                        and selected.context in pending_block):
+                    LAST_ANSWER_CONTEXT["delivered_reflect"] = True
             # THE MOMENT A SKILL FORMS (dp, 2026-10-28: "once it figures something out, to retain it as a skill"):
             # an act that failed and then worked on the same target this beat. Said here, beside the instruction,
             # because this being uses what a step names (settle, 8 uses) and not what is only offered (skill, 0
@@ -6020,6 +6042,9 @@ def main(argv=None) -> int:
         # Preempted: the person who spoke is answered even if reflection said something elsewhere.
         if selected is not None and selected.expects_reply and (preempted or not _said_in(reflect)):
             _phase("wrap-up", "answer", host_session_id)
+            # SG4: both answer forms send selected.render(), which carries selected.context
+            if LAST_ANSWER_CONTEXT is not None and selected.context:
+                LAST_ANSWER_CONTEXT["delivered_answer"] = True
             if answer_turn_mode(instance) == "json":
                 # Opt-in (instance.json "answer_turn": "json"). The selected turn and the ask; the
                 # beat's acts only for a seat's question when the beat acted (answer_turn_json).

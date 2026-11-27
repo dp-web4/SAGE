@@ -63,6 +63,7 @@ def test_the_sparse_rung_lists_the_questions_with_the_read_that_opens_them():
     line = [l for l in out.splitlines() if l.startswith(f"- seq {q} ")]
     assert line, "the off-window ask the answer replies to has a line"
     assert "cbp-being (you)" in line[0] and "names it" in line[0]
+    assert "replies to" not in out, "adjacency is not a reply; nothing asserts one"
     assert f"memory_read path conversations/dp.jsonl start_line {q} end_line {q}" in line[0]
     assert "Which folder?" in line[0], "its first words"
     assert "TAIL-MARK" not in out, "gist arm: a line, never the turn spliced in"
@@ -119,7 +120,10 @@ def test_the_reflect_block_and_the_answer_turn_list_the_chain():
     assert f"- seq {q} " in block, "the reflect turn has no conversation block; the line rides here"
     assert f"start_line {q}" in sel.render()
     from sage.gateway import heartbeat as hb
-    assert hb.LAST_ANSWER_CONTEXT["arm"] == "gist" and q in hb.LAST_ANSWER_CONTEXT["listed"]
+    ac = hb.LAST_ANSWER_CONTEXT
+    assert ac["arm"] == "gist" and q in [e["seq"] for e in ac["listed"]]
+    assert ac["linked"] is False and ac["chars"] <= hb.ANSWER_CONTEXT_CHARS
+    assert ac["delivered_reflect"] is False and ac["delivered_answer"] is False, "set only where sent"
 
 
 def test_reflect_is_unchanged_without_the_setting():
@@ -128,18 +132,102 @@ def test_reflect_is_unchanged_without_the_setting():
     assert f"seq {q}" not in block.replace(f"dp seq {q}", "") and sel.context == ""
 
 
-def test_a_being_turn_that_asked_nothing_has_no_chain():
+def _pa(inst, cid="dp"):
+    return conv.prior_ask(inst, cid, ME, conv.recent(inst, cid, 1)[-1], turn_expects_reply)
+
+
+def test_a_being_turn_that_asked_nothing_has_no_prior_ask():
     inst = _inst()
     _say(inst, ME, "I finished the census today.")
     _say(inst, "dp", "nice work")
-    assert conv.what_it_answers(inst, "dp", ME, conv.recent(inst, "dp", 1)[-1], turn_expects_reply) == []
+    assert _pa(inst) is None
 
 
-def test_a_request_run_result_has_no_chain():
+def test_a_request_run_result_has_no_prior_ask():
     inst = _inst()
     _say(inst, ME, "Can you look at seq 1?")
     _say(inst, "dp", "[request_run] scratch/x.py exited 0")
-    assert conv.what_it_answers(inst, "dp", ME, conv.recent(inst, "dp", 1)[-1], turn_expects_reply) == []
+    assert _pa(inst) is None
+
+
+def test_an_unrelated_statement_is_listed_as_adjacent_never_as_a_reply():
+    inst = _inst("gist")
+    _say(inst, "dp", "hi")
+    _say(inst, ME, "Which folder should I use? " + "x " * 80)
+    _say(inst, ME, "ping")
+    _say(inst, ME, "Any answer to seq 2?")
+    _say(inst, "dp", "fyi the server restarts tonight")
+    pa = _pa(inst)
+    assert pa is not None and pa["linked"] is False
+    out = _render(inst)
+    assert "- seq 2 " in out and "your seq 4 names it" in out and "replies to" not in out
+    ents = conv.prior_ask_entries(pa, 5)
+    assert ents[0]["why"] == "your last ask before seq 5", "adjacency, said as adjacency"
+
+
+def test_an_explicit_answers_link_is_said_as_one():
+    inst = _inst()
+    _say(inst, ME, "Which folder?")
+    conv.append(inst, "dp", speaker="dp", text="the archive one", extra={"answers": [1]})
+    pa = _pa(inst)
+    assert pa is not None and pa["linked"] is True
+    assert "names it as answered" in conv.prior_ask_entries(pa, 2)[0]["why"]
+
+
+def test_a_voice_line_gets_nothing_in_either_path():
+    inst, _q = _the_1126_case(directory="gist")
+    conv.append(inst, "dp", speaker="dp", text="tv noise about decisions", via="voice")
+    assert _pa(inst) is None
+    out = _render(inst)
+    assert "your last ask before" not in out
+    _line, block, _first, _target, _sel = pending_selection(inst, ME)
+    assert "your last ask before" not in block
+
+
+def test_a_third_speaker_in_between_breaks_adjacency():
+    inst = Path(tempfile.mkdtemp(prefix="sg4-3p-"))
+    conv.create(inst, "room", title="three", participants=["dp", "cbp-claude", ME],
+                writable_by=["dp", "cbp-claude", ME], summary="")
+    _say(inst, ME, "Which folder should I use?", cid="room")
+    _say(inst, "cbp-claude", "I ran the census.", cid="room")
+    _say(inst, "dp", "your call", cid="room")
+    assert _pa(inst, "room") is None, "the seat spoke first; nothing says whose question dp takes up"
+
+
+def test_the_full_arm_is_verbatim():
+    inst = _inst()
+    body = "Line one:\n  1. Which folder?\n\n  2. Which   script?\n" + "pad " * 40
+    _say(inst, ME, body)
+    _say(inst, ME, "x")
+    _say(inst, ME, "Answer to seq 1?")
+    _say(inst, "dp", "decide")
+    out = _render(inst, directory="full")
+    stored = conv.recent(inst, "dp", 10)[0]["text"]      # the store trims the turn's outer whitespace
+    assert "  2. Which   script?" in stored
+    assert "\n".join("    " + ln for ln in stored.split("\n")) in out, "the stored turn, nothing collapsed"
+
+
+def test_reflect_context_is_held_under_its_ceiling():
+    from sage.gateway import heartbeat as hb
+    inst = _inst("full")
+    _say(inst, ME, "A " + "very long question " * 200 + "?")
+    a = _seqs(inst)[-1]
+    _say(inst, ME, "B " + "another long one " * 200 + "?")
+    b = _seqs(inst)[-1]
+    _say(inst, ME, f"Answers to seq {a} and seq {b}?")
+    _say(inst, "dp", "decide")      # seq 4, even -> but mode is full, not ab
+    _line, block, _f, _t, sel = pending_selection(inst, ME)
+    ac = hb.LAST_ANSWER_CONTEXT
+    assert ac["chars"] <= hb.ANSWER_CONTEXT_CHARS and len(sel.context) == ac["chars"]
+    assert ac["verbatim_cap"] < conv.CITED_TURN_CHARS, "the verbatim cut stepped down, the lines stayed"
+    assert f"start_line {a}" in sel.context and f"start_line {b}" in sel.context
+
+
+def test_delivery_is_what_reached_the_prompt():
+    rec = [{"cid": "dp", "arm": "gist", "listed": [{"seq": 7, "kind": "cited"}, {"seq": 9, "kind": "unanswered"}]}]
+    sent = "... " + conv.open_handle("dp", 7) + " ..."
+    marked = conv.mark_delivered(rec, sent)
+    assert [e["delivered"] for e in marked[0]["listed"]] == [True, False]
 
 
 def test_a_seq_named_for_another_conversation_is_not_resolved_here():
@@ -149,8 +237,8 @@ def test_a_seq_named_for_another_conversation_is_not_resolved_here():
     _say(inst, "dp", "first")
     _say(inst, ME, "What did cbp-claude seq 1 mean?")
     _say(inst, "dp", "ask the seat")
-    ctx = conv.what_it_answers(inst, "dp", ME, conv.recent(inst, "dp", 1)[-1], turn_expects_reply)
-    assert [t["text"] for t in ctx] == ["What did cbp-claude seq 1 mean?"]
+    pa = _pa(inst)
+    assert pa["ask"]["text"] == "What did cbp-claude seq 1 mean?" and pa["cited"] == []
 
 
 def test_a_seq_older_than_the_recent_window_is_still_found():

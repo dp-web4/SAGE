@@ -479,55 +479,73 @@ def open_turns(turns: list, me: str) -> list[dict]:
 # its own pointer and the answer, and NOT the four questions. The reflect line said, correctly, that the
 # turn "replied to what you asked for" (answers_the_being), but what it had asked was a pointer to a turn
 # it could no longer see. Its reply did not take up the questions, and the next three beats went to an
-# unrelated script. what_it_answers finds that chain; SG4 below lists it beside the answer.
+# unrelated script. prior_ask finds that ask; SG4 below lists it beside the newest turn.
 CITED_TURN_CHARS = 900       # per turn; the full turn stays readable (memory_read conversations/<id>.jsonl)
 CITED_MAX = 2                # turns the ask may pull in by seq, newest first
 _SEQ_REF = re.compile(r"(?:\b([A-Za-z][\w.-]*)\s+)?\bseq\s*#?(\d+)\b", re.I)
 
 
-def what_it_answers(instance: Path, conv_id: str, me: str, turn: dict, asks) -> list[dict]:
-    """The being's own ask that `turn` replies to, then up to CITED_MAX earlier turns of THIS
-    conversation that the ask names by seq ("... the answer to dp seq 1248?"). [] when `turn` is
-    the being's own, is a [request_run] result (the seat's reply by construction, often to an older
-    request: see heartbeat.answers_the_being), or follows a being turn that asked nothing.
+def prior_ask(instance: Path, conv_id: str, me: str, turn: dict, asks) -> Optional[dict]:
+    """The being's own ask immediately before `turn`, and up to CITED_MAX earlier turns of THIS
+    conversation that the ask names by seq ("... the answer to dp seq 1248?"), as
+    {"ask": turn, "cited": [turns], "linked": bool}; None when there is no such ask.
 
-    `asks(text) -> bool` is heartbeat.turn_expects_reply, passed in so the one place that decides
-    "this asks for something" stays the one place, and this module does not import the heartbeat.
+    THE ONE ELIGIBILITY PREDICATE (NOVA on #836): the conversation block and the reflect/answer path
+    both call this and nothing else, so they cannot disagree about which turns qualify. None when:
+      * `turn` is the being's own, a voice line (the mic picked it up; nobody addressed the being),
+        or a [request_run] result (the seat's reply by construction, often to an older request);
+      * the being's last turn before `turn` asked nothing (`asks`, heartbeat.turn_expects_reply);
+      * ANY other participant spoke between that ask and `turn`. With a third speaker in between,
+        `turn` is not the next word after the ask, and nothing here can say whose question it takes up.
+
+    ADJACENCY IS NOT A REPLY. Unless `turn` names the ask explicitly (an `answers` list holding its seq),
+    `linked` is False and callers must say only what was measured: this was the being's last ask before
+    `turn`. The store has no reply-to field for other speakers, so for most turns that is all anyone knows.
     A seq prefixed by ANOTHER conversation's id ("cbp-claude seq 17753") is not resolved here."""
     try:
-        if not isinstance(turn, dict) or turn.get("from") == me:
-            return []
+        if not isinstance(turn, dict) or turn.get("from") == me or turn.get("via") == "voice":
+            return None
         if str(turn.get("text") or "").startswith("[request_run]"):
-            return []
+            return None
         seq = int(turn.get("seq") or 0)
         # The last 200 turns hold the ask (answers_the_being looks at 40); the whole record is read only
         # when the ask cites a seq older than that, since the ladder renders this up to five times a beat.
         history = [t for t in recent(instance, conv_id, limit=200) if isinstance(t, dict)]
-        mine = [t for t in history if t.get("from") == me and int(t.get("seq") or 0) < seq]
-        if not mine:
-            return []
-        ask = mine[-1]
+        before = [t for t in history if int(t.get("seq") or 0) < seq]
+        mine_idx = max((k for k, t in enumerate(before) if t.get("from") == me), default=-1)
+        if mine_idx < 0:
+            return None
+        if any(t.get("from") != me for t in before[mine_idx + 1:]):
+            return None
+        ask = before[mine_idx]
         text = str(ask.get("text") or "")
         if not (text.startswith("[request_run]") or asks(text)):
-            return []
+            return None
         other_ids = {m.get("id") for m in listing(instance)} - {conv_id}
         ask_seq = int(ask.get("seq") or 0)
-        wanted: list[int] = []
-        for m in _SEQ_REF.finditer(text):
-            if m.group(1) and m.group(1) in other_ids:
-                continue
-            n = int(m.group(2))
-            if 0 < n < ask_seq and n not in wanted:
-                wanted.append(n)
+        wanted = _cited_seqs(text, conv_id, other_ids, ask_seq)
         by_seq = {int(t.get("seq") or 0): t for t in history}
         if any(n not in by_seq for n in wanted):
             by_seq = {int(t.get("seq") or 0): t for t in recent(instance, conv_id, limit=10 ** 6)
                       if isinstance(t, dict)}
-        cited = [n for n in wanted if n in by_seq]
-        cited = sorted(cited, reverse=True)[:CITED_MAX]
-        return [ask] + [by_seq[n] for n in cited]
+        cited = sorted((n for n in wanted if n in by_seq), reverse=True)[:CITED_MAX]
+        named = turn.get("answers")
+        linked = isinstance(named, list) and ask_seq in {int(x) for x in named if is_seq(x)}
+        return {"ask": ask, "cited": [by_seq[n] for n in cited], "linked": linked}
     except Exception:
+        return None
+
+
+def prior_ask_entries(pa: Optional[dict], reply_seq) -> list[dict]:
+    """prior_ask's turns as directory entries, worded with what was measured (linked or adjacent)."""
+    if not pa:
         return []
+    ask_seq = pa["ask"].get("seq")
+    why = (f"seq {reply_seq} names it as answered" if pa["linked"]
+           else f"your last ask before seq {reply_seq}")
+    out = [{"turn": pa["ask"], "why": why, "kind": "prior_ask"}]
+    out += [{"turn": t, "why": f"your seq {ask_seq} names it", "kind": "cited"} for t in pa["cited"]]
+    return out
 
 
 # SG4, THE CONVERSATION SLICE (paged-context PRD, dev-SAGE sage/cognition/paged_context/PRD.md §9a):
@@ -538,13 +556,14 @@ def what_it_answers(instance: Path, conv_id: str, me: str, turn: dict, asks) -> 
 # why it is listed, its first words, and the exact read that opens it. Which turns matter is measured, not
 # guessed: the being's own ask that the newest turn replies to, the turns a shown turn names by seq (the
 # being's own citation is a page fault), and turns from others that no turn of the being's has answered.
+# The being's last ask before the newest turn is listed as exactly that (prior_ask): adjacency is not a reply.
 #
 # The PRD's checks: no imperative text (the lines are material, labelled with how they were found); the
 # being's reach stays authoritative (the default lists, never splices); uptake is measured (each beat
 # records the lines it listed, so listed -> opened -> cited can be read off heartbeats.jsonl).
 #
 # `conversation_directory` (instance.json) turns it on per instance: "gist" lists; "full" lists and also
-# shows the reply chain's turns verbatim (CITED_TURN_CHARS each, the shape SAGE #836 first shipped); "ab"
+# shows the prior ask and the turns it names verbatim (CITED_TURN_CHARS each, the shape SAGE #836 first shipped); "ab"
 # assigns gist or full by the parity of the newest turn's seq, so both shapes run on the same being and
 # the record says which one each case got. Absent, nothing changes.
 DIRECTORY_MAX = 4            # lines per conversation
@@ -583,7 +602,8 @@ def _cited_seqs(text: str, conv_id: str, other_ids: set, below: int) -> list[int
 
 def directory_entries(instance: Path, conv_id: str, me: str, shown: list, asks) -> list[dict]:
     """Off-window turns of `conv_id` worth a line, most load-bearing first, at most DIRECTORY_MAX:
-    the reply chain (what_it_answers on the newest shown turn), turns a shown turn names by seq, then
+    the being's last ask before the newest shown turn and what it names (prior_ask), turns a shown turn
+    names by seq, then
     others' turns no turn of `me` has answered. Each entry: {turn, why, kind}. Off-window means older
     than the oldest shown turn; nothing shown is repeated."""
     if not shown:
@@ -611,13 +631,9 @@ def directory_entries(instance: Path, conv_id: str, me: str, shown: list, asks) 
             out.append({"turn": t, "why": why, "kind": kind})
 
         newest = shown[-1]
-        if asks is not None and newest.get("from") != me and newest.get("via") != "voice":
-            chain = what_it_answers(instance, conv_id, me, newest, asks)
-            if chain:
-                ask_seq = int(chain[0].get("seq") or 0)
-                add(ask_seq, f"your ask that seq {newest.get('seq')} replies to", "reply_chain")
-                for t in chain[1:]:
-                    add(int(t.get("seq") or 0), f"your seq {ask_seq} names it", "reply_chain")
+        if asks is not None:
+            for e in prior_ask_entries(prior_ask(instance, conv_id, me, newest, asks), newest.get("seq")):
+                add(int(e["turn"].get("seq") or 0), e["why"], e["kind"])
         for t in reversed(shown):
             for n in _cited_seqs(t.get("text"), conv_id, other_ids, int(t.get("seq") or 0)):
                 add(n, f"seq {t.get('seq')} names it", "cited")
@@ -630,11 +646,30 @@ def directory_entries(instance: Path, conv_id: str, me: str, shown: list, asks) 
         return []
 
 
-def render_directory(entries: list, me: str, conv_id: str, arm: Optional[str]) -> str:
-    """One line per entry; under the "full" arm the reply chain and cited turns also show verbatim."""
+def open_handle(conv_id: str, seq) -> str:
+    """The exact read a directory line ends with; also how delivery is checked (mark_delivered)."""
+    return f"memory_read path conversations/{conv_id}.jsonl start_line {seq} end_line {seq}"
+
+
+def mark_delivered(convs: Optional[list], sent_text: str) -> list:
+    """LAST_DIRECTORY's record for one rung, each listed entry marked `delivered`: whether its line's
+    open handle is in the text actually sent. An exposure is what reached the prompt, not what was
+    selected (NOVA on #836)."""
+    return [dict(c, listed=[dict(e, delivered=open_handle(c["cid"], e["seq"]) in (sent_text or ""))
+                            for e in c.get("listed") or []]) for c in (convs or [])]
+
+
+def render_directory(entries: list, me: str, conv_id: str, arm: Optional[str],
+                     verbatim_cap: int = CITED_TURN_CHARS) -> str:
+    """One line per entry. Under the "full" arm a prior_ask or cited turn longer than its gist also
+    follows VERBATIM (NOVA on #836: no whitespace collapsed), each of its lines indented four spaces,
+    cut at `verbatim_cap` chars with the cut said."""
     if not entries:
         return ""
-    lines = ["_Not shown above, one line each (the quoted text is the turn's first words):_"]
+    head = "_Not shown above, one line each (the quoted text is the turn's first words, spacing collapsed)"
+    if arm == "full" and verbatim_cap > 0 and any(e["kind"] in ("prior_ask", "cited") for e in entries):
+        head += "; your asks and the turns they name follow verbatim, indented four spaces"
+    lines = [head + ":_"]
     for e in entries:
         t = e["turn"]
         seq = t.get("seq")
@@ -642,12 +677,12 @@ def render_directory(entries: list, me: str, conv_id: str, arm: Optional[str]) -
         txt = " ".join(str(t.get("text") or "").split())
         gist = txt if len(txt) <= GIST_CHARS else txt[:GIST_CHARS].rstrip() + "…"
         lines.append(f"- seq {seq} · {who} · {str(t.get('ts') or '')[:16].replace('T', ' ')} · {e['why']} · "
-                     f"\"{gist}\" · memory_read path conversations/{conv_id}.jsonl start_line {seq} "
-                     f"end_line {seq}")
-        if arm == "full" and e["kind"] in ("reply_chain", "cited") and len(txt) > GIST_CHARS:
-            full = txt if len(txt) <= CITED_TURN_CHARS else (
-                txt[:CITED_TURN_CHARS].rstrip() + f" …[{len(txt) - CITED_TURN_CHARS} more chars]")
-            lines.append(f"  {full}")
+                     f"\"{gist}\" · {open_handle(conv_id, seq)}")
+        raw = str(t.get("text") or "")
+        if arm == "full" and verbatim_cap > 0 and e["kind"] in ("prior_ask", "cited") and len(txt) > GIST_CHARS:
+            body = raw if len(raw) <= verbatim_cap else (
+                raw[:verbatim_cap] + f"\n…[cut here: {len(raw) - verbatim_cap} more chars]")
+            lines.append("\n".join("    " + ln for ln in body.split("\n")))
     return "\n".join(lines)
 
 
