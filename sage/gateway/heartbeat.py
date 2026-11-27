@@ -1172,6 +1172,16 @@ def _failed_sentence(failed) -> str:
 # them beside the instruction to write the record. An affordance: nothing is blocked.
 RECEIPTS_SHOWN = 6
 _LANDED_VERBS = ("memory_edit", "memory_write", "retire_note")
+# A LANDED .py WRITE CARRIES ITS PARSE VERDICT. The write receipt already says whether Python can parse
+# the file after it (reference_f1a), but this summary cut that to "landed", and a small model reads
+# "landed" as "fixed". cbp-being 2026-11-27 08:05Z: the beat's one landed edit said "Python cannot
+# parse xor-visualization-final.py now: IndentationError at line 94"; reflect was told "memory_edit ...
+# landed" and journaled "The file now parses and runs". Over its heartbeats, a beat whose last landed
+# .py receipt said "cannot parse" had a reflect write claiming it parses in 41/310 beats before #716
+# and 3/38 after, against 157/3082 and 84/985 when it said "can parse": before, the claim came MORE often
+# on a broken file; after, at the same rate either way, so it does not track the verdict. The last verdict on a target is the
+# file's state at reflect time: failed and refused writes change nothing on disk.
+_PARSE_VERDICT = re.compile(r"Python (?:cannot parse \S+ now: \w+ at line \d+|can parse \S+ now)")
 
 
 def receipts_this_beat(*turns) -> list:
@@ -1185,6 +1195,7 @@ def receipts_this_beat(*turns) -> list:
             items.extend(i for i in tr if isinstance(i, tuple) and len(i) == 2)
     runs: dict = {}
     order: dict = {}
+    verdicts: dict = {}
     for intent, env in items:
         if not getattr(env, "ok", False) or getattr(env, "refused", False):
             continue
@@ -1202,6 +1213,9 @@ def receipts_this_beat(*turns) -> list:
         elif eff in _LANDED_VERBS and target:
             key = (eff, target)
             order[key] = (order.get(key) or 0) + 1
+            m = _PARSE_VERDICT.search(res if isinstance(res, str) else "")
+            if m:
+                verdicts[target] = m.group(0)
     out = []
     for (eff, target), n in order.items():
         if eff == "run":
@@ -1212,7 +1226,11 @@ def receipts_this_beat(*turns) -> list:
             out.append(f"request_run {target} was only asked for: the seat has not run it, so no result"
                        " of it exists yet")
         else:
-            out.append(f"{eff} {target} landed" + (f" ({n} times)" if n > 1 else ""))
+            line = f"{eff} {target} landed" + (f" ({n} times)" if n > 1 else "")
+            v = verdicts.pop(target, None)            # said once per file, on its first landed line
+            if v:
+                line += f", and after your last write to it its receipt said: {v}"
+            out.append(line)
     return out
 
 

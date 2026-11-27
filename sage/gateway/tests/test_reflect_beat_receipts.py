@@ -68,6 +68,44 @@ def test_many_receipts_are_capped_and_counted():
     assert "; and 3 more." in p and f"notes/n{RECEIPTS_SHOWN}.md" not in p
 
 
+X = "scratch/xor-visualization-final.py"
+BROKEN = (": replaced 1 occurrence, on line 85; the file went from 147 to 147 lines. This changed the file on"
+          " disk — it is not an append. Python cannot parse xor-visualization-final.py now: IndentationError"
+          " at line 94: unindent does not match any outer indentation level. It cannot run until that line"
+          " is fixed.")
+FINE = ": replaced 1 occurrence. Python can parse xor-visualization-final.py now. That is not the same as running it."
+
+
+def _landed(path, result, eff="memory_edit"):
+    return (BeingIntent(eff, {"path": path}), ResultEnvelope(ok=True, result=result))
+
+
+def test_a_landed_py_edit_carries_its_parse_verdict():
+    """cbp-being 2026-11-27 08:05Z: told only "landed", reflect journaled "The file now parses and runs"."""
+    explore = SimpleNamespace(trace=[_landed(X, BROKEN), _act("memory_edit", X, ok=False)])
+    r = receipts_this_beat(explore, None)
+    assert r == [f"memory_edit {X} landed, and after your last write to it its receipt said: Python cannot"
+                 " parse xor-visualization-final.py now: IndentationError at line 94"], r
+    assert "cannot parse" in reflect_prompt(refused=False, receipts=r, **KW)
+
+
+def test_the_last_verdict_on_a_file_is_the_one_said():
+    explore = SimpleNamespace(trace=[_landed(X, BROKEN), _landed(X, FINE)])
+    assert receipts_this_beat(explore, None) == [
+        f"memory_edit {X} landed (2 times), and after your last write to it its receipt said:"
+        " Python can parse xor-visualization-final.py now"]
+    explore = SimpleNamespace(trace=[_landed(X, FINE), _landed(X, BROKEN, eff="memory_write")])
+    r = receipts_this_beat(explore, None)
+    assert r[0] == f"memory_edit {X} landed, and after your last write to it its receipt said: Python cannot" \
+                   " parse xor-visualization-final.py now: IndentationError at line 94", r
+    assert r[1] == f"memory_write {X} landed", "the verdict is said once per file"
+
+
+def test_a_receipt_without_a_verdict_stays_landed():
+    explore = SimpleNamespace(trace=[_landed("notes/a.md", "appended 3 lines"), _landed(X, {"not": "text"})])
+    assert receipts_this_beat(explore, None) == ["memory_edit notes/a.md landed", f"memory_edit {X} landed"]
+
+
 def test_nothing_to_say_leaves_the_prompt_unchanged():
     assert receipts_this_beat() == [] and receipts_this_beat(None, SimpleNamespace(trace=None)) == []
     assert reflect_prompt(refused=False, receipts=[], **KW) == reflect_prompt(refused=False, **KW)
