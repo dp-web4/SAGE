@@ -3969,7 +3969,7 @@ class HestiaF1aDispatcher:
             if said:
                 outside.append(said)
         # The traceback's verdict leads, so window compaction keeps it (_run_headline).
-        headline = _run_headline(rc, errtxt, [b for b, _ in staged])
+        headline = _run_headline(rc, errtxt, [b for b, _ in staged], stage=stage)
         result = {"headline": headline} if headline else {}
         result.update({"script": staged[0][0], "files": [b for b, _ in staged], "exit": rc})
         if outside:
@@ -6274,7 +6274,7 @@ _TB_FRAME = re.compile(r'^  File "([^"]+)", line (\d+), in (.+)$')
 RUN_HEADLINE_EXC_MAX = 300
 
 
-def _run_headline(rc: int, stderr: str, files: list) -> str:
+def _run_headline(rc: int, stderr: str, files: list, stage: str = "") -> str:
     """A failed run's verdict, quoted from its own traceback, to lead the result: the exception
     line and the deepest frame in one of the run's own files. "" when there is no traceback.
 
@@ -6292,31 +6292,45 @@ def _run_headline(rc: int, stderr: str, files: list) -> str:
     goes there.
 
     ONLY WHAT STDERR SAYS (the #474 rule for `note`): the exception line as printed, and the
-    frame as printed. No cause is inferred, and nothing is said when there is no traceback."""
+    frame as printed. No cause is inferred, and nothing is said when there is no traceback.
+
+    AT THE END MEANS AT THE END (legion-claude on #844). A traceback printed and survived (a
+    retry loop's `traceback.print_exc()`), then more output, then the wall-clock stop, would be
+    credited with ending the run. So the headline is said only when nothing but blank lines and
+    indented continuation lines follow the exception line. Anything else, a `[stopped: ...]`
+    notice included, means the traceback may not be the verdict, and the result stays as it was.
+
+    YOUR OWN FILE IS A PATH, NOT A NAME. A staged `utils.py` and a library's `.../lib/utils.py`
+    share a basename. A frame is the run's own only when its path is where the run put the file:
+    `/work/<name>` in the bwrap sandbox, `<stage>/<name>` under Seatbelt, or the bare name."""
     if rc == 0 or "Traceback (most recent call last)" not in (stderr or ""):
         return ""
     lines = stderr.splitlines()
     last_frame = -1
     own = None
     names = {os.path.basename(f) for f in (files or ())}
+    roots = {"/work"} | ({stage, os.path.realpath(stage)} if stage else set())
     for i, ln in enumerate(lines):
         m = _TB_FRAME.match(ln)
         if m:
             last_frame = i
-            if os.path.basename(m.group(1)) in names:
-                own = (os.path.basename(m.group(1)), m.group(2), m.group(3).strip())
+            path, base = m.group(1), os.path.basename(m.group(1))
+            if base in names and (path == base or os.path.dirname(path) in roots):
+                own = (base, m.group(2), m.group(3).strip())
     if last_frame < 0:
         return ""
     # The exception line is the first line after the last frame that is not the frame's
     # indented source/caret lines. A message can run over several lines; the first carries
     # the type, which is what a reader needs to tell it from a warning.
-    exc = ""
-    for ln in lines[last_frame + 1:]:
-        if ln.startswith("    ") or not ln.strip():
+    exc, at = "", -1
+    for j in range(last_frame + 1, len(lines)):
+        if lines[j].startswith("    ") or not lines[j].strip():
             continue
-        exc = ln.strip()
+        exc, at = lines[j].strip(), j
         break
     if not exc:
+        return ""
+    if any(ln.strip() and not ln[:1].isspace() for ln in lines[at + 1:]):
         return ""
     if len(exc) > RUN_HEADLINE_EXC_MAX:
         exc = exc[:RUN_HEADLINE_EXC_MAX] + " …"
