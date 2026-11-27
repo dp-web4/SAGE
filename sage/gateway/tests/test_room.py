@@ -229,7 +229,7 @@ def test_the_heartbeat_carries_heard_words_in_before_it_builds_the_state():
     src = open(os.path.join(os.path.dirname(__file__), "..", "heartbeat.py")).read()
     ingest = src.index("_room.ingest_heard(instance")
     assert ingest < src.index("pending_selection(instance, args.member")
-    assert ingest < src.index("body_reading=_body_cur) + _scope_tail")
+    assert ingest < src.index("def _build_state(per_conv, turn_chars)")
 
 
 def test_append_lands_then_the_watermark_write_fails_and_nothing_is_duplicated(monkeypatch):

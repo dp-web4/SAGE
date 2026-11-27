@@ -5621,6 +5621,21 @@ def main(argv=None) -> int:
     _by_name = _toolset.by_name_verbs(instance, instance_config(instance))
     if _by_name:
         _explore_specs = _toolset.offer_by_name(_explore_specs, _by_name)
+    # WINDOW PROFILE (opt-in, window_profile.py; SAGE-at-home step 1): the verbs the being uses most keep
+    # their specs inside the tools' share of the window, the rest are listed behind `verb`. Budgeted at the
+    # fallback CPT, which is below every measured ratio, so the share errs small (the state share below uses
+    # the beat's measured ratio, which isn't known yet here).
+    from sage.gateway import window_profile as _wp
+    _wp_on = _wp.mode(instance_config(instance))
+    _wp_rec = None
+    if _wp_on and isinstance(_num_ctx, int) and isinstance(_num_predict, int):
+        try:
+            _wp_budget0 = window_budget_chars(_num_ctx, _num_predict)
+            _explore_specs, _wp_tools = _wp.fit_tools(
+                _explore_specs, _wp.share_chars(_wp_budget0, "tool_schemas"), _wp.call_counts(instance))
+            _wp_rec = {"num_ctx": _num_ctx, "num_predict": _num_predict, "tools": _wp_tools}
+        except Exception as _e:          # a profile that errors costs the being nothing: specs as they were
+            _wp_rec = {"error": f"{type(_e).__name__}: {_e}"[:200]}
     _expect_arm = trial_arm(instance, instance / "heartbeats.jsonl", "expect_trial")
     if _expect_arm["arm"] != "on":
         for _sp in _explore_specs:
@@ -5634,8 +5649,9 @@ def main(argv=None) -> int:
     _schema_measured = _schema_chars_for(_explore_tools, _unavail, _enums, brief=_tool_desc_mode == "brief",
                                          lean=_tool_desc_mode == "lean",
                                          cfg=instance_config(instance))
-    if _by_name:
+    if _by_name or (_wp_rec and "tools" in _wp_rec):
         # measured on the specs that are SENT: _schema_chars_for rebuilds them without the by-name cut
+        # (or the window profile's `verb` listing)
         _schema_measured = len(json.dumps(_explore_specs))
     _schema_chars = (_schema_measured if _schema_measured is not None
                      else _schema_chars_fallback(_explore_tools))
@@ -5678,14 +5694,23 @@ def main(argv=None) -> int:
 
     _convs.LAST_DIRECTORY.clear()       # SG4: per-rung listings for THIS beat; the record keeps the rung sent
 
+    _wp_state_budget = [None]           # set once the beat's ratio is known (below), before the first render
+    _wp_state_recs = {}                 # per rung: what the profile listed in that render
+
     def _build_state(per_conv, turn_chars):
-        return (_state_head + own_state(instance, args.member, entrusted,
-                                        per_conv=per_conv, turn_chars=turn_chars,
-                                        services=_services, mark_conversations=False,
-                                        settled_turns=_settled_turns,
-                                        proprioception=_proprioception,
-                                        scope_snap=scope_snap,
-                                        body_reading=_body_cur) + _scope_tail)
+        _st = own_state(instance, args.member, entrusted,
+                        per_conv=per_conv, turn_chars=turn_chars,
+                        services=_services, mark_conversations=False,
+                        settled_turns=_settled_turns,
+                        proprioception=_proprioception,
+                        scope_snap=scope_snap,
+                        body_reading=_body_cur)
+        if _wp_state_budget[0] is not None:
+            try:
+                _st, _wp_state_recs[(per_conv, turn_chars)] = _wp.fit_state(_st, _wp_state_budget[0], instance)
+            except Exception as _e:
+                _wp_state_recs[(per_conv, turn_chars)] = {"error": f"{type(_e).__name__}: {_e}"[:200]}
+        return _state_head + _st + _scope_tail
 
     # A FRAME IS PROMPT TOO. It is not characters, so the ladder cannot see it unless its
     # token cost is converted and charged here. Measured 2,042 tokens for two frames, about a
@@ -5714,6 +5739,10 @@ def main(argv=None) -> int:
     _fit_cpt = fit_cpt(_cpt_cal)
     _cpt_cal["fit_cpt"] = _fit_cpt
     _frame_chars = sum(int(FRAME_TOKENS * _fit_cpt) for _ in _frame_b64s)
+    if _wp_rec is not None and "tools" in _wp_rec:
+        _wp_budget = window_budget_chars(_num_ctx, _num_predict, cpt=_fit_cpt)
+        _wp_state_budget[0] = _wp.share_chars(_wp_budget, "state")
+        _wp_rec.update(budget=_wp_budget, cpt=_fit_cpt, state_budget=_wp_state_budget[0])
     _other = (len(posture()) + len(inbox) + _schema_chars + 1200 + _frame_chars
               + 1200 + 400 + LOOP_GROWTH_CHARS)
     state_block, conv_rung, conv_intervention = fit_state(
@@ -5798,6 +5827,10 @@ def main(argv=None) -> int:
         llm, _cpt_cal)
     if _seed_rung != conv_rung:
         conv_rung, state_block = _seed_rung, _states[_seed_rung]
+    if _wp_rec is not None and "tools" in _wp_rec:
+        # what the profile did in the render that is SENT; delivered once explore/posture reaches the model
+        _wp_rec.update(rung=list(conv_rung), state=_wp_state_recs.get(tuple(conv_rung)),
+                       not_managed={"posture": len(posture()), "inbox": len(inbox)}, delivered=False)
     _conv_dir_plan = None
     if _convs.directory_mode(instance_config(instance)):
         # SG4: an exposure is a line the model READ, not one that was selected or prepared (NOVA on #836). The
@@ -5944,6 +5977,9 @@ def main(argv=None) -> int:
                              "convs": _convs.mark_delivered(
                                  _conv_dir_plan[0], (_conv_dir_plan[1] if _seed_sent else "")
                                  + (_conv_dir_plan[2] if _posture_sent else ""))}
+        if _wp_rec is not None and "delivered" in _wp_rec:
+            # the profile's listings and tool offer travel in the seed (and posture's prompt carries the seed)
+            _wp_rec["delivered"] = prompt_reached_model(explore) or prompt_reached_model(after)
         _check_preempt("explore" if explore is not None and explore.yielded else
                        "posture" if after is not None and after.yielded else "before account")
         _phase("wake", "account", host_session_id)
@@ -6301,6 +6337,8 @@ def main(argv=None) -> int:
         # what the selected turn was shown it answers (null when the instance has conversation_directory off)
         "conv_directory": _conv_dir_rec,
         "answer_context": LAST_ANSWER_CONTEXT,
+        # WINDOW PROFILE (opt-in): budget, each managed part's share vs actual, what was listed, delivered
+        **({"window_profile": _wp_rec} if _wp_rec is not None else {}),
         "tool_offer": {"mode": "by_use", "by_name": list(_by_name)} if _by_name else None,
         "decline_closing": decline_closing_for(instance_config(instance)),
         "no_result_line": no_result_line_for(instance_config(instance)),
