@@ -3743,7 +3743,8 @@ def own_state(instance: Path, member: str = "", entrusted: str = "",
                                        refuted=refuted_claims(services) + files_refuted,
                                        settled_turns=settled_turns,
                                        answered_cap=_bp.value(instance, "answered_turn_chars"),
-                                       asks=turn_expects_reply)
+                                       asks=turn_expects_reply,
+                                       directory=_conv.directory_mode(_conv_cfg(instance)))
         if convs.strip():
             parts.append(conversation_header(instance, member) + "\n" + convs.strip())
     if services.strip():
@@ -3896,6 +3897,15 @@ _QUESTION_OPENER = re.compile(
     re.I)
 
 
+def _conv_cfg(instance: Path) -> dict:
+    """instance.json, for the conversation settings own_state and pending_selection read (fail-open)."""
+    try:
+        from sage.gateway.governed_turn import instance_config as _icfg
+        return _icfg(instance) or {}
+    except Exception:
+        return {}
+
+
 def turn_expects_reply(text: str) -> bool:
     """True when a turn asks the being for something. The ONE place this is decided, used by
     both the reflect line and the answer-phase gate so they cannot disagree."""
@@ -3966,7 +3976,7 @@ class SelectedTurn:
         # statement. Offline on dp's six most recent statements, offered the JSON answer turn the being
         # replied 11/12 and chose silence 1/12, 0 echoes; silence stays a real choice.
         self.woke = woke
-        # What this turn replies to, rendered (conversations.render_what_it_answers); set by
+        # What this turn replies to, rendered (conversations.render_directory, SG4); set by
         # pending_selection, "" when the turn answers no ask of the being's.
         self.context = ""
 
@@ -4214,9 +4224,10 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
       * conversations exist, nothing waiting -> the generic form, ids listed.
       * something waiting -> the person's name, the real id, and WHAT THEY SAID.
     """
-    global LAST_SELECTION_ERROR, LAST_PENDING_SCAN
+    global LAST_SELECTION_ERROR, LAST_PENDING_SCAN, LAST_ANSWER_CONTEXT
     LAST_SELECTION_ERROR = None     # describes THIS selection, the one whose result the beat records
     LAST_PENDING_SCAN = None
+    LAST_ANSWER_CONTEXT = None
     try:
         ids, pend = pending_turns(instance, member)
         LAST_PENDING_SCAN = [[cid, t.get("seq")] for cid, t in pend if isinstance(t, dict) and t.get("from") != member]
@@ -4262,15 +4273,25 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
             # filled with ".." (seq 52, 56, 58). A turn that asks nothing is not a debt.
             who = t.get("from")
             sel = SelectedTurn(cid, t, answers_the_being(instance, cid, member, t), woke=woke_hit)
-            # THE ASK IT ANSWERS, beside it (conversations.what_it_answers). The reflect turn's context is
-            # compact by design and carries no conversation block, so "dp replied to what you asked for"
-            # was the whole of what it knew about the ask: on 2026-11-26 the ask was a pointer to an earlier
-            # turn of questions (seq 1248) that was nowhere in view.
+            # THE ASK IT ANSWERS, beside it (SG4; conversations.directory_entries). The reflect turn's context is
+            # compact by design and carries no conversation block, so "dp replied to what you asked for" was
+            # the whole of what it knew about the ask: on 2026-11-26 the ask was a pointer to an earlier turn
+            # of questions (seq 1248) that was nowhere in view. Off unless the instance sets
+            # `conversation_directory`; the arm (gist line or verbatim) is recorded per case.
             from sage.gateway import conversations as _cv
-            sel.context = _cv.render_what_it_answers(
-                _cv.what_it_answers(instance, cid, member, t, turn_expects_reply), member, cid, sel.seq)
-            if sel.context:
-                block += "\n" + sel.context
+            _dmode = _cv.directory_mode(_conv_cfg(instance))
+            if _dmode:
+                _arm = _cv.directory_arm(_dmode, sel.seq)
+                _chain = _cv.what_it_answers(instance, cid, member, t, turn_expects_reply)
+                if _chain:
+                    _ents = [{"turn": c, "kind": "reply_chain",
+                              "why": (f"your ask that seq {sel.seq} replies to" if k == 0
+                                      else f"your seq {_chain[0].get('seq')} names it")}
+                             for k, c in enumerate(_chain)]
+                    sel.context = _cv.render_directory(_ents, member, cid, _arm)
+                    block += "\n" + sel.context
+                LAST_ANSWER_CONTEXT = {"turn": f"{cid}:{sel.seq}", "arm": _arm,
+                                       "listed": [int(c.get("seq") or 0) for c in _chain]}
             if sel.woke and not sel.asks:
                 first = (f'FIRST, before the numbered writes below: {who} just wrote to you, and that is '
                          f'what woke you. If you have something to say back, call say with to set to '
@@ -4315,6 +4336,7 @@ def pending_selection(instance: Path, member: str, woke: Optional[list] = None) 
 
 LAST_SELECTION_ERROR: Optional[str] = None
 LAST_PENDING_SCAN: Optional[list] = None    # [[cid, seq]] the last selection saw, not the member's own
+LAST_ANSWER_CONTEXT: Optional[dict] = None  # SG4: what the selected turn was shown it answers, and in which arm
 
 
 def reconcile_recall(record: dict, scan: Optional[list], selected) -> dict:
@@ -5559,6 +5581,7 @@ def main(argv=None) -> int:
     # per instance (RESEARCH_GENERALIZATION_RULE): "brief" shortens available verbs' descriptions
     _tool_desc_mode = _toolset.tool_descriptions_mode(instance_config(instance))
     _prompt_parts = None            # set once the seed is composed (SAGE #708)
+    _conv_dir_rec = None            # SG4: set once the sent rung is known
     _explore_specs = _toolset.specs(_unavail, _enums, brief=_tool_desc_mode == "brief",
                                     lean=_tool_desc_mode == "lean",
                                     cfg=instance_config(instance))
@@ -5623,6 +5646,8 @@ def main(argv=None) -> int:
     # PER-INSTANCE (RESEARCH_GENERALIZATION_RULE): absent means the default rendering.
     _settled_turns = settled_turns_for(instance_config(instance))
     _proprioception = proprioception_for(instance_config(instance))
+
+    _convs.LAST_DIRECTORY.clear()       # SG4: per-rung listings for THIS beat; the record keeps the rung sent
 
     def _build_state(per_conv, turn_chars):
         return (_state_head + own_state(instance, args.member, entrusted,
@@ -5744,6 +5769,8 @@ def main(argv=None) -> int:
         llm, _cpt_cal)
     if _seed_rung != conv_rung:
         conv_rung, state_block = _seed_rung, _states[_seed_rung]
+    if _convs.directory_mode(instance_config(instance)):
+        _conv_dir_rec = {"rung": list(conv_rung), "convs": _convs.LAST_DIRECTORY.get(tuple(conv_rung))}
     # CALIBRATION IS EVIDENCE, NOT A SILENT CHANGE (NOVA on #774): the sent seed's estimate at the ratio used
     # and at the prior, so a beat the measured ratio admitted (or a cut it caused) is visible against the
     # server's own count of the same prompt, explore.generates[0].prompt_eval_count.
@@ -6214,6 +6241,10 @@ def main(argv=None) -> int:
         "conversation_settled_turns": _settled_turns,
         "tool_descriptions": _tool_desc_mode,
         "prompt_parts": _prompt_parts,
+        # SG4 uptake rung "listed": the off-window conversation turns this beat's sent state gave a line, and
+        # what the selected turn was shown it answers (null when the instance has conversation_directory off)
+        "conv_directory": _conv_dir_rec,
+        "answer_context": LAST_ANSWER_CONTEXT,
         "tool_offer": {"mode": "by_use", "by_name": list(_by_name)} if _by_name else None,
         "decline_closing": decline_closing_for(instance_config(instance)),
         "no_result_line": no_result_line_for(instance_config(instance)),
