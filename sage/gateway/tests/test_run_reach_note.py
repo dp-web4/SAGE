@@ -31,7 +31,8 @@ def test_unmasked_home_keeps_the_absent_wording():
 def test_note_names_data_as_the_way_in_either_way():
     for mask in (True, False):
         note = _run_reach_note([], [], mask_home=mask)
-        assert "name it in run's data" in note and "copied into /work under its base name" in note
+        assert "name its path (relative to your home) in run's data" in note
+        assert "appears in /work under its base name" in note
 
 
 def test_a_grant_around_the_home_masks_it_and_the_note_follows(tmp_path):

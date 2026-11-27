@@ -5803,8 +5803,8 @@ def _run_reach_note(mounts: list, skipped: list, mask_home: bool = False) -> str
                "Any other path, your home included, does not exist in there")
             + ", so a check like "
               "os.path.exists() is False for it whatever is on disk; memory_read answers about "
-              "the disk. To use a file from your home in a run, name it in run's data: it is "
-              "copied into /work under its base name. Outside /tmp, /work and what is WRITABLE above, nothing in there can be "
+              "the disk. To use a file from your home in a run, name its path (relative to your "
+              "home) in run's data: inside the sandbox it appears in /work under its base name. Outside /tmp, /work and what is WRITABLE above, nothing in there can be "
               "written: a write elsewhere (/home/..., /opt/...) fails as 'Read-only file system', and to "
               "a system file mounted in there (/etc/passwd) as 'Permission denied', so a run cannot "
               "change those files on this machine.")
