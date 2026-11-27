@@ -10,13 +10,15 @@ parent's laptop is smaller: at an 8k window with a 1,500-token reserve the budge
 fixed parts alone (schemas + posture + framing, ~29,500) are half again more than all of it.
 
 WHAT IT DOES, given the window budget (`window_budget_chars`, the one producer both fitters use):
-1. TOOLS. Every verb stays callable (dp 2026-09-29: every being is offered the whole toolset). Native tool
-   calling only accepts verbs that are OFFERED (being_tool_loop.salvage_tool_calls; the gate refuses the
-   rest), and a spec costs ~300 chars even cut to its name (measured: all 40 verbs by name = 13,202 chars),
-   so a directory of per-verb specs cannot fit a 4k share. Instead the verbs the being uses most keep their
-   specs, and the rest sit behind ONE spec, `verb`: a closed list of their names (an enum) with one line
-   each, and `args` as an object. `parse_tool_calls` resolves `verb name=X args={...}` to X before the gate,
-   so the call is gated, dispatched and recorded as X. `describe X` still returns X's full text, and a verb
+1. TOOLS. Every verb stays offered and callable (dp 2026-09-29: every being is offered the whole toolset).
+   The model forms calls for what a turn offers, and a spec costs ~300 chars even cut to its name (measured:
+   all 40 verbs by name = 13,202 chars), so a directory of per-verb specs cannot fit a 4k share. Instead the
+   verbs the being uses most keep their specs, and the rest sit behind ONE spec, `verb`: a closed list of
+   their names (an enum) with one line each, and `args` as an object. The tool loop resolves
+   `verb name=X args={...}` to X before the gate ONLY when X is in the enum of the `verb` spec that turn
+   offered (Ollama does not enforce an enum on generated output, so the code does); any other name stays
+   `verb`, which the gate refuses at its registry stage. A resolved call is gated, dispatched and recorded
+   as X. `describe X` still returns X's full text, and a verb
    called (through `verb` or natively) or described counts as used: from the next beat it competes for a
    spec by use. A page fault for tools (paged-context PRD P1): listed, reachable, never pushed.
 2. STATE. Sections whose kind is listable (settled conclusions, the todo, the journal tail, skills, the
@@ -155,10 +157,25 @@ def fit_tools(specs: List[dict], budget: int, counts: Counter,
                      router_lines=lines, fits=size(out) <= budget)
 
 
-def resolve_router(name: str, args: dict) -> Tuple[str, dict]:
-    """`verb name=X args={...}` -> (X, {...}). Anything else is returned unchanged. A string `args` is parsed
-    as JSON; a malformed one becomes {"_raw": ...} so the gate refuses it with the verb's own reason."""
+def listed_behind(tools) -> Optional[set]:
+    """The verb names this turn lists behind `verb` (its `name` enum), or None when `verb` isn't offered."""
+    for t in tools or ():
+        fn = (t or {}).get("function") or {}
+        if fn.get("name") == ROUTER:
+            enum = (((fn.get("parameters") or {}).get("properties") or {}).get("name") or {}).get("enum") or []
+            return {str(n) for n in enum}
+    return None
+
+
+def resolve_router(name: str, args: dict, listed: Optional[set] = None) -> Tuple[str, dict]:
+    """`verb name=X args={...}` -> (X, {...}), only when X is one of the names this turn lists behind `verb`
+    (`listed`, from listed_behind). The enum is not enforced on generated output, so a name the turn doesn't
+    list there -- a verb this turn deliberately doesn't offer, or no verb at all -- is NOT resolved: the call
+    stays `verb`, which the gate's registry stage refuses. `listed=None` resolves nothing. A string `args` is
+    parsed as JSON; a malformed one becomes {"_raw": ...} so the gate refuses it with the verb's own reason."""
     if name != ROUTER or not isinstance(args, dict) or not str(args.get("name") or "").strip():
+        return name, args
+    if listed is None or str(args["name"]).strip() not in listed:
         return name, args
     inner = args.get("args")
     if inner is None:

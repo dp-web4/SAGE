@@ -430,9 +430,11 @@ def _attr_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
             out.append({"function": {"name": name, "arguments": args}, "_salvaged": "attr"})
     return out
 
-def _resolve_routed(calls: List[dict]) -> List[dict]:
-    """Ollama-shaped calls with each `verb name=X args={...}` replaced by X's own call (window_profile).
-    The `_salvaged` mark, if any, is kept; `_routed` records that the call came through `verb`."""
+def _resolve_routed(calls: List[dict], listed: Optional[set]) -> List[dict]:
+    """Ollama-shaped calls with each `verb name=X args={...}` replaced by X's own call (window_profile), for X in
+    `listed` only: the names THIS turn lists behind `verb`. Any other name stays a `verb` call, which the gate's
+    registry stage refuses; it is never resolved to a verb this turn doesn't offer. The `_salvaged` mark, if any,
+    is kept; `_routed` records that the call came through `verb`."""
     from sage.gateway.window_profile import resolve_router
     out = []
     for c in calls or []:
@@ -443,7 +445,7 @@ def _resolve_routed(calls: List[dict]) -> List[dict]:
                 args = json.loads(args)
             except Exception:
                 args = {}
-        name, inner = resolve_router(fn.get("name") or "", args if isinstance(args, dict) else {})
+        name, inner = resolve_router(fn.get("name") or "", args if isinstance(args, dict) else {}, listed)
         if name != fn.get("name"):
             c = dict(c, function={"name": name, "arguments": inner}, _routed=True)
         out.append(c)
@@ -1479,11 +1481,14 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     except Exception:
         reserve = _ANSWER_RESERVE
     tools = tools if tools is not None else ollama_tools()
-    # WINDOW PROFILE (window_profile.py): when this turn offers the `verb` spec, a call to it is resolved to
-    # the verb it names before the gate, so the gate, the dispatcher and the record all see that verb. A turn
-    # that doesn't offer `verb` resolves nothing: a stray call to it is refused like any unoffered name.
-    from sage.gateway.window_profile import ROUTER as _ROUTER
-    _router_offered = any((t.get("function") or {}).get("name") == _ROUTER for t in tools or ())
+    # WINDOW PROFILE (window_profile.py): when this turn offers the `verb` spec, a call to it naming one of the
+    # verbs THIS turn lists behind it is resolved to that verb before the gate, so the gate, the dispatcher and
+    # the record all see that verb. Any other name, and any `verb` call on a turn that doesn't offer `verb`,
+    # stays `verb`: not a registry verb, so the gate refuses it at stage 0. (A native call naming a real verb the
+    # turn doesn't offer is judged by registry and law only, as before this change: nothing here widens that.)
+    from sage.gateway.window_profile import listed_behind as _listed_behind
+    _routed_names = _listed_behind(tools)
+    _router_offered = _routed_names is not None
     # THE SCHEMAS THIS TURN ACTUALLY SENDS (#490). Step 1's preflight used _UNCOUNTED_CHARS, a constant
     # set when the schemas were ~11,700 chars; by 2026-10-19 the 35 verbs measured 26,649 (full) and
     # 17,781 (brief), so the preflight under-counted step 1 by up to ~4.9k tokens -- the direction the
@@ -1942,7 +1947,7 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             salvaged.extend({"step": len(thoughts) - 1, "effector": c["function"]["name"],
                              "form": c["_salvaged"]} for c in calls)
         if _router_offered:
-            calls = _resolve_routed(calls)
+            calls = _resolve_routed(calls, _routed_names)
         return {"content": content, "intents": parse_tool_calls(calls)}
 
     result = run_tool_turn(client, generate, seed_messages, max_steps=max_steps, should_yield=should_yield)

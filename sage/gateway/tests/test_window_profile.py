@@ -85,6 +85,9 @@ def test_the_listing_drops_its_one_line_descriptions_before_a_used_verb_loses_it
     assert rec["router_lines"] is False and "say" in rec["kept"]
 
 
+LISTED = {"say", "game"}
+
+
 @pytest.mark.parametrize("args,expect", [
     ({"name": "say", "args": {"to": "dp", "text": "hi"}}, ("say", {"to": "dp", "text": "hi"})),
     ({"name": "say", "args": '{"to": "dp"}'}, ("say", {"to": "dp"})),
@@ -92,12 +95,27 @@ def test_the_listing_drops_its_one_line_descriptions_before_a_used_verb_loses_it
     ({"name": "say", "args": "not json"}, ("say", {"_raw": "not json"})),
     ({"name": "", "args": {}}, (wp.ROUTER, {"name": "", "args": {}})),
 ])
-def test_a_verb_call_resolves_to_the_verb_it_names(args, expect):
-    assert wp.resolve_router(wp.ROUTER, args) == expect
+def test_a_verb_call_resolves_to_a_listed_verb(args, expect):
+    assert wp.resolve_router(wp.ROUTER, args, LISTED) == expect
+
+
+@pytest.mark.parametrize("target", ["witness", "memory_write", "no_such_verb"])
+def test_a_verb_call_naming_anything_not_listed_this_turn_is_not_resolved(target):
+    """The enum isn't enforced on generated output: a real verb this turn doesn't list behind `verb` (a verb it
+    withholds, or one it offers natively), and a name that is no verb at all, both stay `verb`."""
+    args = {"name": target, "args": {"event": "x"}}
+    assert wp.resolve_router(wp.ROUTER, args, LISTED) == (wp.ROUTER, args)
+    assert wp.resolve_router(wp.ROUTER, args, None) == (wp.ROUTER, args), "no listing, nothing resolves"
 
 
 def test_a_call_to_any_other_name_is_untouched():
-    assert wp.resolve_router("say", {"name": "x"}) == ("say", {"name": "x"})
+    assert wp.resolve_router("say", {"name": "x"}, LISTED) == ("say", {"name": "x"})
+
+
+def test_the_listed_set_is_read_from_the_verb_spec_actually_offered():
+    tools = [_spec("witness"), wp.router_spec([_spec("game"), _spec("camera")])]
+    assert wp.listed_behind(tools) == {"game", "camera"}
+    assert wp.listed_behind([_spec("witness")]) is None
 
 
 def _client():
@@ -110,7 +128,7 @@ def _client():
     return c
 
 
-def _llm_calling_verb():
+def _llm_calling_verb(target, inner):
     calls = {"n": 0}
 
     class FakeLLM:
@@ -118,24 +136,43 @@ def _llm_calling_verb():
             calls["n"] += 1
             if calls["n"] == 1:
                 return {"content": "", "tool_calls": [{"function": {"name": wp.ROUTER, "arguments": {
-                    "name": "witness", "args": {"event": "x"}}}}]}
+                    "name": target, "args": inner}}}]}
             return {"content": "done", "tool_calls": []}
     return FakeLLM()
 
 
-def test_on_a_turn_that_offers_verb_the_call_is_gated_and_recorded_as_the_verb_it_names():
+def _turn(tools, target, inner):
     from sage.gateway.being_tool_loop import run_ollama_tool_turn
-    tools = [_spec("witness", params=("event",)), wp.router_spec([_spec("game")])]
-    r = run_ollama_tool_turn(_client(), _llm_calling_verb(), [{"role": "user", "content": "hi"}], tools=tools)
-    intent, env = r.trace[0]
+    r = run_ollama_tool_turn(_client(), _llm_calling_verb(target, inner), [{"role": "user", "content": "hi"}],
+                             tools=tools)
+    return r.trace[0]
+
+
+def test_through_the_loop_a_listed_verb_is_gated_dispatched_and_recorded_as_itself():
+    tools = [_spec("say", params=("to", "text")), wp.router_spec([_spec("witness", params=("event",))])]
+    intent, env = _turn(tools, "witness", {"event": "x"})
     assert intent.effector == "witness" and intent.args == {"event": "x"} and env.ok
+    assert env.result == "result[witness]"
+
+
+def test_through_the_loop_a_real_verb_not_listed_this_turn_is_not_reached_through_verb():
+    """`memory_write` is a real registry verb, but this turn neither offers it nor lists it behind `verb`. The
+    call stays `verb`, which is not a registry verb, so the gate refuses it at stage 0 and nothing is dispatched."""
+    tools = [_spec("say", params=("to", "text")), wp.router_spec([_spec("witness", params=("event",))])]
+    intent, env = _turn(tools, "memory_write", {"path": "notes/x.md", "content": "y"})
+    assert intent.effector == wp.ROUTER and not env.ok
+    assert "result[" not in str(env.result or "")
+
+
+def test_through_the_loop_a_name_that_is_no_verb_is_not_resolved():
+    tools = [_spec("say", params=("to", "text")), wp.router_spec([_spec("witness", params=("event",))])]
+    intent, env = _turn(tools, "no_such_verb", {})
+    assert intent.effector == wp.ROUTER and not env.ok
 
 
 def test_on_a_turn_that_does_not_offer_verb_nothing_is_resolved():
-    from sage.gateway.being_tool_loop import run_ollama_tool_turn
-    tools = [_spec("witness", params=("event",))]
-    r = run_ollama_tool_turn(_client(), _llm_calling_verb(), [{"role": "user", "content": "hi"}], tools=tools)
-    assert r.trace[0][0].effector == wp.ROUTER, "an unoffered name stays what it was, for the gate to judge"
+    intent, env = _turn([_spec("witness", params=("event",))], "witness", {"event": "x"})
+    assert intent.effector == wp.ROUTER and not env.ok, "an unoffered `verb` stays what it was, for the gate"
 
 
 # ---------------------------------------------------------------- state
