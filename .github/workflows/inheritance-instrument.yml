@@ -1,0 +1,38 @@
+name: inheritance-instrument
+
+on:
+  pull_request:
+    paths:
+      - 'research/inheritance/**'
+      - '.github/workflows/inheritance-instrument.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-instrument:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch the exact public source tree
+        env:
+          INHERITANCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # This standalone, stdlib-only instrument needs no training submodule.
+          # Bare fetch/archive avoids the repository's orphan training gitlink;
+          # no credential is supplied or persisted, and no cleanup is disabled.
+          source_git="$(mktemp -d)"
+          trap 'rm -rf "$source_git"' EXIT
+          git init --bare "$source_git"
+          git -C "$source_git" remote add origin https://github.com/dp-web4/SAGE.git
+          git -C "$source_git" fetch --no-tags --depth=1 origin "$INHERITANCE_SHA"
+          test "$(git -C "$source_git" rev-parse FETCH_HEAD)" = "$INHERITANCE_SHA"
+          git -C "$source_git" archive FETCH_HEAD research/inheritance | tar -x -C "$GITHUB_WORKSPACE"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run synthetic instrument tests
+        run: python -m unittest discover -s research/inheritance -p 'test_*.py' -v
+      - name: Repeat without Python assertions
+        run: python -O -m unittest discover -s research/inheritance -p 'test_*.py' -v
