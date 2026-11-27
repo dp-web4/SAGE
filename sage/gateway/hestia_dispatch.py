@@ -3974,8 +3974,8 @@ class HestiaF1aDispatcher:
         result.update({"stdout": out.strip(), "stderr": errtxt.strip(),
                        "note": _run_note(rc, errtxt, [b for b, _ in staged], out, seatbelt=seatbelt)})
         if not seatbelt:
-            mounts, skipped, _mask = grant_mounts
-            result["note"] += _run_reach_note(mounts, skipped)
+            mounts, skipped, mask = grant_mounts
+            result["note"] += _run_reach_note(mounts, skipped, mask_home=bool(mask))
             writable = [p for p, _k, h in mounts if h == "rw"]
             if writable:
                 changed, complete = _changed_since(writable, started)
@@ -5766,13 +5766,20 @@ def _changed_since(roots: list, since: float) -> tuple:
     return out, complete
 
 
-def _run_reach_note(mounts: list, skipped: list) -> str:
+def _run_reach_note(mounts: list, skipped: list, mask_home: bool = False) -> str:
     """What the run could see beyond its own copies, said where it reads its result.
 
     A PATH THE SANDBOX CANNOT SEE READS AS ABSENT, AND THE NOTE SAYS SO. cbp-being, 2026-10-23:
     its check_file.py printed "File exists: False" for a file it had been reading with
     memory_read all morning, and it trusted the run. os.path.exists() inside a run answers about
-    the sandbox, never about the disk."""
+    the sandbox, never about the disk.
+
+    WHEN A GRANT COVERS THE HOME'S PARENT, THE HOME IS NOT ABSENT: IT IS AN EMPTY FOLDER, AND THE
+    NOTE MUST SAY THAT, AND SAY HOW TO BRING A FILE IN. cbp-being, 2026-11-27 15:39Z: its
+    copy_image_full.py printed "Home dir exists: True" and "Contents of home: []" under a note
+    that said the home "does not exist in there". It recorded the gap as "permission denied" (no
+    run printed that) and asked the seat twice to copy a home file "to /work". That is `data`, which
+    the note never named. mask_home is run_grant_mounts' third value: the home gets a tmpfs."""
     def _shown(how):
         return ", ".join(p + ("/" if k == "dir" else "") for p, k, h in mounts if h == how)
     rw, ro = _shown("rw"), _shown("ro")
@@ -5789,9 +5796,15 @@ def _run_reach_note(mounts: list, skipped: list) -> str:
                + "; ".join(parts) + ". "
                if mounts else "the system's own files: no grant of yours reaches a path a run "
                               "can mount. ")
-            + "Any other path, your home included, does not exist in there, so a check like "
+            + ("Your home shows in there as an EMPTY read-only folder: os.path.exists() on the "
+               "folder is True and os.listdir() of it is [], and every file in it reads as absent. "
+               "Any other path does not exist in there"
+               if mask_home else
+               "Any other path, your home included, does not exist in there")
+            + ", so a check like "
               "os.path.exists() is False for it whatever is on disk; memory_read answers about "
-              "the disk. Outside /tmp, /work and what is WRITABLE above, nothing in there can be "
+              "the disk. To use a file from your home in a run, name it in run's data: it is "
+              "copied into /work under its base name. Outside /tmp, /work and what is WRITABLE above, nothing in there can be "
               "written: a write elsewhere (/home/..., /opt/...) fails as 'Read-only file system', and to "
               "a system file mounted in there (/etc/passwd) as 'Permission denied', so a run cannot "
               "change those files on this machine.")
