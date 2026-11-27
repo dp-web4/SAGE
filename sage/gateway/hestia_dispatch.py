@@ -3968,7 +3968,10 @@ class HestiaF1aDispatcher:
                 said = ""
             if said:
                 outside.append(said)
-        result = {"script": staged[0][0], "files": [b for b, _ in staged], "exit": rc}
+        # The traceback's verdict leads, so window compaction keeps it (_run_headline).
+        headline = _run_headline(rc, errtxt, [b for b, _ in staged])
+        result = {"headline": headline} if headline else {}
+        result.update({"script": staged[0][0], "files": [b for b, _ in staged], "exit": rc})
         if outside:
             result["outside_the_sandbox"] = " ".join(outside)
         result.update({"stdout": out.strip(), "stderr": errtxt.strip(),
@@ -6265,6 +6268,64 @@ def _run_ended(rc: int, stderr: str) -> str:
         return (f"Exit {rc}: a run, or a shell inside it, reports signal {sig} "
                 f"({_signal_name(sig)}) as {rc}, unless your code chose {rc} itself{seen}")
     return f"Exit {rc}"
+
+
+_TB_FRAME = re.compile(r'^  File "([^"]+)", line (\d+), in (.+)$')
+RUN_HEADLINE_EXC_MAX = 300
+
+
+def _run_headline(rc: int, stderr: str, files: list) -> str:
+    """A failed run's verdict, quoted from its own traceback, to lead the result: the exception
+    line and the deepest frame in one of the run's own files. "" when there is no traceback.
+
+    THE VERDICT WAS IN THE PART COMPACTION CUTS. A tool result squeezed out of the window keeps
+    its first 200 and last 200 characters (being_tool_loop compaction). A run's result is JSON in
+    key order: exit, stdout, stderr, then `note`, whose reach text runs ~1,300 characters. So the
+    kept head was `"exit": 1, ... "stderr": "Fontconfig error: Cannot load default config file`
+    (a warning matplotlib prints on every run in the box) and the kept tail was the grants
+    paragraph. The traceback's last line sat ~1,500 characters from the end, in the cut middle.
+    cbp-being, 2026-11-27: of 274 runs that day, 216 printed the Fontconfig line first and 201 of
+    those went on to a traceback in its own code. It blamed the Fontconfig line for exit 1 and
+    went looking for a matplotlibrc in a home it cannot reach; at 18:24Z it asked its seat
+    "the run still exits 1 -- what's the traceback?" about a run whose receipt held it. Both are
+    what that window showed. A leading `headline` is kept whole by compaction, so the verdict
+    goes there.
+
+    ONLY WHAT STDERR SAYS (the #474 rule for `note`): the exception line as printed, and the
+    frame as printed. No cause is inferred, and nothing is said when there is no traceback."""
+    if rc == 0 or "Traceback (most recent call last)" not in (stderr or ""):
+        return ""
+    lines = stderr.splitlines()
+    last_frame = -1
+    own = None
+    names = {os.path.basename(f) for f in (files or ())}
+    for i, ln in enumerate(lines):
+        m = _TB_FRAME.match(ln)
+        if m:
+            last_frame = i
+            if os.path.basename(m.group(1)) in names:
+                own = (os.path.basename(m.group(1)), m.group(2), m.group(3).strip())
+    if last_frame < 0:
+        return ""
+    # The exception line is the first line after the last frame that is not the frame's
+    # indented source/caret lines. A message can run over several lines; the first carries
+    # the type, which is what a reader needs to tell it from a warning.
+    exc = ""
+    for ln in lines[last_frame + 1:]:
+        if ln.startswith("    ") or not ln.strip():
+            continue
+        exc = ln.strip()
+        break
+    if not exc:
+        return ""
+    if len(exc) > RUN_HEADLINE_EXC_MAX:
+        exc = exc[:RUN_HEADLINE_EXC_MAX] + " …"
+    where = (f" It was raised at line {own[1]} of {own[0]}, in {own[2]}: the last frame of the "
+             f"traceback that is in your own file." if own else
+             " No frame of the traceback is in a file this run staged.")
+    stop = "" if exc.endswith((".", ":", "…")) else "."
+    return (f"Exit {rc}. The traceback at the end of stderr ends with: {exc}{stop}{where} "
+            f"Text printed above the traceback in stderr is not what ended the run.")
 
 
 def _run_note_core(rc: int, stderr: str, files: list) -> str:
