@@ -430,6 +430,26 @@ def _attr_calls(text: str, names: Dict[str, List[str]]) -> List[dict]:
             out.append({"function": {"name": name, "arguments": args}, "_salvaged": "attr"})
     return out
 
+def _resolve_routed(calls: List[dict]) -> List[dict]:
+    """Ollama-shaped calls with each `verb name=X args={...}` replaced by X's own call (window_profile).
+    The `_salvaged` mark, if any, is kept; `_routed` records that the call came through `verb`."""
+    from sage.gateway.window_profile import resolve_router
+    out = []
+    for c in calls or []:
+        fn = (c or {}).get("function") or {}
+        args = fn.get("arguments") or {}
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except Exception:
+                args = {}
+        name, inner = resolve_router(fn.get("name") or "", args if isinstance(args, dict) else {})
+        if name != fn.get("name"):
+            c = dict(c, function={"name": name, "arguments": inner}, _routed=True)
+        out.append(c)
+    return out
+
+
 def salvage_tool_calls(content: str, tools: Iterable[dict]) -> List[dict]:
     """Lift well-formed tool calls that a model put in the TEXT channel, in Ollama's
     tool_calls shape (plus `_salvaged`: "json" | "python" | "attr"). Accepted: a JSON object or
@@ -1459,6 +1479,11 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
     except Exception:
         reserve = _ANSWER_RESERVE
     tools = tools if tools is not None else ollama_tools()
+    # WINDOW PROFILE (window_profile.py): when this turn offers the `verb` spec, a call to it is resolved to
+    # the verb it names before the gate, so the gate, the dispatcher and the record all see that verb. A turn
+    # that doesn't offer `verb` resolves nothing: a stray call to it is refused like any unoffered name.
+    from sage.gateway.window_profile import ROUTER as _ROUTER
+    _router_offered = any((t.get("function") or {}).get("name") == _ROUTER for t in tools or ())
     # THE SCHEMAS THIS TURN ACTUALLY SENDS (#490). Step 1's preflight used _UNCOUNTED_CHARS, a constant
     # set when the schemas were ~11,700 chars; by 2026-10-19 the 35 verbs measured 26,649 (full) and
     # 17,781 (brief), so the preflight under-counted step 1 by up to ~4.9k tokens -- the direction the
@@ -1916,6 +1941,8 @@ def run_ollama_tool_turn(client: BeingGateClient, llm, seed_messages: List[Dict[
             calls = salvage_tool_calls(content, tools)
             salvaged.extend({"step": len(thoughts) - 1, "effector": c["function"]["name"],
                              "form": c["_salvaged"]} for c in calls)
+        if _router_offered:
+            calls = _resolve_routed(calls)
         return {"content": content, "intents": parse_tool_calls(calls)}
 
     result = run_tool_turn(client, generate, seed_messages, max_steps=max_steps, should_yield=should_yield)
