@@ -557,6 +557,13 @@ async function loadChatHistory() {
   try {
     const r = await fetch(BASE + '/chat/history?limit=100');
     const d = await r.json();
+    if (r.status === 403) {
+      // /chat/history is loopback-only (#847): say why the pane is empty instead of
+      // looking like a being with no history.
+      appendChat(machineName, 'Chat history is not shown here: ' + (d.error || 'refused') +
+        (d.hint ? ' (' + d.hint + ')' : ''), 'sage');
+      return;
+    }
     if (d.messages && d.messages.length > 0) {
       for (const m of d.messages) {
         appendChat(m.sender || 'unknown', m.text || '', m.css_class || 'sage', m.timestamp);

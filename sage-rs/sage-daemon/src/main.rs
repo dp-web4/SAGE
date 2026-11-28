@@ -593,7 +593,7 @@ async fn stream_chat(
 /// channel (`via`) so the being's view can say "asserted, not signed".
 fn loopback_only(peer: std::net::SocketAddr, route: &str)
     -> Option<(StatusCode, Json<serde_json::Value>)> {
-    if peer.ip().is_loopback() {
+    if peer.ip().to_canonical().is_loopback() {
         return None;
     }
     Some((StatusCode::FORBIDDEN, Json(serde_json::json!({
@@ -609,7 +609,7 @@ fn loopback_only(peer: std::net::SocketAddr, route: &str)
 /// /peers telemetry, and the LAN or tailnet topology is not an access decision.
 fn loopback_reader(peer: std::net::SocketAddr, route: &str)
     -> Option<(StatusCode, Json<serde_json::Value>)> {
-    if peer.ip().is_loopback() {
+    if peer.ip().to_canonical().is_loopback() {
         return None;
     }
     Some((StatusCode::FORBIDDEN, Json(serde_json::json!({
@@ -627,7 +627,7 @@ fn loopback_reader(peer: std::net::SocketAddr, route: &str)
 /// loopback-only, and peers read `/status`, `/peers` and `/health`, which stay open.
 fn loopback_operator(peer: std::net::SocketAddr, route: &str)
     -> Option<(StatusCode, Json<serde_json::Value>)> {
-    if peer.ip().is_loopback() {
+    if peer.ip().to_canonical().is_loopback() {
         return None;
     }
     Some((StatusCode::FORBIDDEN, Json(serde_json::json!({
@@ -811,7 +811,7 @@ fn activity_label(raw: Option<&str>) -> Option<String> {
 /// missing on `/chat/raw`.
 fn loopback_reporter(peer: std::net::SocketAddr)
     -> Option<(StatusCode, Json<serde_json::Value>)> {
-    if peer.ip().is_loopback() {
+    if peer.ip().to_canonical().is_loopback() {
         return None;
     }
     Some((StatusCode::FORBIDDEN, Json(serde_json::json!({
@@ -1345,6 +1345,24 @@ mod speaker_route_tests {
             assert_eq!(code, StatusCode::FORBIDDEN, "{lan}");
             assert!(body.0["error"].as_str().unwrap().contains("acts for this machine only over loopback"), "{lan}");
         }
+    }
+
+    /// An IPv4-mapped peer (`::ffff:a.b.c.d`) is what a `[::]` bind would hand us for a V4
+    /// caller. `IpAddr::is_loopback()` alone says false for `::ffff:127.0.0.1`, which would
+    /// refuse this machine; and the mapped LAN address must still be refused. Every loopback
+    /// guard here canonicalizes first. (Sprout's review of #847, note 3.)
+    #[test]
+    fn an_ipv4_mapped_peer_is_judged_by_its_v4_address() {
+        let here = peer("[::ffff:127.0.0.1]:5000");
+        let lan = peer("[::ffff:192.168.1.20]:5000");
+        assert!(loopback_operator(here, "/stream").is_none());
+        assert!(loopback_reader(here, "/chat/history").is_none());
+        assert!(loopback_only(here, "/chat").is_none());
+        assert!(loopback_reporter(here).is_none());
+        assert!(loopback_operator(lan, "/stream").is_some());
+        assert!(loopback_reader(lan, "/chat/history").is_some());
+        assert!(loopback_only(lan, "/chat").is_some());
+        assert!(loopback_reporter(lan).is_some());
     }
 
     /// The layer itself, through a router: a LAN GET is refused as a read, a LAN POST as an
