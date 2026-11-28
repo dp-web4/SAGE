@@ -1241,12 +1241,32 @@ def _receipts_sentence(receipts) -> str:
             " says happened): " + "; ".join(shown) + (f"; and {more} more" if more > 0 else "") + ".")
 
 
-def reflect_prompt(optional=(), refused=True, failed=(), receipts=(), **kw) -> str:
+_NOTHING_RAN_SENTENCE = (" No act of yours this beat ran a script or wrote a file: there was no `run`, no"
+                         " request_run and no landed write. A run or write that a message asked for has not"
+                         " happened, and no output of one exists, so do not record one.")
+
+
+def nothing_ran_this_beat(*turns) -> bool:
+    """True only when the traces are READABLE and hold no ok `run`, no `request_run` and no landed write.
+    False when there was such an act, and False when the traces cannot be read (unknown is not "none")."""
+    return refused_this_beat(*turns) is not None and not receipts_this_beat(*turns)
+
+
+def reflect_prompt(optional=(), refused=True, failed=(), receipts=(), nothing_ran=False, **kw) -> str:
     """REFLECT, with the records in `optional` offered rather than required, and the refusal question
     unless `refused` is False (known: nothing recorded as refused). True and None (unknown) keep it.
     `failed` (failed_this_beat) names acts that ran and failed; when any did, "no act refused" is not
     said alone, the failures are named beside it. `receipts` (receipts_this_beat) says what the ok acts
-    did: run exits, requests not yet run, landed writes (#716)."""
+    did: run exits, requests not yet run, landed writes (#716). `nothing_ran` (nothing_ran_this_beat)
+    says the opposite out loud when the traces show none of those.
+
+    SILENCE WAS READ AS "IT RAN". cbp-being, 2026-11-24 10:30Z (heartbeat-f7fe153eb5f4): the seat's
+    message asked for one memory_write of scratch/unit_count.py and one `run` of it. Explore made
+    neither (2 web_search, recall, 3 memory_read, 2 failed memory_edit). The receipts list was empty,
+    so reflect was told only the two failures, and the journal said "Ran dead_relu_experiment.py and
+    unit_count.py ... unit_count.py printed dead neuron counts per seed for Adam and SGD": a file that
+    does not exist and a run that never happened. An empty receipt list said nothing, and the newest
+    text (the request) filled the gap."""
     body = REFLECT.format(**kw)
     for r in optional:
         old, new = _REFLECT_OPTIONAL_LINE[r]
@@ -1254,6 +1274,8 @@ def reflect_prompt(optional=(), refused=True, failed=(), receipts=(), **kw) -> s
     tail = _failed_sentence(failed) if failed else ""
     if receipts:
         tail += _receipts_sentence(receipts)
+    elif nothing_ran:
+        tail += _NOTHING_RAN_SENTENCE
     if refused is False:
         old, new = _REFLECT_REFUSED
         body = body.replace(old, new + tail, 1)
@@ -6063,6 +6085,7 @@ def main(argv=None) -> int:
                 reflect_optional_for(instance_config(instance)), refused=refused_this_beat(explore, after),
                 failed=failed_this_beat(explore, after),
                 receipts=receipts_this_beat(explore, after),
+                nothing_ran=nothing_ran_this_beat(explore, after),
                 date=f"{now:%Y-%m-%d %H:%M} UTC", say_line=say_line, say_first=say_first)})
             # One extra step when someone is waiting, because the routine three fill the budget exactly.
             # Measured 2026-09-18, the first beat after the being could finally SEE what it was being
