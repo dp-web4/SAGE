@@ -1,0 +1,371 @@
+{
+  "model": "gemma4:12b",
+  "started": "2026-11-25T20:24:03Z",
+  "machine": "McNugget M4 16GB",
+  "swap_start_mb": 5663.19,
+  "coherence": [
+    {
+      "q": "What is 17 * 23? Answer with the number only.",
+      "content": "391",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 29,
+      "prefill_tok_s": 61.3,
+      "eval_tokens": 4,
+      "decode_tok_s": 16.5,
+      "load_s": 6.3,
+      "wall_s": 7.1,
+      "swap_before_mb": 5663.19,
+      "swap_after_mb": 1324.44,
+      "resident_after": [
+        {
+          "name": "nomic-embed-text:latest",
+          "size_gb": 0.38,
+          "vram_gb": 0.0,
+          "ctx": 2048
+        },
+        {
+          "name": "gemma4:12b",
+          "size_gb": 8.34,
+          "vram_gb": 8.34,
+          "ctx": 8192
+        }
+      ],
+      "pass": true
+    },
+    {
+      "q": "What is the capital of Australia? One word.",
+      "content": "Canberra",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 23,
+      "prefill_tok_s": 47.8,
+      "eval_tokens": 3,
+      "decode_tok_s": 18.4,
+      "load_s": 0.0,
+      "wall_s": 0.6,
+      "swap_before_mb": 1324.44,
+      "swap_after_mb": 1324.44,
+      "resident_after": [
+        {
+          "name": "nomic-embed-text:latest",
+          "size_gb": 0.38,
+          "vram_gb": 0.0,
+          "ctx": 2048
+        },
+        {
+          "name": "gemma4:12b",
+          "size_gb": 8.34,
+          "vram_gb": 8.34,
+          "ctx": 8192
+        }
+      ],
+      "pass": true
+    },
+    {
+      "q": "Reverse the string 'heartbeat'. Answer with the reversed string only.",
+      "content": "taebtraeh",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 27,
+      "prefill_tok_s": 57.6,
+      "eval_tokens": 5,
+      "decode_tok_s": 15.7,
+      "load_s": 0.0,
+      "wall_s": 0.8,
+      "swap_before_mb": 1324.44,
+      "swap_after_mb": 1324.44,
+      "resident_after": [
+        {
+          "name": "nomic-embed-text:latest",
+          "size_gb": 0.38,
+          "vram_gb": 0.0,
+          "ctx": 2048
+        },
+        {
+          "name": "gemma4:12b",
+          "size_gb": 8.34,
+          "vram_gb": 8.34,
+          "ctx": 8192
+        }
+      ],
+      "pass": true
+    },
+    {
+      "q": "Name the chemical symbol for sodium. Symbol only.",
+      "content": "Na",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 23,
+      "prefill_tok_s": 47.8,
+      "eval_tokens": 2,
+      "decode_tok_s": 24.8,
+      "load_s": 0.0,
+      "wall_s": 0.6,
+      "swap_before_mb": 1324.44,
+      "swap_after_mb": 1324.44,
+      "resident_after": [
+        {
+          "name": "nomic-embed-text:latest",
+          "size_gb": 0.38,
+          "vram_gb": 0.0,
+          "ctx": 2048
+        },
+        {
+          "name": "gemma4:12b",
+          "size_gb": 8.34,
+          "vram_gb": 8.34,
+          "ctx": 8192
+        }
+      ],
+      "pass": true
+    },
+    {
+      "q": "If a beat runs every 30 minutes, how many beats run in 5 hours? Number only.",
+      "content": "10",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 35,
+      "prefill_tok_s": 73.9,
+      "eval_tokens": 3,
+      "decode_tok_s": 18.5,
+      "load_s": 0.0,
+      "wall_s": 0.6,
+      "swap_before_mb": 1324.44,
+      "swap_after_mb": 1324.44,
+      "resident_after": [
+        {
+          "name": "nomic-embed-text:latest",
+          "size_gb": 0.38,
+          "vram_gb": 0.0,
+          "ctx": 2048
+        },
+        {
+          "name": "gemma4:12b",
+          "size_gb": 8.34,
+          "vram_gb": 8.34,
+          "ctx": 8192
+        }
+      ],
+      "pass": true
+    }
+  ],
+  "tool_call": {
+    "first": {
+      "content": "",
+      "thinking": "",
+      "tool_calls": [
+        {
+          "id": "call_py6xxfbm",
+          "function": {
+            "index": 0,
+            "name": "read_file",
+            "arguments": {
+              "path": "explorations/README.md"
+            }
+          }
+        }
+      ],
+      "done_reason": "stop",
+      "prompt_tokens": 117,
+      "prefill_tok_s": 103.2,
+      "eval_tokens": 21,
+      "decode_tok_s": 13.1,
+      "load_s": 0.0,
+      "wall_s": 2.7,
+      "swap_before_mb": 1324.44,
+      "swap_after_mb": 1324.44,
+      "resident_after": [
+        {
+          "name": "nomic-embed-text:latest",
+          "size_gb": 0.38,
+          "vram_gb": 0.0,
+          "ctx": 2048
+        },
+        {
+          "name": "gemma4:12b",
+          "size_gb": 8.34,
+          "vram_gb": 8.34,
+          "ctx": 8192
+        }
+      ]
+    },
+    "called_read_file": true,
+    "final": {
+      "content": "The most important field of an exploration is the criterion.",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 984,
+      "prefill_tok_s": 144.1,
+      "eval_tokens": 16,
+      "decode_tok_s": 12.2,
+      "load_s": 0.0,
+      "wall_s": 8.1,
+      "swap_before_mb": 1324.44,
+      "swap_after_mb": 1324.44,
+      "resident_after": [
+        {
+          "name": "nomic-embed-text:latest",
+          "size_gb": 0.38,
+          "vram_gb": 0.0,
+          "ctx": 2048
+        },
+        {
+          "name": "gemma4:12b",
+          "size_gb": 8.34,
+          "vram_gb": 8.34,
+          "ctx": 8192
+        }
+      ]
+    },
+    "pass": true
+  },
+  "reflect": [
+    {
+      "q": "Heartbeat state: your last three tool calls returned partial output because your context window filled (prompt ~15,900 of 16,384 tokens). What should you change about how you work this beat? Give at most three concrete steps.",
+      "content": "State: Context window nearly full (15,900/16,384).\n\nActions:\n1. Summarize preceding context to condense previous turns.\n2. Drop irrelevant history to free space.\n3. Request smaller, more modular tool outputs.\n\nLearning: High token density restricts memory; summarization is required to maintain continuity.",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 118,
+      "prefill_tok_s": 104.0,
+      "eval_tokens": 75,
+      "decode_tok_s": 12.6,
+      "load_s": 1.7,
+      "wall_s": 8.8,
+      "swap_before_mb": 1324.44,
+      "swap_after_mb": 1324.44,
+      "resident_after": [
+        {
+          "name": "gemma4:12b",
+          "size_gb": 8.36,
+          "vram_gb": 8.36,
+          "ctx": 16384
+        }
+      ]
+    },
+    {
+      "q": "A peer asked you to review a 1,054-line Python file but you can only read it in ranges. Plan how you will review it within one heartbeat of at most 8 steps.",
+      "content": "1. **Scan Metadata**: Identify imports and global constants to determine dependencies.\n2. **Segment 1 (Lines 1-150):** Review initialization and core configuration.\n3. **Segment 2 (Lines 151-300):** Review primary helper functions and utility logic.\n4. **Segment 3 (Lines 301-450):** Review core logic and primary class structures.\n5. **Segment 4 (Lines 451-600):** Review mid-level processing and data transformations.\n6. **Segment 5 (Lines 601-750):** Review integration points and external interactions.\n7. **Segment 6 (Lines 751-900):** Review error handling and edge case logic.\n8. **Segment 7 (Lines 901-1054):** Review main execution blocks and final methods.",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 106,
+      "prefill_tok_s": 94.0,
+      "eval_tokens": 202,
+      "decode_tok_s": 12.5,
+      "load_s": 0.0,
+      "wall_s": 17.2,
+      "swap_before_mb": 1324.44,
+      "swap_after_mb": 1324.44,
+      "resident_after": [
+        {
+          "name": "gemma4:12b",
+          "size_gb": 8.36,
+          "vram_gb": 8.36,
+          "ctx": 16384
+        }
+      ]
+    },
+    {
+      "q": "You notice your journal says you finished a task, but the repository shows the change was never committed. What do you record, and what do you do next?",
+      "content": "**State:** Journal entry indicates task completion; repository shows no local or remote commit for the change.\n\n**Learning:** The journal is inaccurate or ahead of the actual codebase state.\n\n**Next Step:** Perform a `git status` and `git diff` to locate the uncommitted changes, then commit them to the repository.",
+      "thinking": "",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 96,
+      "prefill_tok_s": 105.1,
+      "eval_tokens": 67,
+      "decode_tok_s": 12.7,
+      "load_s": 0.0,
+      "wall_s": 6.2,
+      "swap_before_mb": 1324.44,
+      "swap_after_mb": 1324.44,
+      "resident_after": [
+        {
+          "name": "gemma4:12b",
+          "size_gb": 8.36,
+          "vram_gb": 8.36,
+          "ctx": 16384
+        }
+      ]
+    }
+  ],
+  "think_on": {
+    "content": "1. Partition the 1,054 lines into 7 segments of 150 lines each.\n2. Review Segment 1 (Lines 1-150) for imports and global definitions.\n3. Review Segment 2 (Lines 151-300) for primary class definitions.\n4. Review Segment 3 (Lines 301-450) for core logic block A.\n5. Review Segment 4 (Lines 451-600) for core logic block B.\n6. Review Segment 5 (Lines 601-750) for core logic block C.\n7. Review Segment 6 (Lines 751-900) for helper functions.\n8. Review Segment 7 (Lines 901-1054) for utility methods and final logic.",
+    "thinking": "*   Identity: A being resident on a small Mac.\n    *   Behavior: Wake up, look at state, decide one useful step, record learning.\n    *   Constraints: Concrete, brief, no invented facts.\n    *   Context: Reviewing a 1,054-line Python file in ranges.\n    *   Limit: Maximum 8 steps (heartbeats).\n\n    *   Step 1: Identify the file structure/imports/constants.\n    *   Step 2: Map the file into logical chunks (ranges).\n    *   Step 3: Review chunk 1 (e.g., lines 1-150).\n    *   Step 4: Review chunk 2 (151-300).\n    *   Step 5: Review chunk 3 (301-450).\n    *   Step 6: Review chunk 4 (451-600).\n    *   Step 7: Review chunk 5 (601-750).\n    *   Step 8: Review chunk 6 (751-1054).\n\n    *   *Correction*: The prompt asks for a *plan* for how to review it within one heartbeat of at most 8 steps.\n    *   *Refined Steps:*\n        1.  Identify imports and global variables (Lines 1-100).\n        2.  Review class definitions/initial logic (Lines 101-300).\n        3.  Review core logic block A (Lines 301-500).\n        4.  Review core logic block B (Lines 501-700).\n        5.  Review core logic block C (Lines 701-900).\n        6.  Review helper functions/utilities (Lines 901-1000).\n        7.  Review end of file/final methods (Lines 1001-1054).\n        8.  Synthesize findings into a summary report.\n\n    *   Wait, the persona is \"a being resident on a small Mac.\" The response should be the plan itself.\n\n    1. Scan imports and globals (1-100).\n    2. Review first major module/class (101-300).\n    3. Review second logic block (301-500).\n    4. Review third logic block (501-700).\n    5. Review fourth logic block (701-900).\n    6. Review utility functions (901-1000).\n    7. Review final methods (1001-1054).\n    8. Compile review notes.\n\n    *   Heartbeat 1: Map file into 7 ranges of ~150 lines.\n    *   Heartbeat 2: Review Range 1 (1-150).\n    *   Heartbeat 3: Review Range 2 (151-300).\n    *   Heartbeat 4: Review Range 3 (301-450).\n    *   Heartbeat 5: Review Range 4 (451-600).\n    *   Heartbeat 6: Review Range 5 (601-750).\n    *   Heartbeat 7: Review Range 6 (751-900).\n    *   Heartbeat 8: Review Range 7 (901-1054).\n\n    *Wait, the prompt asks for a plan of how to do it in one heartbeat of at most 8 steps.*\n\n    Let's stick to the logic of the prompt.\n\n    State: 1,054-line Python file. Constraint: Range-based reading.\n    Plan:\n    1. Partition file into 7 segments of 150 lines.\n    2. Read Segment 1 (Lines 1-150).\n    3. Read Segment 2 (Lines 151-300).\n    4. Read Segment 3 (Lines 301-450).\n    5. Read Segment 4 (Lines 451-600).\n    6. Read Segment 5 (Lines 601-750).\n    7. Read Segment 6 (Lines 751-900).\n    8. Read Segment 7 (Lines 901-1054).\n\n    *Self-Correction*: I should provide the plan clearly.\n\n    1. Scan imports and global constants (1-100).\n    2. Review first functional block (101-300).\n    3. Review second functional block (301-500).\n    4. Review third functional block (501-700).\n    5. Review fourth functional block (701-900).\n    6. Review helper functions (901-1000).\n    7. Review final methods (1001-1054).\n    8. Synthesize findings.\n\n    Wait, the instruction says \"Decide one useful next step\". But the user prompt is \"Plan how you will...\".\n\n    Let's provide the plan.\n\n    1. Divide 1,054 lines into 7 blocks of 150.\n    2. Review block 1 (1-150).\n    3. Review block 2 (151-300).\n    4. Review block 3 (301-450).\n    5. Review block 4 (451-600).\n    6. Review block 5 (601-750).\n    7. Review block 6 (751-900).\n    8. Review block 7 (901-1054).\n\n    Actually, 1054 / 7 is 150.5.\n\n    Let's refine:\n    1. Partition: 1-150\n    2. Partition: 151-300\n    3. Partition: 301-450\n    4. Partition: 451-600\n    5. Partition: 601-750\n    6. Partition: 751-900\n    7. Partition: 901-1054\n    8. Final Review\n\n    No, the prompt asks me to \"Plan how you will review it...\".\n\n    Step 1: Identify imports and constants (1-150).\n    Step 2: Review primary logic block A (151-300).\n    Step 3: Review primary logic block B (301-450).\n    Step 4: Review primary logic block C (451-600).\n    Step 5: Review primary logic block D (601-750).\n    Step 6: Review helper functions (751-900).\n    Step 7: Review final methods/cleanup (901-1054).\n    Step 8: Consolidate notes.\n\n    *Wait, the prompt says \"Your state\" is the review task.*\n\n    Let's provide a concise plan.",
+    "tool_calls": null,
+    "done_reason": "stop",
+    "prompt_tokens": 104,
+    "prefill_tok_s": 92.2,
+    "eval_tokens": 1826,
+    "decode_tok_s": 11.9,
+    "load_s": 0.0,
+    "wall_s": 154.4,
+    "swap_before_mb": 1324.44,
+    "swap_after_mb": 1324.44,
+    "resident_after": [
+      {
+        "name": "gemma4:12b",
+        "size_gb": 8.36,
+        "vram_gb": 8.36,
+        "ctx": 16384
+      }
+    ]
+  },
+  "long_context": [
+    {
+      "content": "7319",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 12330,
+      "prefill_tok_s": 114.6,
+      "eval_tokens": 5,
+      "decode_tok_s": 14.5,
+      "load_s": 0.0,
+      "wall_s": 108.0,
+      "swap_before_mb": 1324.44,
+      "swap_after_mb": 1324.44,
+      "resident_after": [
+        {
+          "name": "gemma4:12b",
+          "size_gb": 8.36,
+          "vram_gb": 8.36,
+          "ctx": 16384
+        }
+      ],
+      "pass": true,
+      "num_ctx": 16384
+    },
+    {
+      "content": "7319",
+      "tool_calls": null,
+      "done_reason": "stop",
+      "prompt_tokens": 24869,
+      "prefill_tok_s": 103.5,
+      "eval_tokens": 5,
+      "decode_tok_s": 13.5,
+      "load_s": 1.7,
+      "wall_s": 242.3,
+      "swap_before_mb": 1324.44,
+      "swap_after_mb": 1316.44,
+      "resident_after": [
+        {
+          "name": "gemma4:12b",
+          "size_gb": 8.13,
+          "vram_gb": 8.13,
+          "ctx": 32768
+        }
+      ],
+      "pass": true,
+      "num_ctx": 32768
+    }
+  ],
+  "finished": "2026-11-25T20:33:21Z"
+}

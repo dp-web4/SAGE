@@ -26,6 +26,7 @@ The criterion is the most important field. An exploration without a falsifier is
 
 | Exploration | Status | Tracks |
 |-------------|--------|--------|
+| [bonsai-2.5-being-model-2026-11-25/](bonsai-2.5-being-model-2026-11-25/EXPLORATION.md) | Results: Bonsai 2.5 rejected for 16 GB McNugget; gemma4:12b at 32k is the lead | Candidate being models, context window vs memory on small machines |
 | [2026-11-02-weight-space-programming-model-repair.md](2026-11-02-weight-space-programming-model-repair.md) | Drafted, external evidence review and proposed experiment | Weight edits, generation loops, configuration controls, and local task transfer |
 | [2026-10-06-embodied-cognitive-rtos-latent-translation-fabric.md](2026-10-06-embodied-cognitive-rtos-latent-translation-fabric.md) | Drafted, parent architecture | Latent translation fabric + embodied cognitive RTOS |
 | [2026-10-08-nonverbal-intent-modality-selection-action-truth.md](2026-10-08-nonverbal-intent-modality-selection-action-truth.md) | Drafted, architecture exploration | Nonverbal intent + modality selection + action truth |
