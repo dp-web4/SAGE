@@ -1,4 +1,5 @@
-"""#834 S1.5: the cap drop-ins are well-formed and ordered, so installing them cannot silently cap nothing."""
+"""#834 S1.5: the cap drop-ins are well-formed and ordered. Whether one attached to a live unit is the README's
+Check line (MemoryMax=infinity means it did not); a test cannot see the operator's units (legion on #846)."""
 import configparser
 import re
 from pathlib import Path
