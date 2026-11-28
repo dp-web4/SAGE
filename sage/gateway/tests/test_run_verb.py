@@ -187,6 +187,20 @@ def test_run_data_accepts_the_shapes_a_model_actually_emits():
         run_command({"path": "e.py", "data": 7}, ctx)
 
 
+def test_a_command_line_as_run_path_is_told_what_path_is_not_about_data():
+    # 2026-11-28 08:27Z, cbp-being: a command line sent as run's path got the 'data' list advice.
+    from sage.gateway.being_gate_client import run_command
+    ctx = {"memory_root": "/home/x/inst", "member": "b"}
+    act = {"path": "python -c \"import os; print(os.path.exists('x.png'))\""}
+    with pytest.raises(ValueError) as e:
+        run_command(act, ctx)
+    msg = str(e.value)
+    assert "ONE script file" in msg and "memory_write" in msg and "memory_read" in msg
+    assert "Give 'data' as a list" not in msg, "the field at fault is path, not data"
+    with pytest.raises(ValueError, match="Give 'data' as a list"):
+        run_command({"path": "e.py", "data": ["my file.md"]}, ctx)
+
+
 @needs_bwrap
 def test_run_data_mapping_of_base_names_to_sources_is_the_list_it_names():
     """cbp-being 2026-11-16 02:44: data='{"m.py": "scratch/m.py"}' six times, refused each

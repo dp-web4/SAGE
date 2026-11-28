@@ -1909,6 +1909,20 @@ def run_names(args: dict, ctx: Optional[dict] = None) -> List[str]:
                          f"(you gave {len(names) - 1}); the sandbox has nothing else in it")
     reach = _search_reach((ctx or {}).get("worktree") or memory_root, (ctx or {}).get("workspace"))
     for i, n in enumerate(names):
+        if i == 0 and any(ch.isspace() for ch in n):
+            # THE REFUSAL NAMES THE FIELD THAT WAS WRONG. 2026-11-28 08:27Z: cbp-being sent
+            # run path="python -c \"import os; print(os.path.exists('x.png'))\"" — a command
+            # line where a script goes — and was told to "give 'data' as a list". It appealed
+            # with a rationale about a different act; nothing in the refusal said what path is.
+            # A file-existence check also cannot work in here: the sandbox holds only the
+            # script and its data files, so say that too, and name the tool that does answer.
+            raise ValueError(
+                f"run 'path' is ONE script file in your home, and {n!r} has whitespace in it, so it "
+                f"is not a file name (a command line cannot go here). Write the code into a .py "
+                f"file with memory_write (for example path=\"scratch/check.py\"), then run "
+                f"path=\"scratch/check.py\". The sandbox holds only that script and its 'data' "
+                f"files, so a check like os.path.exists on another file of yours prints False "
+                f"there; memory_read on that file's path tells you whether it exists.")
         if not n or any(ch.isspace() for ch in n):
             raise ValueError(f"run path {n!r} may not contain whitespace. Give 'data' as a list "
                              f"— [\"scratch/a.py\", \"scratch/b.md\"] — or as one path per entry; "
