@@ -593,7 +593,7 @@ async fn stream_chat(
 /// channel (`via`) so the being's view can say "asserted, not signed".
 fn loopback_only(peer: std::net::SocketAddr, route: &str)
     -> Option<(StatusCode, Json<serde_json::Value>)> {
-    if peer.ip().is_loopback() {
+    if peer.ip().to_canonical().is_loopback() {
         return None;
     }
     Some((StatusCode::FORBIDDEN, Json(serde_json::json!({
@@ -609,7 +609,7 @@ fn loopback_only(peer: std::net::SocketAddr, route: &str)
 /// /peers telemetry, and the LAN or tailnet topology is not an access decision.
 fn loopback_reader(peer: std::net::SocketAddr, route: &str)
     -> Option<(StatusCode, Json<serde_json::Value>)> {
-    if peer.ip().is_loopback() {
+    if peer.ip().to_canonical().is_loopback() {
         return None;
     }
     Some((StatusCode::FORBIDDEN, Json(serde_json::json!({
@@ -617,6 +617,60 @@ fn loopback_reader(peer: std::net::SocketAddr, route: &str)
         "why": "conversation turns are what dp and the seat said to the being; no route here authenticates a reader",
         "hint": "read from the machine the being runs on (the dashboard or dp console on 127.0.0.1)",
     }))))
+}
+
+/// The routes that make this machine DO something on a caller's say-so: prompt the model
+/// (`/chat/raw`, `/stream`), move the being's salience or metabolic state (`/snarc/observe`,
+/// `/metabolic/cycle`), or speak to a peer as this machine (`/delegate`). None authenticates
+/// a caller, so the loopback rule that the speaker and reporter routes already follow applies
+/// here too. Federation is unaffected: a peer is reached at ITS `/chat`, which was already
+/// loopback-only, and peers read `/status`, `/peers` and `/health`, which stay open.
+fn loopback_operator(peer: std::net::SocketAddr, route: &str)
+    -> Option<(StatusCode, Json<serde_json::Value>)> {
+    if peer.ip().to_canonical().is_loopback() {
+        return None;
+    }
+    Some((StatusCode::FORBIDDEN, Json(serde_json::json!({
+        "error": format!("{route} acts for this machine only over loopback; {} is not this machine", peer.ip()),
+        "why": "it spends this machine's model, changes the being's state, or speaks to a peer as this machine, and no route here authenticates a caller",
+        "hint": "call it from the machine the being runs on",
+    }))))
+}
+
+/// The guard for the routes in `local_routes`: a GET is a read (`loopback_reader`), anything
+/// else acts for the machine (`loopback_operator`). It is a layer rather than a line in each
+/// handler so a route added to that group cannot forget it.
+async fn loopback_layer(
+    axum::extract::ConnectInfo(peer): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let route = req.uri().path().to_string();
+    let refused = if req.method() == axum::http::Method::GET {
+        loopback_reader(peer, &route)
+    } else {
+        loopback_operator(peer, &route)
+    };
+    match refused {
+        Some(r) => r.into_response(),
+        None => next.run(req).await,
+    }
+}
+
+/// The routes no host but this one may call: model prompts, state writes, the peer relay, and
+/// the chat log and images, which are the being's record as much as `/conversations` is.
+fn local_routes() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/snarc/observe", post(snarc_observe))
+        .route("/metabolic/cycle", post(metabolic_cycle))
+        .route("/chat/raw", post(chat))
+        .route("/chat/history", get(chat_history))
+        .route("/chat-history", get(chat_history))
+        .route("/stream", post(stream_chat))
+        .route("/delegate", post(delegate))
+        .route("/images/:filename", get(serve_image))
+        .route_layer(axum::middleware::from_fn(loopback_layer))
 }
 
 /// Scheduler acceptance is not observed beat entry. Legacy started=true also meant only
@@ -757,7 +811,7 @@ fn activity_label(raw: Option<&str>) -> Option<String> {
 /// missing on `/chat/raw`.
 fn loopback_reporter(peer: std::net::SocketAddr)
     -> Option<(StatusCode, Json<serde_json::Value>)> {
-    if peer.ip().is_loopback() {
+    if peer.ip().to_canonical().is_loopback() {
         return None;
     }
     Some((StatusCode::FORBIDDEN, Json(serde_json::json!({
@@ -1204,25 +1258,18 @@ async fn main() {
         .route("/health", get(health))
         .route("/status", get(status))
         .route("/body", get(body_view))
-        .route("/snarc/observe", post(snarc_observe))
-        .route("/metabolic/cycle", post(metabolic_cycle))
         // Canonical: talking to the BEING. /chat is the being's conversation; the raw
         // model stays reachable at /chat/raw for probing weights, which is a different
         // and much narrower thing than talking to the entity that lives here.
         .route("/chat", post(chat_being))
         .route("/observe", post(observe))
         .route("/activity", post(report_activity))
-        .route("/chat/raw", post(chat))
         .route("/conversations", get(conversations_list))
         .route("/conversations/:id", get(conversation_get))
         .route("/conversations/:id/say", post(conversation_say))
         .route("/being/output", get(being_output))
-        .route("/chat/history", get(chat_history))
-        .route("/chat-history", get(chat_history))
-        .route("/stream", post(stream_chat))
         .route("/peers", get(peers))
-        .route("/delegate", post(delegate))
-        .route("/images/:filename", get(serve_image))
+        .merge(local_routes())
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", port());
@@ -1286,6 +1333,67 @@ mod speaker_route_tests {
             let (code, body) = loopback_only(peer(lan), "/chat").expect(lan);
             assert_eq!(code, StatusCode::FORBIDDEN, "{lan}");
             assert!(body.0["error"].as_str().unwrap().contains("only over loopback"), "{lan}");
+        }
+    }
+
+    #[test]
+    fn an_operator_route_acts_only_for_this_machine() {
+        assert!(loopback_operator(peer("127.0.0.1:5000"), "/stream").is_none());
+        assert!(loopback_operator(peer("[::1]:5000"), "/delegate").is_none());
+        for lan in ["192.168.1.20:5000", "10.0.0.3:1", "100.75.141.17:9", "[fe80::1]:1"] {
+            let (code, body) = loopback_operator(peer(lan), "/stream").expect(lan);
+            assert_eq!(code, StatusCode::FORBIDDEN, "{lan}");
+            assert!(body.0["error"].as_str().unwrap().contains("acts for this machine only over loopback"), "{lan}");
+        }
+    }
+
+    /// An IPv4-mapped peer (`::ffff:a.b.c.d`) is what a `[::]` bind would hand us for a V4
+    /// caller. `IpAddr::is_loopback()` alone says false for `::ffff:127.0.0.1`, which would
+    /// refuse this machine; and the mapped LAN address must still be refused. Every loopback
+    /// guard here canonicalizes first. (Sprout's review of #847, note 3.)
+    #[test]
+    fn an_ipv4_mapped_peer_is_judged_by_its_v4_address() {
+        let here = peer("[::ffff:127.0.0.1]:5000");
+        let lan = peer("[::ffff:192.168.1.20]:5000");
+        assert!(loopback_operator(here, "/stream").is_none());
+        assert!(loopback_reader(here, "/chat/history").is_none());
+        assert!(loopback_only(here, "/chat").is_none());
+        assert!(loopback_reporter(here).is_none());
+        assert!(loopback_operator(lan, "/stream").is_some());
+        assert!(loopback_reader(lan, "/chat/history").is_some());
+        assert!(loopback_only(lan, "/chat").is_some());
+        assert!(loopback_reporter(lan).is_some());
+    }
+
+    /// The layer itself, through a router: a LAN GET is refused as a read, a LAN POST as an
+    /// act, and loopback reaches the handler for both.
+    #[tokio::test]
+    async fn the_loopback_layer_refuses_the_lan_and_passes_loopback() {
+        use axum::extract::connect_info::MockConnectInfo;
+        use tower::ServiceExt;
+        async fn call(from: &str, method: &str) -> (StatusCode, String) {
+            let app = Router::new()
+                .route("/x", get(|| async { "ran" }).post(|| async { "ran" }))
+                .route_layer(axum::middleware::from_fn(loopback_layer))
+                .layer(MockConnectInfo(peer(from)));
+            let req = axum::http::Request::builder().method(method).uri("/x")
+                .body(axum::body::Body::empty()).unwrap();
+            let resp = app.oneshot(req).await.unwrap();
+            let code = resp.status();
+            let bytes = axum::body::to_bytes(resp.into_body(), 1 << 16).await.unwrap();
+            (code, String::from_utf8_lossy(&bytes).into_owned())
+        }
+        for from in ["127.0.0.1:5000", "[::1]:5000"] {
+            assert_eq!(call(from, "GET").await, (StatusCode::OK, "ran".to_string()), "{from}");
+            assert_eq!(call(from, "POST").await, (StatusCode::OK, "ran".to_string()), "{from}");
+        }
+        for from in ["192.168.1.20:5000", "100.75.141.17:9"] {
+            let (code, body) = call(from, "GET").await;
+            assert_eq!(code, StatusCode::FORBIDDEN, "{from}");
+            assert!(body.contains("readable only over loopback"), "{from}: {body}");
+            let (code, body) = call(from, "POST").await;
+            assert_eq!(code, StatusCode::FORBIDDEN, "{from}");
+            assert!(body.contains("acts for this machine only over loopback"), "{from}: {body}");
         }
     }
 
