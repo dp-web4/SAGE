@@ -3269,7 +3269,11 @@ _TODO_PARSE: dict = {}
 # item) before the parse. Only lines that carry a status tag are touched; the log itself is never changed.
 _INLINE_ITEM = re.compile(r"^\s*(20\d\d-\d\d-\d\d)(?:[ T](\d\d:\d\d)(?::\d\d)?)?\s*(?:UTC|Z)?\s*:?\s*"
                           r"(\[(?:still open|open|added|done|completed|x| )\].*\S)\s*$", re.I)
-_BARE_TAG = re.compile(r"^\s*(\[(?:still open|open|added|done|completed)\].*\S)\s*$", re.I)
+# A bare checkbox (`[x] text`, `[ ] text`, no dash) is the same act as the dashed one. Measured on cbp-being
+# 2026-11-27 15:35Z: told to mark two items [x], it appended `[ ] <item>` and `[x] <item>` lines with memory_write.
+# _INLINE_ITEM took `x| ` but this did not, so both lines were skipped, nothing closed, and the view kept
+# showing the items open while the being's say reported closing them.
+_BARE_TAG = re.compile(r"^\s*(\[(?:still open|open|added|done|completed|x| )\].*\S)\s*$", re.I)
 # A bare `all: <words>` line is a closing act whatever it sits under. Live on mcnugget-being (2026-11-08 21:58Z,
 # the first beat that could see its list): it wrote `all: camera advice, peer_ask` on its own line, untagged and
 # outside a done: section, so the parser read it as nothing and nothing closed.

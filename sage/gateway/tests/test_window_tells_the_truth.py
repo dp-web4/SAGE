@@ -515,6 +515,12 @@ def test_an_undated_todo_is_shown_not_hidden_as_old():
     assert [t for t, _ in rec] == ["second"] and older == 0
 
 
+def test_a_bare_checkbox_line_opens_and_closes_like_the_dashed_one():
+    # cbp-being 2026-11-27 15:35Z appended `[x] <item>` with no dash; it closed nothing.
+    rec, _ = hb.todo_open("- [ ] first\n- [ ] second\n[x] first\n[X] second\n[ ] third\n")
+    assert [t for t, _ in rec] == ["third"]
+
+
 def test_the_window_shows_the_open_view_not_the_log_tail(tmp_path):
     inst = _home(tmp_path)
     (inst / "todo.md").write_text(TODO_LOG)
