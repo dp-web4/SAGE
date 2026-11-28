@@ -123,3 +123,52 @@ def test_probe_runs_in_the_real_box_when_available():
     assert not c.get("error"), c
     assert c["modules"]["json"] and c["modules"]["no_such_module_xyz"] is None
     assert c["network"] is False, "the census box must have no network, like run's"
+
+
+# --- SAGE #701: the host half. request_run runs on the host, where the user site is visible. ---
+
+HOST = {"python": "3.12.3", "executable": "/usr/bin/python3",
+        "modules": {"numpy": "1.26.4", "imageio": "2.34.0", "torch": "2.6.0+cu124", "pytest": None}}
+
+
+def test_render_says_where_a_box_missing_module_does_import():
+    out = rc.render(dict(BOX, host=HOST))
+    assert "These do not: torch, pytest" in out
+    host_line = [ln for ln in out.splitlines() if ln.startswith("- On the host")]
+    assert len(host_line) == 1
+    assert "torch 2.6.0+cu124" in host_line[0] and "request_run" in host_line[0]
+    assert "pytest" not in host_line[0], "missing in both places: no host claim"
+    assert "numpy" not in host_line[0], "imports in the box already: not repeated"
+
+
+def test_render_without_host_or_with_host_error_adds_no_host_line():
+    assert "On the host" not in rc.render(BOX)
+    assert "On the host" not in rc.render(dict(BOX, host={"error": "TimeoutExpired: x"}))
+
+
+def test_census_stores_the_host_half_and_remeasures_a_cache_without_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(rc, "_newest_site_mtime", lambda: 0.0)
+    mods = ("numpy", "torch")
+    calls = []
+    rc.census(tmp_path, modules=mods, measure_fn=_fake(calls))          # an old-style cache: no host
+    hosts = []
+    def host_fn(m):
+        hosts.append(tuple(m))
+        return dict(HOST, modules={k: HOST["modules"].get(k) for k in m})
+    c = rc.census(tmp_path, modules=mods, measure_fn=_fake(calls), host_fn=host_fn)
+    assert len(calls) == 2 and hosts == [mods], "a cache without the host half is re-measured"
+    assert c["host"]["modules"]["torch"] == "2.6.0+cu124"
+    rc.census(tmp_path, modules=mods, measure_fn=_fake(calls), host_fn=host_fn)
+    assert len(calls) == 2, "a fresh cache with the host half is read, not re-measured"
+
+
+def test_todo_note_names_the_host_for_a_host_only_module():
+    notes = rc.todo_notes(dict(BOX, host=HOST), [("install torch in the sandbox venv", None)])
+    assert any("torch does not import in your box but imports on the host (2.6.0+cu124)" in n
+               for n in notes)
+
+
+def test_measure_host_runs_the_probe_with_this_interpreter():
+    h = rc.measure_host(("json", "no_such_module_701"))
+    assert h["modules"]["json"] and h["modules"]["no_such_module_701"] is None
+    assert h["executable"]
