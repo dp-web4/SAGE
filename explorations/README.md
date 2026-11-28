@@ -26,7 +26,7 @@ The criterion is the most important field. An exploration without a falsifier is
 
 | Exploration | Status | Tracks |
 |-------------|--------|--------|
-| [2026-11-27-octopus-distributed-cognition.md](2026-11-27-octopus-distributed-cognition.md) | Drafted, external proposal checked; three experiments, none run | Local loops below the beat, learned plugin handoff, action-space pruning |
+| [2026-11-27-octopus-distributed-cognition.md](2026-11-27-octopus-distributed-cognition.md) | First measurement on recorded beats (A0/B0/C0); B parked; A and C candidates named | Local loops below the beat, learned plugin handoff, action-space pruning |
 | [2026-11-02-weight-space-programming-model-repair.md](2026-11-02-weight-space-programming-model-repair.md) | Drafted, external evidence review and proposed experiment | Weight edits, generation loops, configuration controls, and local task transfer |
 | [2026-10-06-embodied-cognitive-rtos-latent-translation-fabric.md](2026-10-06-embodied-cognitive-rtos-latent-translation-fabric.md) | Drafted, parent architecture | Latent translation fabric + embodied cognitive RTOS |
 | [2026-10-08-nonverbal-intent-modality-selection-action-truth.md](2026-10-08-nonverbal-intent-modality-selection-action-truth.md) | Drafted, architecture exploration | Nonverbal intent + modality selection + action truth |

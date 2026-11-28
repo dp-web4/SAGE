@@ -1,7 +1,7 @@
 # Octopus-inspired distributed cognition: does local work belong below the beat?
 
 date: 2026-11-27  
-status: drafted. External proposal, checked against the repo, with three experiments written up. Nothing has been run.  
+status: first measurement in (A0, B0, C0 below: recorded beats only, no model run). B parked on its own numbers. A's and C's first live candidates are named. Nothing live has run.  
 scope: public research. The being's control loop, IRP plugins, salience, and ARC-AGI-3 action spaces.  
 related: [exploration criteria](README.md), [SAGE evidence rules](../AGENTS.md)  
 provenance: dp asked Gemini, on the web, for a proposal after an octopus story came up. Gemini's text is kept unedited in the [appendix](#appendix-the-source-proposal-gemini-2026-11-27). A Claude Code seat (cbp) checked it against this repo and the cited sources and wrote the sections above the appendix.
@@ -47,7 +47,7 @@ Taken as a *question*, it's worth testing: how much of a being's central beat bu
   Draw each arm several times; one draw proves nothing inside a 0.04–0.14 noise band.
 - **Measurement.** Per task: central beats, tokens, wall time, and completion. Also count **missed escalations**: failures the local loop settled wrongly or hid, which the central model would have caught. Score these by replaying each locally settled failure through the central model.
 - **Criterion.** It is a finding if central beats per completed task fall and completion stays inside the noise band across draws. The analogy misleads here, and the experiment closes negative, if completion drops beyond the band, or if missed escalations exceed some agreed level (proposed: more than 1 in 20 locally settled failures). Setting that level is the operator's call.
-- **Status.** Drafted, not run. Before it can run, someone has to choose the task set and the being.
+- **Status.** A0 measured on recorded beats (below). The first live candidate is chosen, in Picks. Not run live.
 
 ### B. A nerve ring for plugin handoff: learned routing, no shared trust
 
@@ -58,7 +58,7 @@ Taken as a *question*, it's worth testing: how much of a being's central beat bu
   - only if it beats the baseline, run it live in shadow mode: it predicts and records, the central model still decides.
 - **Measurement.** On the slice where the readout is confident: agreement with the central choice, the outcome when they disagree, and the baseline's agreement on the same slice.
 - **Criterion.** It closes negative if, on the confident slice, the readout does no better than the frequency baseline, or if its disagreements turn out better than the central choice too rarely to matter. Passing it carries no trust semantics: plugins pass routing hints, never trust.
-- **Status.** Drafted, not run. It needs logged plugin sequences; whether enough exist is unchecked.
+- **Status.** Parked (2026-11-27). The logs exist: 170,000 acts across two beings. The frequency baseline is confident on only ~5% of transitions; see B0 below.
 
 ### C. Scaffolding as morphology: prune the action space before the model sees it
 
@@ -68,11 +68,66 @@ Taken as a *question*, it's worth testing: how much of a being's central beat bu
 - **Criterion.** It is a finding only if pruning moves the score above the 0.04–0.14 band across draws and passes the leak audit. It closes negative if the gain sits inside the band, or if the audit finds that pruning used knowledge the environment did not report.
 - **Status.** Drafted, not run.
 
-## Open questions for the operator
+## First measurement: what the recorded beats say (2026-11-27)
 
-1. **Which being and which task set for A?** A test-repair loop is cheap to build. An ARC level is closer to what the being actually does.
-2. **What missed-escalation rate is acceptable?** 1 in 20 is a placeholder.
-3. **Should B wait** until the plugin-sequence logs are known to exist and to be large enough?
+The operator's answer to the open questions was to pick what is reasonable and learn by doing. The cheapest reasonable first step runs no model and touches no live being: it reads the beats the beings have already recorded. The question it answers is: before building any local loop, how much central work goes on local friction, and of which kind?
+
+**Data.** The mirrored daily heartbeat logs of two beings:
+- sprout-being: Jetson, 85 days, 7,850 beats, 34,431 acts, 47,481 model steps. It runs `qwen3.8-distill:4b` now and ran the 2b in September. When it switched isn't checked, and the weekly trend spans both models.
+- cbp-being: WSL, 76 days, 12,417 beats, 135,629 acts, 142,722 model steps, on `qwen3.8-distill:4b` at both ends of the period.
+
+One model step re-reads the whole prompt, about 17,000 tokens on sprout. By beat time over steps, a step costs roughly 40 s on sprout and 15 s on cbp. Probe: [`beat_friction.py`](2026-11-27-octopus-distributed-cognition/beat_friction.py) `<heartbeats dir>`. Every number below is its output. The logs themselves are private and are not in this repo.
+
+### A0. Where the local friction is
+
+| | sprout | cbp |
+|---|---|---|
+| acts going back to a target whose act just failed (upper bound: includes a read that leads to the fix) | 9.7% | 15.5% |
+| …of which follow a failed `memory_edit` | 2,023 | 16,541 |
+| `memory_edit` failure rate | 73% | 60% |
+| commonest failure | "that text is not in *file*" | same |
+| next act after a failed edit: `memory_read` of the same file | 726 of 1,168 (62%) | 4,746 of 8,417 (56%) |
+| edit text-not-found per 100 acts, last 4 weeks | 1.2 → 3.9 | 5.5 → 6.0 |
+
+The largest single block of local friction is **edit, text not found, re-read the file, edit again**. The refusal already does part of an arm's job: it says the file is unchanged and names the closest matching lines (seen in refusals from 2026-11-20; when that wording landed isn't checked here). The being still reads the file next after 56–62% of failed edits, and the rate of text-not-found failures hasn't fallen across November. Better wording has stopped moving this class. Contrast: peer_ask sent to a conversation partner fell on cbp from 3.8 to 0.4 per 100 acts once its refusal named the right door, so wording does work for some classes. This one looks structural.
+
+### B0. Is there a nerve-ring signal to learn?
+
+A frequency table, trained on days before 2026-11-12 and tested on the days after, predicts the next act from the previous act and its outcome:
+
+| | sprout | cbp |
+|---|---|---|
+| top-1, commonest act | 33.8% | 23.7% |
+| top-1, previous act + outcome | 38.8% | 41.7% |
+| transitions where the table is confident (≥ 0.8) | 4.8% | 5.0% |
+| right on that confident slice | 87.9% | 88.3% |
+
+The confident slice is about one transition in twenty. A readout that matched the central choice perfectly there would skip at most ~5% of handoffs, and each handoff it skipped is one of the cheapest, most routine steps. **B is parked on this:** the nerve ring has little to carry in a single being's tool loop. It reopens if someone proposes a readout with a reason to expect a confident slice well above 5%, or a setting with many more parallel arms (several plugins or machines acting at once), where the octopus analogy is stronger.
+
+### C0. Wrong doors in the being's own action space
+
+Before any ARC run, there is a cheaper case of "prune before the model sees it": acts the environment already knows are the wrong door.
+
+| | sprout | cbp |
+|---|---|---|
+| `search` refused | 94% | 72% |
+| …mostly because | it reads code checkouts, not the being's home | same |
+| `peer_ask` to someone already in conversation with it | 608 | 1,294 |
+
+The fact behind the commonest search refusal, "there is no code checkout here", is one the environment reports itself. Pruning on it passes C's leak audit trivially, because nothing about any task's answer is used.
+
+## Picks (2026-11-27), revisable as results come in
+
+1. **A, first live candidate: the arm does the read.** When `memory_edit`'s old text isn't found and the closest region can be identified, the refusal also carries the current text of that region, with line numbers and a few lines of context. Then the being's next step can be the corrected edit instead of a read. Nothing is applied automatically; the central model still writes every edit. No change to the model, posture or offered tools.
+   - **Being:** all of them, because it is one gateway change. It is measured per being by rerunning `beat_friction.py` on beats before and after.
+   - **Prediction:** `memory_read` right after a failed edit falls well below today's 56–62%, and model steps per recovered edit fall by about one. The share of failed edits later recovered stays the same.
+   - **Missed escalation:** this becomes "an edit recovered through the shown region lands on the wrong lines". It is checked by sampling recovered edits. The 1-in-20 threshold is kept: above it, the change is reverted and A closes negative for this class.
+   - **Second candidate:** #829's progress signal, which compares where a run stops with the last run of the same file. Failed runs account for 1,509 steps back on cbp and 472 on sprout.
+2. **C, first candidate: don't offer the wrong door.** Offer `search` only when the being has a code checkout to search. Measure the refusals that remain, and whether the being reaches the same lines through `memory_read`/`recall` instead of giving up. The ARC arm stays drafted.
+3. **Missed-escalation level: 1 in 20,** as above, for A. C has no escalation path to miss.
+4. **B: parked** on B0.
+
+None of these is built yet. Each lands as its own SAGE PR, reviewed like any other gateway change.
 
 ---
 
